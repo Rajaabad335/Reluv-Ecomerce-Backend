@@ -1,0 +1,85 @@
+{
+  "kind": "collectionType",
+  "collectionName": "products",
+  "info": {
+    "singularName": "product",
+    "pluralName": "products",
+    "displayName": "Product"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "title": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "blocks",
+      "required": true
+    },
+    "condition": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "new_with_tags",
+        "new_without_tags",
+        "very_good",
+        "good",
+        "satisfactory"
+      ]
+    },
+    "productStatus": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "draft",
+        "active",
+        "reserved",
+        "sold",
+        "hidden"
+      ]
+    },
+    "price": {
+      "type": "decimal",
+      "required": true
+    },
+    "countryCode": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "viewCount": {
+      "type": "integer"
+    },
+    "likeCount": {
+      "type": "integer"
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "products"
+    },
+    "users_permissions_user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "products"
+    },
+    "brand": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::brand.brand",
+      "inversedBy": "products"
+    },
+    "size": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::size.size",
+      "inversedBy": "products"
+    }
+  }
+}

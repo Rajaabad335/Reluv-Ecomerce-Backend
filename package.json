@@ -2,7 +2,7 @@
   "name": "reluv-ecomerce-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "A Strapi application",
+  "description": "Reluv-Backend",
   "scripts": {
     "build": "strapi build",
     "console": "strapi console",

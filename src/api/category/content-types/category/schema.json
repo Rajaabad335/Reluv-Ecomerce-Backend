@@ -37,6 +37,18 @@
       "relation": "manyToOne",
       "target": "api::category.category",
       "inversedBy": "categories"
+    },
+    "products": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::product.product",
+      "mappedBy": "category"
+    },
+    "sizes": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::size.size",
+      "mappedBy": "category"
     }
   }
 }
