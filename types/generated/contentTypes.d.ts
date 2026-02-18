@@ -457,6 +457,84 @@ export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCategoryAttributeOptionCategoryAttributeOption
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'category_attribute_options';
+  info: {
+    displayName: 'category-attribute-option';
+    pluralName: 'category-attribute-options';
+    singularName: 'category-attribute-option';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    category_attribute: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::category-attribute.category-attribute'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::category-attribute-option.category-attribute-option'
+    > &
+      Schema.Attribute.Private;
+    product_attribute_values: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product-attribute-value.product-attribute-value'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    sortOrder: Schema.Attribute.Integer;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    value: Schema.Attribute.String & Schema.Attribute.Required;
+  };
+}
+
+export interface ApiCategoryAttributeCategoryAttribute
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'category_attributes';
+  info: {
+    displayName: 'category-attribute';
+    pluralName: 'category-attributes';
+    singularName: 'category-attribute';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
+    category_attribute_options: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::category-attribute-option.category-attribute-option'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isRequired: Schema.Attribute.Boolean;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::category-attribute.category-attribute'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    product_attribute_values: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product-attribute-value.product-attribute-value'
+    >;
+    publishedAt: Schema.Attribute.DateTime;
+    type: Schema.Attribute.Enumeration<['string', 'number', 'boolean', 'enum']>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   collectionName: 'categories';
   info: {
@@ -473,6 +551,10 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
       'api::category.category'
     >;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
+    category_attributes: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::category-attribute.category-attribute'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -492,6 +574,46 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiProductAttributeValueProductAttributeValue
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'product_attribute_values';
+  info: {
+    displayName: 'product-attribute-value';
+    pluralName: 'product-attribute-values';
+    singularName: 'product-attribute-value';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    category_attribute: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::category-attribute.category-attribute'
+    >;
+    category_attribute_option: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::category-attribute-option.category-attribute-option'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product-attribute-value.product-attribute-value'
+    > &
+      Schema.Attribute.Private;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    valueBoolean: Schema.Attribute.Boolean;
+    valueNumber: Schema.Attribute.Decimal;
+    valueText: Schema.Attribute.String;
   };
 }
 
@@ -526,6 +648,10 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    product_attribute_values: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::product-attribute-value.product-attribute-value'
+    >;
     productStatus: Schema.Attribute.Enumeration<
       ['draft', 'active', 'reserved', 'sold', 'hidden']
     > &
@@ -1083,7 +1209,10 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::brand.brand': ApiBrandBrand;
+      'api::category-attribute-option.category-attribute-option': ApiCategoryAttributeOptionCategoryAttributeOption;
+      'api::category-attribute.category-attribute': ApiCategoryAttributeCategoryAttribute;
       'api::category.category': ApiCategoryCategory;
+      'api::product-attribute-value.product-attribute-value': ApiProductAttributeValueProductAttributeValue;
       'api::product.product': ApiProductProduct;
       'api::size.size': ApiSizeSize;
       'plugin::content-releases.release': PluginContentReleasesRelease;

@@ -1,0 +1,49 @@
+{
+  "kind": "collectionType",
+  "collectionName": "category_attributes",
+  "info": {
+    "singularName": "category-attribute",
+    "pluralName": "category-attributes",
+    "displayName": "category-attribute"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "type": {
+      "type": "enumeration",
+      "enum": [
+        "string",
+        "number",
+        "boolean",
+        "enum"
+      ]
+    },
+    "isRequired": {
+      "type": "boolean"
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "category_attributes"
+    },
+    "category_attribute_options": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::category-attribute-option.category-attribute-option",
+      "mappedBy": "category_attribute"
+    },
+    "product_attribute_values": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::product-attribute-value.product-attribute-value",
+      "mappedBy": "category_attribute"
+    }
+  }
+}

@@ -80,6 +80,12 @@
       "relation": "manyToOne",
       "target": "api::size.size",
       "inversedBy": "products"
+    },
+    "product_attribute_values": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::product-attribute-value.product-attribute-value",
+      "mappedBy": "product"
     }
   }
 }

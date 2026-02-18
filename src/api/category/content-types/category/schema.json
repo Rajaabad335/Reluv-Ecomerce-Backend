@@ -49,6 +49,12 @@
       "relation": "oneToMany",
       "target": "api::size.size",
       "mappedBy": "category"
+    },
+    "category_attributes": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::category-attribute.category-attribute",
+      "mappedBy": "category"
     }
   }
 }
