@@ -71,6 +71,38 @@
       "relation": "oneToMany",
       "target": "api::product.product",
       "mappedBy": "users_permissions_user"
+    },
+    "received_reviews": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::review.review",
+      "mappedBy": "recipient"
+    },
+    "written_reviews": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::review.review",
+      "mappedBy": "author"
+    },
+    "rating_avg": {
+      "type": "integer",
+      "min": 1,
+      "max": 5
+    },
+    "location": {
+      "type": "string"
+    },
+    "followers": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "following"
+    },
+    "following": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "plugin::users-permissions.user",
+      "mappedBy": "followers"
     }
   }
 }
