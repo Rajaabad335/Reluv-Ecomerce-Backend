@@ -28,6 +28,58 @@ const sortTree = (nodes) => {
   return nodes;
 };
 
+const slugifyCode = (value = '') =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+const defaultPlaceholderFor = (attribute) => {
+  if (attribute.type === 'enum') return `Select ${attribute.name.toLowerCase()}`;
+  if (attribute.type === 'boolean') return `Select ${attribute.name.toLowerCase()}`;
+  return `Enter ${attribute.name.toLowerCase()}`;
+};
+
+const mapAttributeToUploadShape = (attribute, categorySlug) => {
+  const code = attribute.code || `${slugifyCode(categorySlug)}_${slugifyCode(attribute.name)}`;
+  const options = (attribute.category_attribute_options || []).map((option) => ({
+    id: option.id,
+    title: option.value,
+  }));
+  const displayType = attribute.displayType || (attribute.type === 'enum' ? 'list' : attribute.type);
+  const placeholder = attribute.placeholder || defaultPlaceholderFor(attribute);
+
+  return {
+    code,
+    has_children: false,
+    value_ids: null,
+    value: null,
+    configuration: {
+      title: attribute.isRequired ? attribute.name : `${attribute.name} (recommended)`,
+      description: attribute.description || null,
+      placeholder,
+      field_placeholder: placeholder,
+      banner: null,
+      display_type: displayType,
+      required: Boolean(attribute.isRequired),
+      selection_type: attribute.selectionType || 'single',
+      selection_limit: attribute.selectionLimit || 1,
+      options: attribute.type === 'enum'
+        ? [
+            {
+              id: attribute.id,
+              title: attribute.name,
+              group_title: null,
+              type: 'group',
+              options,
+            },
+          ]
+        : [],
+    },
+  };
+};
+
 const getSchemaConfig = async (strapi) => {
   if (schemaConfigPromise) {
     return schemaConfigPromise;
@@ -114,6 +166,88 @@ const getSchemaConfig = async (strapi) => {
 };
 
 export default factories.createCoreController('api::category.category', ({ strapi }) => ({
+  async getUploadAttributes(ctx) {
+    try {
+      const rawCategoryId = ctx.query.category_id;
+      const categorySlug = String(ctx.query.category_slug || '').trim();
+      const categoryId = rawCategoryId == null ? null : Number(rawCategoryId);
+
+      if (!categorySlug && (!Number.isInteger(categoryId) || categoryId <= 0)) {
+        return ctx.badRequest('Provide category_id or category_slug.');
+      }
+
+      const categoryFilters = categorySlug
+        ? { slug: { $eq: categorySlug } }
+        : { id: { $eq: categoryId } };
+
+      const categories = await strapi.entityService.findMany('api::category.category', {
+        filters: categoryFilters,
+        fields: ['id', 'slug', 'name'],
+        limit: 1,
+      });
+
+      const category = categories?.[0];
+      if (!category) {
+        return ctx.notFound('Category not found.');
+      }
+
+      const attributes = await strapi.entityService.findMany('api::category-attribute.category-attribute', {
+        filters: { category: { id: { $eq: category.id } } },
+        populate: {
+          category_attribute_options: {
+            fields: ['id', 'value', 'sortOrder'],
+            sort: ['sortOrder:asc', 'value:asc'],
+          },
+        },
+        sort: ['name:asc'],
+      } as any);
+
+      const requiredFieldCodes = [];
+      const mappedAttributes = attributes.map((attribute) => {
+        const mapped = mapAttributeToUploadShape(attribute, category.slug || category.name);
+        if (attribute.isRequired) requiredFieldCodes.push(mapped.code);
+        return mapped;
+      });
+
+      const brands = await strapi.entityService.findMany('api::brand.brand', {
+        filters: { categories: { id: { $eq: category.id } } },
+        fields: ['id', 'name', 'slug'],
+        sort: ['name:asc'],
+        limit: 500,
+      } as any);
+
+      const sizes = await strapi.entityService.findMany('api::size.size', {
+        filters: { category: { id: { $eq: category.id } } },
+        fields: ['id', 'label'],
+        sort: ['label:asc'],
+        limit: 500,
+      });
+
+      ctx.body = {
+        code: 0,
+        message: null,
+        category: {
+          id: category.id,
+          slug: category.slug,
+          name: category.name,
+        },
+        attributes: mappedAttributes,
+        required_field_codes: requiredFieldCodes,
+        brands: brands.map((brand) => ({
+          id: brand.id,
+          title: brand.name,
+          slug: brand.slug,
+        })),
+        sizes: sizes.map((size) => ({
+          id: size.id,
+          title: size.label,
+        })),
+      };
+    } catch (error) {
+      strapi.log.error(error);
+      return ctx.internalServerError('Failed to load upload attributes.');
+    }
+  },
   async bulkDelete(ctx) {
     const body = ctx.request.body;
     const rawIds = Array.isArray(body?.ids) ? body.ids : [];

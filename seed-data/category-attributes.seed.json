@@ -1,0 +1,658 @@
+{
+  "attachMode": "level2",
+  "globalAttributes": [
+    {
+      "name": "Condition",
+      "type": "enum",
+      "isRequired": true,
+      "options": [
+        "New with tags",
+        "New without tags",
+        "Very good",
+        "Good",
+        "Satisfactory"
+      ]
+    },
+    {
+      "name": "Brand",
+      "type": "string",
+      "isRequired": false
+    },
+    {
+      "name": "Color",
+      "type": "enum",
+      "isRequired": false,
+      "options": [
+        "Black",
+        "White",
+        "Grey",
+        "Beige",
+        "Brown",
+        "Red",
+        "Pink",
+        "Purple",
+        "Blue",
+        "Green",
+        "Yellow",
+        "Orange",
+        "Gold",
+        "Silver",
+        "Multicolor"
+      ]
+    }
+  ],
+  "categorySpecificAttributes": {
+    "Women > Clothing": [
+      {
+        "name": "Size",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["XXS", "XS", "S", "M", "L", "XL", "XXL", "XXXL"]
+      },
+      {
+        "name": "Clothing Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Women > Shoes": [
+      {
+        "name": "Shoe Size EU",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["35", "36", "37", "38", "39", "40", "41", "42", "43"]
+      },
+      {
+        "name": "Heel Height",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Flat", "Low", "Mid", "High"]
+      },
+      {
+        "name": "Shoe Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Women > Bags": [
+      {
+        "name": "Bag Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Women > Accessories": [
+      {
+        "name": "Accessory Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Women > Beauty": [
+      {
+        "name": "Product Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Volume/Weight",
+        "type": "number",
+        "isRequired": false
+      },
+      {
+        "name": "Expiry Date",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Men > Clothing": [
+      {
+        "name": "Size",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["XS", "S", "M", "L", "XL", "XXL", "XXXL"]
+      },
+      {
+        "name": "Fit",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Slim", "Regular", "Oversized"]
+      }
+    ],
+    "Men > Shoes": [
+      {
+        "name": "Shoe Size EU",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["39", "40", "41", "42", "43", "44", "45", "46", "47"]
+      }
+    ],
+    "Men > Accessories": [
+      {
+        "name": "Accessory Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Men > Sportswear": [
+      {
+        "name": "Size",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["XS", "S", "M", "L", "XL", "XXL", "XXXL"]
+      },
+      {
+        "name": "Sport Type",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Running", "Gym", "Football", "Basketball", "Tennis", "Training"]
+      }
+    ],
+    "Men > Grooming": [
+      {
+        "name": "Product Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Volume/Weight",
+        "type": "number",
+        "isRequired": false
+      }
+    ],
+    "Designer > Brands": [
+      {
+        "name": "Brand Name",
+        "type": "string",
+        "isRequired": true
+      }
+    ],
+    "Designer > Collections": [
+      {
+        "name": "Collection Name",
+        "type": "string",
+        "isRequired": true
+      },
+      {
+        "name": "Season",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Spring", "Summer", "Autumn", "Winter", "Resort"]
+      }
+    ],
+    "Designer > Shoes": [
+      {
+        "name": "Shoe Size EU",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["35", "36", "37", "38", "39", "40", "41", "42", "43"]
+      },
+      {
+        "name": "Heel Height",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Flat", "Low", "Mid", "High"]
+      },
+      {
+        "name": "Shoe Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Authenticity",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Authentic", "Unknown", "Replica"]
+      }
+    ],
+    "Designer > Bags": [
+      {
+        "name": "Bag Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      },
+      {
+        "name": "Authenticity",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Authentic", "Unknown", "Replica"]
+      }
+    ],
+    "Designer > Accessories": [
+      {
+        "name": "Accessory Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      },
+      {
+        "name": "Authenticity",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Authentic", "Unknown", "Replica"]
+      }
+    ],
+    "Kids > Clothing": [
+      {
+        "name": "Age Range",
+        "type": "enum",
+        "isRequired": true,
+        "options": [
+          "0-3 months",
+          "3-6 months",
+          "6-12 months",
+          "1-2 years",
+          "2-3 years",
+          "3-4 years",
+          "4-5 years",
+          "5-6 years",
+          "6-7 years",
+          "7-8 years",
+          "8-9 years",
+          "9-10 years",
+          "10-11 years",
+          "11-12 years",
+          "12-13 years",
+          "13-14 years"
+        ]
+      },
+      {
+        "name": "Size",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["XS", "S", "M", "L", "XL"]
+      }
+    ],
+    "Kids > Shoes": [
+      {
+        "name": "Shoe Size EU",
+        "type": "enum",
+        "isRequired": true,
+        "options": [
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23",
+          "24",
+          "25",
+          "26",
+          "27",
+          "28",
+          "29",
+          "30",
+          "31",
+          "32",
+          "33",
+          "34",
+          "35"
+        ]
+      }
+    ],
+    "Kids > Toys": [
+      {
+        "name": "Age Range",
+        "type": "enum",
+        "isRequired": false,
+        "options": [
+          "0-3 months",
+          "3-6 months",
+          "6-12 months",
+          "1-2 years",
+          "2-3 years",
+          "3-4 years",
+          "4-5 years",
+          "5-6 years",
+          "6-7 years",
+          "7-8 years",
+          "8-9 years",
+          "9-10 years",
+          "10-11 years",
+          "11-12 years",
+          "12-13 years",
+          "13-14 years"
+        ]
+      },
+      {
+        "name": "Toy Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Kids > Accessories": [
+      {
+        "name": "Accessory Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Kids > School Supplies": [
+      {
+        "name": "Item Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Home > Furniture": [
+      {
+        "name": "Furniture Type",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      },
+      {
+        "name": "Width",
+        "type": "number",
+        "isRequired": false
+      },
+      {
+        "name": "Height",
+        "type": "number",
+        "isRequired": false
+      },
+      {
+        "name": "Depth",
+        "type": "number",
+        "isRequired": false
+      }
+    ],
+    "Home > Decor": [
+      {
+        "name": "Decor Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Home > Bedding": [
+      {
+        "name": "Bedding Size",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Single", "Double", "Queen", "King"]
+      }
+    ],
+    "Home > Kitchen": [
+      {
+        "name": "Kitchen Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Material",
+        "type": "string",
+        "isRequired": false
+      }
+    ],
+    "Home > Bath": [
+      {
+        "name": "Bath Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Electronics > Mobile": [
+      {
+        "name": "Model",
+        "type": "string",
+        "isRequired": true
+      },
+      {
+        "name": "Storage",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["32GB", "64GB", "128GB", "256GB", "512GB", "1TB"]
+      },
+      {
+        "name": "RAM",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB"]
+      },
+      {
+        "name": "Warranty",
+        "type": "boolean",
+        "isRequired": false
+      }
+    ],
+    "Electronics > Computers": [
+      {
+        "name": "Model",
+        "type": "string",
+        "isRequired": true
+      },
+      {
+        "name": "CPU",
+        "type": "string",
+        "isRequired": false
+      },
+      {
+        "name": "RAM",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["2GB", "3GB", "4GB", "6GB", "8GB", "12GB", "16GB", "32GB", "64GB"]
+      },
+      {
+        "name": "Storage",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["128GB", "256GB", "512GB", "1TB", "2TB"]
+      },
+      {
+        "name": "Screen Size",
+        "type": "number",
+        "isRequired": false
+      }
+    ],
+    "Electronics > TV & Audio": [
+      {
+        "name": "Model",
+        "type": "string",
+        "isRequired": false
+      },
+      {
+        "name": "Screen Size",
+        "type": "number",
+        "isRequired": false
+      },
+      {
+        "name": "Type",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["TV", "Soundbar", "Speaker", "Headphones", "Home Theater"]
+      }
+    ],
+    "Electronics > Gaming": [
+      {
+        "name": "Platform",
+        "type": "enum",
+        "isRequired": true,
+        "options": ["PS4", "PS5", "Xbox One", "Xbox Series X/S", "Nintendo Switch", "PC"]
+      }
+    ],
+    "Electronics > Smart Home": [
+      {
+        "name": "Device Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      },
+      {
+        "name": "Compatibility",
+        "type": "enum",
+        "isRequired": false,
+        "options": ["Alexa", "Google Home", "Apple HomeKit"]
+      }
+    ],
+    "Entertainment > Movies": [
+      {
+        "name": "Genre",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Entertainment > Music": [
+      {
+        "name": "Genre",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Entertainment > TV Shows": [
+      {
+        "name": "Genre",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Entertainment > Theater": [
+      {
+        "name": "Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Entertainment > Streaming": [
+      {
+        "name": "Platform",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Hobbies & Collectables > Art": [
+      {
+        "name": "Medium",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Hobbies & Collectables > Collectables": [
+      {
+        "name": "Collectable Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Hobbies & Collectables > Music Instruments": [
+      {
+        "name": "Instrument Type",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Hobbies & Collectables > Model Kits": [
+      {
+        "name": "Model Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Hobbies & Collectables > DIY & Crafts": [
+      {
+        "name": "Craft Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Sports > Team Sports": [
+      {
+        "name": "Sport Type",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Sports > Individual Sports": [
+      {
+        "name": "Sport Type",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ],
+    "Sports > Fitness": [
+      {
+        "name": "Fitness Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Sports > Outdoor": [
+      {
+        "name": "Outdoor Type",
+        "type": "enum",
+        "isRequired": false,
+        "optionsSource": "level3"
+      }
+    ],
+    "Sports > Equipment": [
+      {
+        "name": "Equipment Type",
+        "type": "enum",
+        "isRequired": true,
+        "optionsSource": "level3"
+      }
+    ]
+  }
+}

@@ -12,5 +12,17 @@ export default {
       handler: 'category.bulkDelete',
       config: {},
     },
+    {
+      method: 'GET',
+      path: '/categories/upload-attributes',
+      handler: 'category.getUploadAttributes',
+      config: {},
+    },
+    {
+      method: 'GET',
+      path: '/item-upload/attributes',
+      handler: 'category.getUploadAttributes',
+      config: {},
+    },
   ],
 };

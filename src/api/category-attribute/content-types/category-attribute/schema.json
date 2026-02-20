@@ -27,6 +27,36 @@
     "isRequired": {
       "type": "boolean"
     },
+    "code": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    },
+    "description": {
+      "type": "text"
+    },
+    "displayType": {
+      "type": "enumeration",
+      "enum": [
+        "text",
+        "list",
+        "number",
+        "boolean"
+      ],
+      "default": "text"
+    },
+    "selectionType": {
+      "type": "enumeration",
+      "enum": [
+        "single",
+        "multiple"
+      ],
+      "default": "single"
+    },
+    "selectionLimit": {
+      "type": "integer"
+    },
     "category": {
       "type": "relation",
       "relation": "manyToOne",
