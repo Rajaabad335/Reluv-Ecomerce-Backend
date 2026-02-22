@@ -11,13 +11,18 @@
   },
   "pluginOptions": {},
   "attributes": {
-    "label": {
+    "name": {
       "type": "string",
       "required": true
     },
-    "category": {
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true
+    },
+    "categories": {
       "type": "relation",
-      "relation": "manyToOne",
+      "relation": "manyToMany",
       "target": "api::category.category",
       "inversedBy": "sizes"
     },

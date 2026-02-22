@@ -1,0 +1,484 @@
+{
+  "brands": [
+    {
+      "name": "Zara",
+      "slug": "zara",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "H&M",
+      "slug": "hm",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Mango",
+      "slug": "mango",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Massimo Dutti",
+      "slug": "massimo-dutti",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Bershka",
+      "slug": "bershka",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Stradivarius",
+      "slug": "stradivarius",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Pull&Bear",
+      "slug": "pull-bear",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Uniqlo",
+      "slug": "uniqlo",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Gap",
+      "slug": "gap",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Old Navy",
+      "slug": "old-navy",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Levi's",
+      "slug": "levis",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Calvin Klein",
+      "slug": "calvin-klein",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Tommy Hilfiger",
+      "slug": "tommy-hilfiger",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Ralph Lauren",
+      "slug": "ralph-lauren",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Nike",
+      "slug": "nike",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Adidas",
+      "slug": "adidas",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Puma",
+      "slug": "puma",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Reebok",
+      "slug": "reebok",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Converse",
+      "slug": "converse",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Vans",
+      "slug": "vans",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "New Balance",
+      "slug": "new-balance",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Gucci",
+      "slug": "gucci",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Prada",
+      "slug": "prada",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Louis Vuitton",
+      "slug": "louis-vuitton",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Chanel",
+      "slug": "chanel",
+      "categories": ["Women", "Designer"]
+    },
+    {
+      "name": "Dior",
+      "slug": "dior",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Versace",
+      "slug": "versace",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Fendi",
+      "slug": "fendi",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Balenciaga",
+      "slug": "balenciaga",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Hermès",
+      "slug": "hermes",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Yves Saint Laurent",
+      "slug": "yves-saint-laurent",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Burberry",
+      "slug": "burberry",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Alexander McQueen",
+      "slug": "alexander-mcqueen",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Valentino",
+      "slug": "valentino",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Dolce & Gabbana",
+      "slug": "dolce-gabbana",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Armani",
+      "slug": "armani",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Cartier",
+      "slug": "cartier",
+      "categories": ["Designer"]
+    },
+    {
+      "name": " Tiffany & Co",
+      "slug": "tiffany-co",
+      "categories": ["Designer"]
+    },
+    {
+      "name": "Coach",
+      "slug": "coach",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Michael Kors",
+      "slug": "michael-kors",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Kate Spade",
+      "slug": "kate-spade",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Tory Burch",
+      "slug": "tory-burch",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Marc Jacobs",
+      "slug": "marc-jacobs",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": " DKNY",
+      "slug": "dkny",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Jimmy Choo",
+      "slug": "jimmy-choo",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Stuart Weitzman",
+      "slug": "stuart-weitzman",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Manolo Blahnik",
+      "slug": "manolo-blahnik",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Christian Louboutin",
+      "slug": "christian-louboutin",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Sergio Rossi",
+      "slug": "sergio-rossi",
+      "categories": ["Women"]
+    },
+    {
+      "name": "ASOS",
+      "slug": "asos",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Topshop",
+      "slug": "topshop",
+      "categories": ["Women"]
+    },
+    {
+      "name": "River Island",
+      "slug": "river-island",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Primark",
+      "slug": "primark",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "New Look",
+      "slug": "new-look",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Forever 21",
+      "slug": "forever-21",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Urban Outfitters",
+      "slug": "urban-outfitters",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Anthropologie",
+      "slug": "anthropologie",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Free People",
+      "slug": "free-people",
+      "categories": ["Women"]
+    },
+    {
+      "name": "REISS",
+      "slug": "reiss",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "COS",
+      "slug": "cos",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "& Other Stories",
+      "slug": "other-stories",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Arket",
+      "slug": "arket",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Jack & Jones",
+      "slug": "jack-jones",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Selected",
+      "slug": "selected",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Only",
+      "slug": "only",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Vero Moda",
+      "slug": "vero-moda",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Pieces",
+      "slug": "pieces",
+      "categories": ["Women"]
+    },
+    {
+      "name": "G-star",
+      "slug": "g-star",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Superdry",
+      "slug": "superdry",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Lacoste",
+      "slug": "lacoste",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Ralph Lauren",
+      "slug": "ralph-lauren",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Hugo Boss",
+      "slug": "hugo-boss",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Ted Baker",
+      "slug": "ted-baker",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "JOULES",
+      "slug": "joules",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "White Stuff",
+      "slug": "white-stuff",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "FatFace",
+      "slug": "fatface",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Crew Clothing",
+      "slug": "crew-clothing",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": " Boden",
+      "slug": "boden",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Jigsaw",
+      "slug": "jigsaw",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Phase Eight",
+      "slug": "phase-eight",
+      "categories": ["Women"]
+    },
+    {
+      "name": " Hobbs",
+      "slug": "hobbs",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Salsa",
+      "slug": "salsa",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Esprit",
+      "slug": "esprit",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Dockers",
+      "slug": "dockers",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Wrangler",
+      "slug": "wrangler",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Lee",
+      "slug": "lee",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Dickies",
+      "slug": " dickies",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Carhartt",
+      "slug": "carhartt",
+      "categories": ["Men"]
+    },
+    {
+      "name": "The North Face",
+      "slug": "the-north-face",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Patagonia",
+      "slug": "patagonia",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Columbia",
+      "slug": "columbia",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Under Armour",
+      "slug": "under-armour",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Skechers",
+      "slug": "skechers",
+      "categories": ["Women", "Men", "Kids"]
+    },
+    {
+      "name": "Dr. Martens",
+      "slug": "dr-martens",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Timberland",
+      "slug": "timberland",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Clarks",
+      "slug": "clarks",
+      "categories": ["Women", "Men"]
+    }
+  ]
+}

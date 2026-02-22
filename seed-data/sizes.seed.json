@@ -1,0 +1,419 @@
+{
+  "sizes": [
+    {
+      "name": "XXS",
+      "slug": "xxs",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "XS",
+      "slug": "xs",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "S",
+      "slug": "s",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "M",
+      "slug": "m",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "L",
+      "slug": "l",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "XL",
+      "slug": "xl",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "XXL",
+      "slug": "xxl",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "XXXL",
+      "slug": "xxxl",
+      "categories": ["Men"]
+    },
+    {
+      "name": "4XL",
+      "slug": "4xl",
+      "categories": ["Men"]
+    },
+    {
+      "name": "5XL",
+      "slug": "5xl",
+      "categories": ["Men"]
+    },
+    {
+      "name": "One Size",
+      "slug": "one-size",
+      "categories": ["Women", "Men"]
+    },
+    {
+      "name": "Petite",
+      "slug": "petite",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Plus Size",
+      "slug": "plus-size",
+      "categories": ["Women"]
+    },
+    {
+      "name": "Tall",
+      "slug": "tall",
+      "categories": ["Women"]
+    },
+    {
+      "name": "2T",
+      "slug": "2t",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "3T",
+      "slug": "3t",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "4T",
+      "slug": "4t",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "5T",
+      "slug": "5t",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "XS (5-6)",
+      "slug": "xs-5-6",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "S (6-7)",
+      "slug": "s-6-7",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "M (7-8)",
+      "slug": "m-7-8",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "L (8-9)",
+      "slug": "l-8-9",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "XL (9-10)",
+      "slug": "xl-9-10",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "XXL (10-12)",
+      "slug": "xxl-10-12",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "0-3 months",
+      "slug": "0-3-months",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "3-6 months",
+      "slug": "3-6-months",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "6-12 months",
+      "slug": "6-12-months",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "1-2 years",
+      "slug": "1-2-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "2-3 years",
+      "slug": "2-3-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "3-4 years",
+      "slug": "3-4-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "4-5 years",
+      "slug": "4-5-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "5-6 years",
+      "slug": "5-6-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "6-7 years",
+      "slug": "6-7-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "7-8 years",
+      "slug": "7-8-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "8-9 years",
+      "slug": "8-9-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "9-10 years",
+      "slug": "9-10-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "10-11 years",
+      "slug": "10-11-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "11-12 years",
+      "slug": "11-12-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "12-13 years",
+      "slug": "12-13-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "13-14 years",
+      "slug": "13-14-years",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Shoe Size 35",
+      "slug": "shoe-size-35",
+      "categories": ["Women", "Designer"]
+    },
+    {
+      "name": "Shoe Size 36",
+      "slug": "shoe-size-36",
+      "categories": ["Women", "Designer"]
+    },
+    {
+      "name": "Shoe Size 37",
+      "slug": "shoe-size-37",
+      "categories": ["Women", "Designer"]
+    },
+    {
+      "name": "Shoe Size 38",
+      "slug": "shoe-size-38",
+      "categories": ["Women", "Designer"]
+    },
+    {
+      "name": "Shoe Size 39",
+      "slug": "shoe-size-39",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Shoe Size 40",
+      "slug": "shoe-size-40",
+      "categories": ["Women", "Men", "Designer"]
+    },
+    {
+      "name": "Shoe Size 41",
+      "slug": "shoe-size-41",
+      "categories": ["Men", "Designer"]
+    },
+    {
+      "name": "Shoe Size 42",
+      "slug": "shoe-size-42",
+      "categories": ["Men", "Designer"]
+    },
+    {
+      "name": "Shoe Size 43",
+      "slug": "shoe-size-43",
+      "categories": ["Men", "Designer"]
+    },
+    {
+      "name": "Shoe Size 44",
+      "slug": "shoe-size-44",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Shoe Size 45",
+      "slug": "shoe-size-45",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Shoe Size 46",
+      "slug": "shoe-size-46",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Shoe Size 47",
+      "slug": "shoe-size-47",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Shoe Size 48",
+      "slug": "shoe-size-48",
+      "categories": ["Men"]
+    },
+    {
+      "name": "Kids Shoe Size 16",
+      "slug": "kids-shoe-size-16",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 17",
+      "slug": "kids-shoe-size-17",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 18",
+      "slug": "kids-shoe-size-18",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 19",
+      "slug": "kids-shoe-size-19",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 20",
+      "slug": "kids-shoe-size-20",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 21",
+      "slug": "kids-shoe-size-21",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 22",
+      "slug": "kids-shoe-size-22",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 23",
+      "slug": "kids-shoe-size-23",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 24",
+      "slug": "kids-shoe-size-24",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 25",
+      "slug": "kids-shoe-size-25",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 26",
+      "slug": "kids-shoe-size-26",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 27",
+      "slug": "kids-shoe-size-27",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 28",
+      "slug": "kids-shoe-size-28",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 29",
+      "slug": "kids-shoe-size-29",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 30",
+      "slug": "kids-shoe-size-30",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 31",
+      "slug": "kids-shoe-size-31",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 32",
+      "slug": "kids-shoe-size-32",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 33",
+      "slug": "kids-shoe-size-33",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 34",
+      "slug": "kids-shoe-size-34",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 35",
+      "slug": "kids-shoe-size-35",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Kids Shoe Size 36",
+      "slug": "kids-shoe-size-36",
+      "categories": ["Kids"]
+    },
+    {
+      "name": "Twin",
+      "slug": "twin",
+      "categories": ["Home"]
+    },
+    {
+      "name": "Twin XL",
+      "slug": "twin-xl",
+      "categories": ["Home"]
+    },
+    {
+      "name": "Full",
+      "slug": "full",
+      "categories": ["Home"]
+    },
+    {
+      "name": "Queen",
+      "slug": "queen",
+      "categories": ["Home"]
+    },
+    {
+      "name": "King",
+      "slug": "king",
+      "categories": ["Home"]
+    },
+    {
+      "name": "California King",
+      "slug": "california-king",
+      "categories": ["Home"]
+    },
+    {
+      "name": "Single",
+      "slug": "single",
+      "categories": ["Home"]
+    },
+    {
+      "name": "Double",
+      "slug": "double",
+      "categories": ["Home"]
+    }
+  ]
+}

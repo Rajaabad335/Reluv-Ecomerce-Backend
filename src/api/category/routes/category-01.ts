@@ -4,7 +4,9 @@ export default {
       method: 'GET',
       path: '/categories/catalog-tree',
       handler: 'category.getCatalogTree',
-      config: {},
+      config: {
+        auth: false,
+      },
     },
     {
       method: 'POST',
@@ -16,13 +18,17 @@ export default {
       method: 'GET',
       path: '/categories/upload-attributes',
       handler: 'category.getUploadAttributes',
-      config: {},
+      config: {
+        auth: false,
+      },
     },
     {
       method: 'GET',
       path: '/item-upload/attributes',
       handler: 'category.getUploadAttributes',
-      config: {},
+      config: {
+        auth: false,
+      },
     },
   ],
 };
