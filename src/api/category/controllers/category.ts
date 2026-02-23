@@ -287,7 +287,7 @@ export default factories.createCoreController('api::category.category', ({ strap
       });
 
       const sizes = await strapi.entityService.findMany('api::size.size', {
-        filters: { category: { id: { $in: allCategoryIds } } },
+        filters: { categories: { id: { $in: allCategoryIds } } },
         fields: ['id', 'name'],
         sort: ['name:asc'],
         limit: 500,
@@ -445,3 +445,4 @@ export default factories.createCoreController('api::category.category', ({ strap
     }
   },
 }));
+
