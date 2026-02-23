@@ -5,6 +5,14 @@
 import { factories } from '@strapi/strapi';
 
 let schemaConfigPromise = null;
+let uploadAttributeSchemaPromise = null;
+
+const qi = (strapi: any, name: string) => {
+  const client = String(strapi?.db?.connection?.client?.config?.client || '').toLowerCase();
+  const quote = client.includes('mysql') ? '`' : '"';
+  const escaped = String(name).replace(new RegExp(quote, 'g'), `${quote}${quote}`);
+  return `${quote}${escaped}${quote}`;
+};
 
 const isTruthy = (value) =>
   value === true || value === 1 || value === '1' || value === 't' || value === 'true';
@@ -180,6 +188,117 @@ const getSchemaConfig = async (strapi: any) => {
   return schemaConfigPromise;
 };
 
+const getUploadAttributeSchema = async (strapi: any) => {
+  if (uploadAttributeSchemaPromise) {
+    return uploadAttributeSchemaPromise;
+  }
+
+  uploadAttributeSchemaPromise = (async () => {
+    const rows = await strapi.db.connection('information_schema.columns')
+      .select('table_name', 'column_name')
+      .whereIn('table_name', ['category_attributes', 'category_attribute_options']);
+
+    const byTable = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const table = String((row as any).table_name);
+      const column = String((row as any).column_name);
+      const current = byTable.get(table) ?? new Set<string>();
+      current.add(column);
+      byTable.set(table, current);
+    }
+
+    const findColumn = (columns: Set<string>, candidates: string[]) =>
+      candidates.find((candidate) => columns.has(candidate)) ?? null;
+
+    const attrColumns = byTable.get('category_attributes') ?? new Set<string>();
+    const optionColumns = byTable.get('category_attribute_options') ?? new Set<string>();
+
+    let schema: any = {
+      attributesTable: 'category_attributes',
+      optionsTable: 'category_attribute_options',
+      relationMode: 'direct',
+      attrCategoryId: findColumn(attrColumns, ['category_id', 'categoryId']),
+      attrPublishedAt: findColumn(attrColumns, ['published_at', 'publishedAt']),
+      attrIsRequired: findColumn(attrColumns, ['is_required', 'isRequired']),
+      attrDisplayType: findColumn(attrColumns, ['display_type', 'displayType']),
+      attrSelectionType: findColumn(attrColumns, ['selection_type', 'selectionType']),
+      attrSelectionLimit: findColumn(attrColumns, ['selection_limit', 'selectionLimit']),
+      optionAttributeId: findColumn(optionColumns, ['category_attribute_id', 'categoryAttributeId']),
+      optionSortOrder: findColumn(optionColumns, ['sort_order', 'sortOrder']),
+      optionPublishedAt: findColumn(optionColumns, ['published_at', 'publishedAt']),
+    };
+
+    if (!schema.attrCategoryId) {
+      let linkRows: any[] = [];
+      try {
+        linkRows = await strapi.db.connection('information_schema.columns')
+          .select('table_name', 'column_name')
+          .where('table_name', 'like', 'category_attributes%lnk');
+      } catch (error) {
+        linkRows = [];
+      }
+
+      const linkByTable = new Map<string, string[]>();
+      for (const row of linkRows as any[]) {
+        const t = String(row.table_name);
+        const c = String(row.column_name);
+        const cols = linkByTable.get(t) ?? [];
+        cols.push(c);
+        linkByTable.set(t, cols);
+      }
+
+      for (const [tableName, cols] of linkByTable) {
+        const isIdCol = (c: string) => c.endsWith('_id') || c.endsWith('Id');
+        const attrCol = cols.find((c) => c.toLowerCase().includes('category_attribute') && isIdCol(c)) ?? null;
+        const catCol = cols.find((c) => c.toLowerCase().includes('category') && !c.toLowerCase().includes('attribute') && isIdCol(c)) ?? null;
+        if (attrCol && catCol) {
+          schema = {
+            ...schema,
+            relationMode: 'link',
+            attrCategoryId: null,
+            attrLinkTable: tableName,
+            attrLinkAttributeId: attrCol,
+            attrLinkCategoryId: catCol,
+          };
+          break;
+        }
+      }
+    }
+
+    if (schema.relationMode === 'link' && (!schema.attrLinkTable || !schema.attrLinkAttributeId || !schema.attrLinkCategoryId)) {
+      schema = {
+        ...schema,
+        relationMode: 'direct',
+      };
+    }
+
+    if (!schema.attrCategoryId && schema.relationMode !== 'link') {
+      const guessedCategoryId = findColumn(attrColumns, ['categoryId', 'category_id']);
+      schema = {
+        ...schema,
+        relationMode: 'direct',
+        attrCategoryId: guessedCategoryId || 'categoryId',
+      };
+    }
+
+    if (schema.relationMode === 'direct' && !schema.attrCategoryId) {
+      schema = {
+        ...schema,
+        disabled: true,
+      };
+    }
+
+    return schema;
+  })();
+
+  try {
+    return await uploadAttributeSchemaPromise;
+  } catch (error) {
+    uploadAttributeSchemaPromise = null;
+    throw error;
+  }
+};
+
 export default factories.createCoreController('api::category.category', ({ strapi }: { strapi: any }) => ({
   async getUploadAttributes(ctx: any) {
     try {
@@ -206,91 +325,159 @@ export default factories.createCoreController('api::category.category', ({ strap
         return ctx.notFound('Category not found.');
       }
 
-      // Get all parent categories recursively using direct database query
+      const schema = await getSchemaConfig(strapi);
       const getAllParentIds = async (catId: number): Promise<number[]> => {
         const parentIds: number[] = [];
-        
-        // Query the link table to find parent
-        const schema = await getSchemaConfig(strapi);
-        
-        let parentId = null;
-        
-        if (schema.mode === 'direct') {
-          const rows = await strapi.db.connection('categories')
-            .select('id', { parentId: schema.parentColumn })
-            .where('id', catId)
-            .limit(1);
-          if (rows.length > 0 && rows[0].parentId) {
-            parentId = Number(rows[0].parentId);
+        const seen = new Set<number>();
+        let currentId: number | null = catId;
+
+        while (currentId && !seen.has(currentId)) {
+          seen.add(currentId);
+          let parentId: number | null = null;
+
+          if (schema.mode === 'direct') {
+            const rows = await strapi.db.connection('categories')
+              .select({ parentId: schema.parentColumn })
+              .where('id', currentId)
+              .limit(1);
+            if (rows.length > 0 && rows[0].parentId) {
+              parentId = Number(rows[0].parentId);
+            }
+          } else {
+            const linkRows = await strapi.db.connection(schema.linkTable)
+              .select({ parentId: schema.parentColumn })
+              .where(schema.childColumn, currentId)
+              .limit(1);
+            if (linkRows.length > 0 && linkRows[0].parentId) {
+              parentId = Number(linkRows[0].parentId);
+            }
           }
-        } else {
-          const linkRows = await strapi.db.connection(schema.linkTable)
-            .select(schema.childColumn, schema.parentColumn)
-            .where(schema.childColumn, catId)
-            .limit(1);
-          if (linkRows.length > 0 && linkRows[0][schema.parentColumn]) {
-            parentId = Number(linkRows[0][schema.parentColumn]);
-          }
-        }
-        
-        if (parentId) {
+
+          if (!parentId || !Number.isInteger(parentId) || parentId <= 0) break;
           parentIds.push(parentId);
-          const grandParentIds = await getAllParentIds(parentId);
-          parentIds.push(...grandParentIds);
+          currentId = parentId;
         }
-        
+
         return parentIds;
       };
 
-      // Get category and all its parent IDs
       const parentIds = await getAllParentIds(category.id);
       const allCategoryIds = [category.id, ...parentIds];
-      
-      // Collect ALL unique attributes from the entire ancestor chain
-      const attributesMap = new Map();
-      
-      for (const catId of allCategoryIds) {
-        const catAttributes = await strapi.entityService.findMany('api::category-attribute.category-attribute', {
-          filters: { category: { id: { $eq: catId } } },
-          populate: {
-            category_attribute_options: {
-              fields: ['id', 'value', 'sortOrder'],
-              sort: ['sortOrder:asc', 'value:asc'],
-            },
+      const rawSchema = await getUploadAttributeSchema(strapi);
+      if ((rawSchema as any).disabled) {
+        ctx.body = {
+          code: 0,
+          message: null,
+          category: {
+            id: category.id,
+            slug: category.slug,
+            name: category.name,
           },
-          sort: ['name:asc'],
+          attributes: [],
+          required_field_codes: [],
+          brands: [],
+          sizes: [],
+        };
+        return;
+      }
+      const idPlaceholders = allCategoryIds.map(() => '?').join(', ');
+      const caTable = qi(strapi, rawSchema.attributesTable);
+      const caAlias = 'ca';
+      const lcaAlias = 'lca';
+      if (rawSchema.relationMode !== 'link' && !rawSchema.attrCategoryId) {
+        ctx.body = {
+          code: 0,
+          message: null,
+          category: {
+            id: category.id,
+            slug: category.slug,
+            name: category.name,
+          },
+          attributes: [],
+          required_field_codes: [],
+          brands: [],
+          sizes: [],
+        };
+        return;
+      }
+      const categoryIdExpr = rawSchema.relationMode === 'link'
+        ? `${lcaAlias}.${qi(strapi, rawSchema.attrLinkCategoryId)}`
+        : `${caAlias}.${qi(strapi, rawSchema.attrCategoryId)}`;
+      const joinClause = rawSchema.relationMode === 'link'
+        ? `JOIN ${qi(strapi, rawSchema.attrLinkTable)} ${lcaAlias} ON ${lcaAlias}.${qi(strapi, rawSchema.attrLinkAttributeId)} = ${caAlias}.${qi(strapi, 'id')}`
+        : '';
+      const isRequiredSelect = rawSchema.attrIsRequired
+        ? `${caAlias}.${qi(strapi, rawSchema.attrIsRequired)} AS is_required_value`
+        : `NULL AS is_required_value`;
+      const displayTypeSelect = rawSchema.attrDisplayType
+        ? `${caAlias}.${qi(strapi, rawSchema.attrDisplayType)} AS display_type_value`
+        : `NULL AS display_type_value`;
+      const selectionTypeSelect = rawSchema.attrSelectionType
+        ? `${caAlias}.${qi(strapi, rawSchema.attrSelectionType)} AS selection_type_value`
+        : `NULL AS selection_type_value`;
+      const selectionLimitSelect = rawSchema.attrSelectionLimit
+        ? `${caAlias}.${qi(strapi, rawSchema.attrSelectionLimit)} AS selection_limit_value`
+        : `NULL AS selection_limit_value`;
+      const rawQuery = `
+        SELECT
+          ${caAlias}.${qi(strapi, 'id')} AS id,
+          ${caAlias}.${qi(strapi, 'name')} AS name,
+          ${caAlias}.${qi(strapi, 'type')} AS type,
+          ${caAlias}.${qi(strapi, 'code')} AS code,
+          ${caAlias}.${qi(strapi, 'placeholder')} AS placeholder,
+          ${caAlias}.${qi(strapi, 'description')} AS description,
+          ${isRequiredSelect},
+          ${displayTypeSelect},
+          ${selectionTypeSelect},
+          ${selectionLimitSelect},
+          ${categoryIdExpr} AS category_id_value
+        FROM ${caTable} ${caAlias}
+        ${joinClause}
+        WHERE ${categoryIdExpr} IN (${idPlaceholders})
+        ${rawSchema.attrPublishedAt ? `AND ${caAlias}.${qi(strapi, rawSchema.attrPublishedAt)} IS NOT NULL` : ''}
+        ORDER BY ${caAlias}.${qi(strapi, 'name')} ASC
+      `;
+      const result = await strapi.db.connection.raw(rawQuery, allCategoryIds);
+      const attributeRows = Array.isArray(result?.rows)
+        ? result.rows
+        : Array.isArray(result?.[0])
+          ? result[0]
+          : [];
+
+      const attributesByCategoryId = new Map<number, any[]>();
+      for (const row of attributeRows as any[]) {
+        const catId = Number(row.category_id_value ?? row.categoryId ?? row.categoryid);
+        if (!Number.isInteger(catId) || catId <= 0) continue;
+        const bucket = attributesByCategoryId.get(catId) ?? [];
+        bucket.push({
+          id: Number(row.id),
+          name: String(row.name ?? ''),
+          type: String(row.type ?? 'string'),
+          isRequired: isTruthy(row.is_required_value ?? row.isRequired ?? row.isrequired),
+          code: row.code == null ? null : String(row.code),
+          placeholder: row.placeholder == null ? null : String(row.placeholder),
+          description: row.description == null ? null : String(row.description),
+          displayType: row.display_type_value == null ? null : String(row.display_type_value),
+          selectionType: row.selection_type_value == null ? null : String(row.selection_type_value),
+          selectionLimit: row.selection_limit_value == null ? null : Number(row.selection_limit_value),
+          category_attribute_options: [],
         });
-        
-        // Add attributes to map, later categories override earlier ones
-        for (const attr of catAttributes) {
+        attributesByCategoryId.set(catId, bucket);
+      }
+
+      const attributesMap = new Map<string, any>();
+      for (const catId of allCategoryIds) {
+        for (const attr of attributesByCategoryId.get(catId) ?? []) {
           const code = attr.code || `attr_${attr.id}`;
-          if (!attributesMap.has(code)) {
-            attributesMap.set(code, attr);
-          }
+          if (!attributesMap.has(code)) attributesMap.set(code, attr);
         }
       }
 
-      const attributes = Array.from(attributesMap.values());
-
       const requiredFieldCodes: any[] = [];
-      const mappedAttributes = attributes.map((attribute: any) => {
+      const mappedAttributes = Array.from(attributesMap.values()).map((attribute: any) => {
         const mapped = mapAttributeToUploadShape(attribute, category.slug || category.name);
         if (attribute.isRequired) requiredFieldCodes.push(mapped.code);
         return mapped;
-      });
-
-      const brands = await strapi.entityService.findMany('api::brand.brand', {
-        filters: { categories: { id: { $in: allCategoryIds } } },
-        fields: ['id', 'name', 'slug'],
-        sort: ['name:asc'],
-        limit: 500,
-      });
-
-      const sizes = await strapi.entityService.findMany('api::size.size', {
-        filters: { categories: { id: { $in: allCategoryIds } } },
-        fields: ['id', 'name'],
-        sort: ['name:asc'],
-        limit: 500,
       });
 
       ctx.body = {
@@ -303,19 +490,186 @@ export default factories.createCoreController('api::category.category', ({ strap
         },
         attributes: mappedAttributes,
         required_field_codes: requiredFieldCodes,
-        brands: brands.map((brand: any) => ({
-          id: brand.id,
-          title: brand.name,
-          slug: brand.slug,
-        })),
-        sizes: sizes.map((size: any) => ({
-          id: size.id,
-          title: size.name,
-        })),
+        brands: [],
+        sizes: [],
       };
     } catch (error) {
       strapi.log.error(error);
       return ctx.internalServerError('Failed to load upload attributes.');
+    }
+  },
+  async getUploadDropdown(ctx: any) {
+    try {
+      const code = String(ctx.query.code || '').trim().toLowerCase();
+      const rawCategoryId = ctx.query.category_id;
+      const categorySlug = String(ctx.query.category_slug || '').trim();
+      const categoryId = rawCategoryId == null ? null : Number(rawCategoryId);
+
+      if (!code) return ctx.badRequest('Provide code.');
+      if (!categorySlug && (!Number.isInteger(categoryId) || categoryId <= 0)) {
+        return ctx.badRequest('Provide category_id or category_slug.');
+      }
+
+      const categoryFilters = categorySlug
+        ? { slug: { $eq: categorySlug } }
+        : { id: { $eq: categoryId } };
+      const categories = await strapi.entityService.findMany('api::category.category', {
+        filters: categoryFilters,
+        fields: ['id'],
+        limit: 1,
+      });
+      const category = categories?.[0];
+      if (!category) return ctx.notFound('Category not found.');
+
+      const schema = await getSchemaConfig(strapi);
+      const getAllParentIds = async (catId: number): Promise<number[]> => {
+        const parentIds: number[] = [];
+        const seen = new Set<number>();
+        let currentId: number | null = catId;
+        while (currentId && !seen.has(currentId)) {
+          seen.add(currentId);
+          let parentId: number | null = null;
+          if (schema.mode === 'direct') {
+            const rows = await strapi.db.connection('categories')
+              .select({ parentId: schema.parentColumn })
+              .where('id', currentId)
+              .limit(1);
+            if (rows.length > 0 && rows[0].parentId) parentId = Number(rows[0].parentId);
+          } else {
+            const linkRows = await strapi.db.connection(schema.linkTable)
+              .select({ parentId: schema.parentColumn })
+              .where(schema.childColumn, currentId)
+              .limit(1);
+            if (linkRows.length > 0 && linkRows[0].parentId) parentId = Number(linkRows[0].parentId);
+          }
+          if (!parentId || !Number.isInteger(parentId) || parentId <= 0) break;
+          parentIds.push(parentId);
+          currentId = parentId;
+        }
+        return parentIds;
+      };
+
+      const allCategoryIds = [category.id, ...(await getAllParentIds(category.id))];
+
+      if (code === 'brand') {
+        const brands = await strapi.entityService.findMany('api::brand.brand', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        });
+        ctx.body = {
+          code: 0,
+          message: null,
+          data_code: code,
+          options: brands.map((brand: any) => ({
+            id: brand.id,
+            title: brand.name,
+            value: brand.name,
+            slug: brand.slug,
+          })),
+        };
+        return;
+      }
+
+      if (code === 'size') {
+        const sizes = await strapi.entityService.findMany('api::size.size', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name'],
+          sort: ['name:asc'],
+          limit: 500,
+        });
+        ctx.body = {
+          code: 0,
+          message: null,
+          data_code: code,
+          options: sizes.map((size: any) => ({
+            id: size.id,
+            title: size.name,
+            value: size.name,
+          })),
+        };
+        return;
+      }
+
+      const rawSchema = await getUploadAttributeSchema(strapi);
+      if ((rawSchema as any).disabled) {
+        ctx.body = { code: 0, message: null, data_code: code, options: [] };
+        return;
+      }
+      if (!rawSchema.optionAttributeId) {
+        ctx.body = { code: 0, message: null, data_code: code, options: [] };
+        return;
+      }
+      const idPlaceholders = allCategoryIds.map(() => '?').join(', ');
+      const orderCase = allCategoryIds.map((id, i) => `WHEN ${id} THEN ${i}`).join(' ');
+      const caTable = qi(strapi, rawSchema.attributesTable);
+      const caAlias = 'ca';
+      const lcaAlias = 'lca';
+      if (rawSchema.relationMode !== 'link' && !rawSchema.attrCategoryId) {
+        ctx.body = { code: 0, message: null, data_code: code, options: [] };
+        return;
+      }
+      const categoryIdExpr = rawSchema.relationMode === 'link'
+        ? `${lcaAlias}.${qi(strapi, rawSchema.attrLinkCategoryId)}`
+        : `${caAlias}.${qi(strapi, rawSchema.attrCategoryId)}`;
+      const attrJoinClause = rawSchema.relationMode === 'link'
+        ? `JOIN ${qi(strapi, rawSchema.attrLinkTable)} ${lcaAlias} ON ${lcaAlias}.${qi(strapi, rawSchema.attrLinkAttributeId)} = ${caAlias}.${qi(strapi, 'id')}`
+        : '';
+
+      const attrRawQuery = `
+        SELECT
+          ${caAlias}.${qi(strapi, 'id')} AS id,
+          ${categoryIdExpr} AS category_id_value
+        FROM ${caTable} ${caAlias}
+        ${attrJoinClause}
+        WHERE ${caAlias}.${qi(strapi, 'code')} = ?
+          AND ${categoryIdExpr} IN (${idPlaceholders})
+          ${rawSchema.attrPublishedAt ? `AND ${caAlias}.${qi(strapi, rawSchema.attrPublishedAt)} IS NOT NULL` : ''}
+        ORDER BY CASE ${categoryIdExpr} ${orderCase} ELSE 9999 END, ${caAlias}.${qi(strapi, 'id')} ASC
+        LIMIT 1
+      `;
+      const attrResult = await strapi.db.connection.raw(attrRawQuery, [code, ...allCategoryIds]);
+      const attrRows = Array.isArray(attrResult?.rows)
+        ? attrResult.rows
+        : Array.isArray(attrResult?.[0])
+          ? attrResult[0]
+          : [];
+      const attribute = attrRows?.[0];
+      if (!attribute) {
+        ctx.body = { code: 0, message: null, data_code: code, options: [] };
+        return;
+      }
+
+      const optionsRawQuery = `
+        SELECT
+          cao.${qi(strapi, 'id')} AS id,
+          cao.${qi(strapi, 'value')} AS value
+        FROM ${qi(strapi, rawSchema.optionsTable)} cao
+        WHERE cao.${qi(strapi, rawSchema.optionAttributeId)} = ?
+          ${rawSchema.optionPublishedAt ? `AND cao.${qi(strapi, rawSchema.optionPublishedAt)} IS NOT NULL` : ''}
+        ORDER BY ${rawSchema.optionSortOrder ? `cao.${qi(strapi, rawSchema.optionSortOrder)} ASC,` : ''} cao.${qi(strapi, 'value')} ASC
+      `;
+      const optionsResult = await strapi.db.connection.raw(optionsRawQuery, [Number(attribute.id)]);
+      const optionRows = Array.isArray(optionsResult?.rows)
+        ? optionsResult.rows
+        : Array.isArray(optionsResult?.[0])
+          ? optionsResult[0]
+          : [];
+
+      ctx.body = {
+        code: 0,
+        message: null,
+        data_code: code,
+        options: (optionRows as any[]).map((row) => ({
+          id: Number(row.id),
+          title: String(row.value ?? ''),
+          value: String(row.value ?? ''),
+        })),
+      };
+    } catch (error) {
+      strapi.log.error(error);
+      return ctx.internalServerError('Failed to load dropdown data.');
     }
   },
   async bulkDelete(ctx: any) {
@@ -445,4 +799,3 @@ export default factories.createCoreController('api::category.category', ({ strap
     }
   },
 }));
-

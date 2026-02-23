@@ -30,5 +30,13 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/item-upload/dropdown',
+      handler: 'category.getUploadDropdown',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };
