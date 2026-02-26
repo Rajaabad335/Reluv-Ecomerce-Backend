@@ -81,6 +81,13 @@
       "target": "api::size.size",
       "inversedBy": "products"
     },
+    "images": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": [
+        "images"
+      ]
+    },
     "product_attribute_values": {
       "type": "relation",
       "relation": "oneToMany",
