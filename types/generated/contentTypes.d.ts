@@ -1260,6 +1260,7 @@ export interface PluginUsersPermissionsUser
   attributes: {
     about: Schema.Attribute.Text;
     avatar: Schema.Attribute.Media<'images' | 'files'>;
+    birthday: Schema.Attribute.Date;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     city: Schema.Attribute.String;
     confirmationToken: Schema.Attribute.String & Schema.Attribute.Private;
@@ -1273,6 +1274,8 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    facebookLinked: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     followers: Schema.Attribute.Relation<
       'manyToMany',
       'plugin::users-permissions.user'
@@ -1281,6 +1284,10 @@ export interface PluginUsersPermissionsUser
       'manyToMany',
       'plugin::users-permissions.user'
     >;
+    fullName: Schema.Attribute.String;
+    gender: Schema.Attribute.Enumeration<['Male', 'Female', 'other']>;
+    googleLinked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    holidayMode: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isShowCity: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1293,6 +1300,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    phoneNumber: Schema.Attribute.String & Schema.Attribute.Unique;
     products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
