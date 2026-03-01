@@ -121,6 +121,37 @@
     },
     "about": {
       "type": "text"
+    },
+    "gender": {
+      "type": "enumeration",
+      "enum": [
+        "Male",
+        "Female",
+        "other"
+      ]
+    },
+    "birthday": {
+      "type": "date"
+    },
+    "holidayMode": {
+      "type": "boolean",
+      "default": false
+    },
+    "facebookLinked": {
+      "type": "boolean",
+      "default": false
+    },
+    "googleLinked": {
+      "type": "boolean",
+      "default": false
+    },
+    "fullName": {
+      "type": "string"
+    },
+    "phoneNumber": {
+      "type": "string",
+      "unique": true,
+      "regex": "^[0-9+\\-()\\s]{7,20}$"
     }
   }
 }
