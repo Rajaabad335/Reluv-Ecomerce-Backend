@@ -47,6 +47,20 @@ const toBlocks = (value: any): any => {
   ];
 };
 
+const blocksToText = (value: any): string => {
+  if (!Array.isArray(value)) return '';
+  const parts: string[] = [];
+  for (const block of value) {
+    if (!block || !Array.isArray(block.children)) continue;
+    for (const child of block.children) {
+      if (typeof child?.text === 'string' && child.text.trim().length > 0) {
+        parts.push(child.text.trim());
+      }
+    }
+  }
+  return parts.join(' ').trim();
+};
+
 export default factories.createCoreController('api::product.product', ({ strapi }) => ({
   async createSellNow(ctx: any) {
     try {
@@ -270,6 +284,94 @@ export default factories.createCoreController('api::product.product', ({ strapi 
     } catch (error) {
       strapi.log.error(error);
       return ctx.internalServerError('Failed to create product.');
+    }
+  },
+  async getProducts(ctx: any) {
+    try {
+      const query = ctx.query || {};
+      const products = await strapi.entityService.findMany('api::product.product', {
+        fields: ['id', 'title', 'price', 'condition', 'createdAt'],
+        populate: [
+          "category",
+          "brand",
+          "size",
+          "images"
+        ],
+        sort: { createdAt: 'desc' },
+        limit: 20,
+        offset: query?.offset ? Number(query?.offset) : 0,
+      }) as any[];
+
+      ctx.body = {
+        ok: true,
+        products: products.map((product: any) => ({
+          id: product.id,
+          title: product.title,
+          price: product.price,
+          condition: product?.condition,
+          category: product?.category?.name ?? null,
+          brand: product?.brand?.name ?? null,
+          size: product?.size?.name ?? null,
+          images: Array.isArray(product.images)
+            ? product.images.map((img:any) => ({ id: img.id, url: img.url }))
+            : [],
+
+        }))
+      };
+    } catch (error) {
+      strapi.log.error(error);
+      return ctx.internalServerError('Failed to fetch products.');
+    }
+  },
+  async getProductById(ctx: any) {
+    try {
+      const id = Number(ctx.params?.id);
+      if (!Number.isInteger(id) || id <= 0) {
+        return ctx.badRequest('A valid product id is required.');
+      }
+
+      const productData = await strapi.entityService.findMany('api::product.product', {
+        filters: { id: { $eq: id } },
+        fields: ['id', 'title', 'price', 'condition', 'likeCount', 'createdAt', 'description'],
+        populate: {
+          category: { fields: ['name'] },
+          brand: { fields: ['name'] },
+          size: { fields: ['name'] },
+          images: { fields: ['id', 'url'] },
+          users_permissions_user: {
+            fields: ['id', 'username','rating_avg','city','country']
+          },
+        },
+        limit: 1,
+      }) as any[];
+
+      const product = productData?.[0] as any;
+      if (!product) {
+        return ctx.notFound('Product not found.');
+      }
+
+      ctx.body = {
+        ok: true,
+        product: {
+          id: product.id,
+          title: product.title,
+          description: blocksToText(product.description),
+          price: product.price,
+          condition: product.condition,
+          likeCount: Number(product.likeCount ?? 0) || 0,
+          createdAt: product.createdAt,
+          category: product?.category?.name ?? null,
+          brand: product?.brand?.name ?? null,
+          size: product?.size?.name ?? null,
+          images: Array.isArray(product?.images)
+            ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+            : [],
+            user: product?.users_permissions_user
+        },
+      };
+    } catch (error) {
+      strapi.log.error(error);
+      return ctx.internalServerError('Failed to fetch product details.');
     }
   },
 }));

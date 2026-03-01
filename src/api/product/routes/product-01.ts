@@ -8,5 +8,21 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'GET',
+      path: '/products/getProducts',
+      handler: 'product.getProducts',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/products/getProductById/:id',
+      handler: 'product.getProductById',
+      config: {
+        auth: false,
+      },
+    }
   ],
 };
