@@ -23,6 +23,22 @@ export default {
       config: {
         auth: false,
       },
+    },
+    {
+      method: 'GET',
+      path: '/products/filter',
+      handler: 'product.filterProducts',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/products/filter-options',
+      handler: 'product.getFilterOptions',
+      config: {
+        auth: false,
+      },
     }
   ],
 };
