@@ -93,6 +93,12 @@
       "relation": "oneToMany",
       "target": "api::product-attribute-value.product-attribute-value",
       "mappedBy": "product"
+    },
+    "conversations": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::conversation.conversation",
+      "mappedBy": "product"
     }
   }
 }
