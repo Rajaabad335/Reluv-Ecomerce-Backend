@@ -39,6 +39,19 @@ export default {
       config: {
         auth: false,
       },
+    },
+    {
+      method: 'GET',
+      path: '/dashboard-data',
+      handler: 'product.getDashboardData',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
+      path: '/all-users',
+      handler: 'product.getAllUsers'
     }
   ],
 };
