@@ -379,6 +379,7 @@ export default factories.createCoreController(
               productStatus: "active",
               price: String(priceNumber),
               category: categoryId,
+              users_permissions_user: body?.userId ? Number(body.userId) : null,
               ...(brandId ? { brand: brandId } : {}),
               ...(sizeId ? { size: sizeId } : {}),
             },
@@ -542,7 +543,13 @@ export default factories.createCoreController(
           "api::product.product",
           {
             fields: ["id", "title", "price", "condition", "createdAt"],
-            populate: ["category", "brand", "size", "images"],
+            populate: [
+              "category",
+              "brand",
+              "size",
+              "images",
+              "users_permissions_user",
+            ],
             sort: { createdAt: "desc" },
             limit: 20,
             offset: query?.offset ? Number(query?.offset) : 0,
@@ -562,6 +569,7 @@ export default factories.createCoreController(
             images: Array.isArray(product.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
+            userId: product?.users_permissions_user ?? null,
           })),
         };
       } catch (error) {
@@ -877,6 +885,91 @@ export default factories.createCoreController(
       } catch (error) {
         strapi.log.error(error);
         return ctx.internalServerError("Failed to fetch filtered products.");
+      }
+    },
+    async getProductsByUserId(ctx: any) {
+      try {
+        const userId = Number(ctx.params?.userId);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          return ctx.badRequest("A valid user ID is required.");
+        }
+
+        const products = (await strapi.entityService.findMany(
+          "api::product.product",
+          {
+            filters: {
+              users_permissions_user: { id: { $eq: userId } },
+            },
+            fields: [
+              "id",
+              "title",
+              "price",
+              "condition",
+              "likeCount",
+              "createdAt",
+            ],
+            populate: {
+              category: { fields: ["name", "slug"] },
+              brand: { fields: ["name", "slug"] },
+              size: { fields: ["name"] },
+              images: { fields: ["id", "url"] },
+              product_attribute_values: {
+                fields: ["valueText", "valueNumber", "valueBoolean"],
+                populate: {
+                  category_attribute: { fields: ["code"] },
+                  category_attribute_option: { fields: ["value"] },
+                },
+              },
+            },
+            sort: { createdAt: "desc" },
+            limit: 100,
+          },
+        )) as any[];
+
+        const mapped = products.map((product: any) => {
+          const dynamicByCode = new Map<string, string>();
+          const pavs = Array.isArray(product?.product_attribute_values)
+            ? product.product_attribute_values
+            : [];
+          for (const pav of pavs) {
+            const code = normalizeCode(pav?.category_attribute?.code);
+            if (!code) continue;
+            const textValue = String(
+              pav?.category_attribute_option?.value ??
+                pav?.valueText ??
+                pav?.valueNumber ??
+                pav?.valueBoolean ??
+                "",
+            ).trim();
+            if (!textValue) continue;
+            if (!dynamicByCode.has(code)) dynamicByCode.set(code, textValue);
+          }
+
+          return {
+            id: product.id,
+            title: product.title,
+            price: product.price,
+            condition: product?.condition,
+            category: product?.category?.name ?? null,
+            brand: product?.brand?.name ?? null,
+            size: product?.size?.name ?? null,
+            color:
+              dynamicByCode.get("colour") || dynamicByCode.get("color") || null,
+            material: dynamicByCode.get("material") || null,
+            likeCount: Number(product?.likeCount ?? 0) || 0,
+            images: Array.isArray(product.images)
+              ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+              : [],
+          };
+        });
+
+        ctx.body = {
+          ok: true,
+          products: mapped,
+        };
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to fetch user products.");
       }
     },
     async getFilterOptions(ctx: any) {
