@@ -708,6 +708,54 @@ export interface ApiMessageMessage extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
+  collectionName: 'orders';
+  info: {
+    displayName: 'Order';
+    pluralName: 'orders';
+    singularName: 'order';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.Text;
+    buyer: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    buyerProtectionFee: Schema.Attribute.Decimal;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    deliveryMethod: Schema.Attribute.Enumeration<['pickup', 'home']>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::order.order'> &
+      Schema.Attribute.Private;
+    orderStatus: Schema.Attribute.Enumeration<
+      ['placed', 'processing', 'shipped', 'delivered', 'cancelled']
+    > &
+      Schema.Attribute.DefaultTo<'placed'>;
+    paymentStatus: Schema.Attribute.Enumeration<['pending', 'paid', 'failed']> &
+      Schema.Attribute.DefaultTo<'pending'>;
+    phoneNumber: Schema.Attribute.String;
+    product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
+    productImage: Schema.Attribute.String;
+    productPrice: Schema.Attribute.Decimal;
+    productTitle: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    shippingFee: Schema.Attribute.Decimal;
+    totalAmount: Schema.Attribute.Decimal;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiProductAttributeValueProductAttributeValue
   extends Struct.CollectionTypeSchema {
   collectionName: 'product_attribute_values';
@@ -1440,6 +1488,7 @@ declare module '@strapi/strapi' {
       'api::category.category': ApiCategoryCategory;
       'api::conversation.conversation': ApiConversationConversation;
       'api::message.message': ApiMessageMessage;
+      'api::order.order': ApiOrderOrder;
       'api::product-attribute-value.product-attribute-value': ApiProductAttributeValueProductAttributeValue;
       'api::product.product': ApiProductProduct;
       'api::review.review': ApiReviewReview;

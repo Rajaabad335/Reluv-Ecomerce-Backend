@@ -1,0 +1,77 @@
+{
+  "kind": "collectionType",
+  "collectionName": "orders",
+  "info": {
+    "singularName": "order",
+    "pluralName": "orders",
+    "displayName": "Order"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "product": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::product.product"
+    },
+
+    "buyer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+
+    "productTitle": {
+      "type": "string"
+    },
+    "productPrice": {
+      "type": "decimal"
+    },
+    "productImage": {
+      "type": "string"
+    },
+
+    "buyerProtectionFee": {
+      "type": "decimal"
+    },
+    "shippingFee": {
+      "type": "decimal"
+    },
+    "totalAmount": {
+      "type": "decimal"
+    },
+
+    "deliveryMethod": {
+      "type": "enumeration",
+      "enum": ["pickup", "home"]
+    },
+
+    "address": {
+      "type": "text"
+    },
+
+    "phoneNumber": {
+      "type": "string"
+    },
+
+    "paymentStatus": {
+      "type": "enumeration",
+      "enum": ["pending", "paid", "failed"],
+      "default": "pending"
+    },
+
+    "orderStatus": {
+      "type": "enumeration",
+      "enum": ["placed", "processing", "shipped", "delivered", "cancelled"],
+      "default": "placed"
+    }
+  }
+}

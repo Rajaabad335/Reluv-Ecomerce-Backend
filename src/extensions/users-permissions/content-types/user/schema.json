@@ -107,7 +107,10 @@
     "avatar": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images", "files"]
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
     },
     "city": {
       "type": "string"
@@ -121,7 +124,11 @@
     },
     "gender": {
       "type": "enumeration",
-      "enum": ["Male", "Female", "other"]
+      "enum": [
+        "Male",
+        "Female",
+        "other"
+      ]
     },
     "birthday": {
       "type": "date"
@@ -148,8 +155,11 @@
     },
     "accountType": {
       "type": "enumeration",
-      "enum": ["user", "admin"],
-      "default": "user"
+      "default": "user",
+      "enum": [
+        "user",
+        "admin"
+      ]
     }
   }
 }
