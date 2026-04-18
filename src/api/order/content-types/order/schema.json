@@ -70,7 +70,7 @@
 
     "orderStatus": {
       "type": "enumeration",
-      "enum": ["placed", "processing", "shipped", "delivered", "cancelled"],
+      "enum": ["In Progress", "shipped", "delivered", "cancelled"],
       "default": "placed"
     }
   }
