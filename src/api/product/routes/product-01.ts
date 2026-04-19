@@ -34,6 +34,14 @@ export default {
     },
     {
       method: "GET",
+      path: "/products/search",
+      handler: "product.searchProducts",
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: "GET",
       path: "/products/filter-options",
       handler: "product.getFilterOptions",
       config: {

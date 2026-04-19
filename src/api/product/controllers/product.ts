@@ -887,6 +887,125 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to fetch filtered products.");
       }
     },
+    async searchProducts(ctx: any) {
+      try {
+        const query = ctx.query || {};
+        const searchTerm = String(query.q || query.query || query.item || "")
+          .trim();
+        const pageSize = Math.min(
+          20,
+          parsePositiveInt(query.pageSize ?? query.limit, 5),
+        );
+
+        if (searchTerm.length < 2) {
+          ctx.body = {
+            ok: true,
+            products: [],
+            pagination: {
+              offset: 0,
+              pageSize,
+              hasMore: false,
+            },
+          };
+          return;
+        }
+
+        const products = (await strapi.entityService.findMany(
+          "api::product.product",
+          {
+            filters: {
+              productStatus: { $eq: "active" },
+              $or: [
+                { title: { $containsi: searchTerm } },
+                { brand: { name: { $containsi: searchTerm } } },
+                { category: { name: { $containsi: searchTerm } } },
+                { size: { name: { $containsi: searchTerm } } },
+              ],
+            },
+            fields: [
+              "id",
+              "title",
+              "price",
+              "condition",
+              "createdAt",
+              "likeCount",
+            ],
+            populate: {
+              category: { fields: ["name", "slug"] },
+              brand: { fields: ["name", "slug"] },
+              size: { fields: ["name"] },
+              images: { fields: ["id", "url"] },
+              product_attribute_values: {
+                fields: ["valueText", "valueNumber", "valueBoolean"],
+                populate: {
+                  category_attribute: { fields: ["code"] },
+                  category_attribute_option: { fields: ["value"] },
+                },
+              },
+            },
+            sort: { createdAt: "desc" as const },
+            start: 0,
+            limit: pageSize + 1,
+          },
+        )) as any[];
+
+        const hasMore = products.length > pageSize;
+        const pageSlice = hasMore ? products.slice(0, pageSize) : products;
+
+        const mapped = pageSlice.map((product: any) => {
+          const dynamicByCode = new Map<string, string>();
+          const pavs = Array.isArray(product?.product_attribute_values)
+            ? product.product_attribute_values
+            : [];
+
+          for (const pav of pavs) {
+            const code = normalizeCode(pav?.category_attribute?.code);
+            if (!code) continue;
+            const textValue = String(
+              pav?.category_attribute_option?.value ??
+                pav?.valueText ??
+                pav?.valueNumber ??
+                pav?.valueBoolean ??
+                "",
+            ).trim();
+            if (!textValue) continue;
+            if (!dynamicByCode.has(code)) dynamicByCode.set(code, textValue);
+          }
+
+          return {
+            id: product.id,
+            title: product.title,
+            price: product.price,
+            condition: product?.condition,
+            category: product?.category?.name ?? null,
+            subCategory: null,
+            item: product?.title ?? null,
+            brand: product?.brand?.name ?? null,
+            size: product?.size?.name ?? null,
+            color:
+              dynamicByCode.get("colour") || dynamicByCode.get("color") || null,
+            material: dynamicByCode.get("material") || null,
+            likeCount: Number(product?.likeCount ?? 0) || 0,
+            images: Array.isArray(product.images)
+              ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+              : [],
+          };
+        });
+
+        ctx.body = {
+          ok: true,
+          products: mapped,
+          pagination: {
+            offset: 0,
+            pageSize,
+            hasMore,
+          },
+        };
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to search products.");
+      }
+    },
     async getProductsByUserId(ctx: any) {
       try {
         const userId = Number(ctx.params?.userId);
