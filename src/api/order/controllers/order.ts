@@ -84,5 +84,77 @@ export default factories.createCoreController('api::order.order', ({ strapi }) =
       console.error("Error fetching orders:", error); 
       return ctx.internalServerError("An error occurred while fetching the orders.");
     }
+  },
+  async getAllOrders(ctx: any) {
+  try {
+    const allOrders = await strapi.entityService.findMany("api::order.order", {
+      populate: {
+        buyer: true,
+        seller: true,
+        product: true,
+      },
+      sort: { createdAt: "desc" },
+    });
+
+    // ✅ Transform data to match frontend UI
+    const formattedOrders = allOrders.map((order: any) => ({
+      id: order.id,
+
+      buyer: {
+        name: order.buyer?.username || "N/A",
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${order.buyer?.username || "user"}`
+      },
+
+      seller: {
+        name: order.seller?.username || "N/A",
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${order.seller?.username || "seller"}`
+      },
+
+      amount: order.totalAmount
+        ? `€${order.totalAmount}`
+        : "€0.00",
+
+      item: order.product?.title || "Product",
+      itemImage: order.product?.image || "https://via.placeholder.com/300",
+
+      role: "User",
+
+      roleColor:
+        order.status === "Delivered"
+          ? "bg-[#ffede0] text-[#f2994a]"
+          : "bg-[#56ab65]",
+
+      status: order.status || "Pending",
+
+      progressStatus:
+        order.status === "Delivered"
+          ? "Completed"
+          : order.status === "Cancelled"
+          ? "Cancelled"
+          : "In Progress",
+
+      dotColor:
+        order.status === "Delivered"
+          ? "bg-orange-500"
+          : order.status === "Cancelled"
+          ? "bg-red-500"
+          : "bg-green-600",
+
+      tracking: order.trackingNumber || "N/A",
+      carrier: order.carrier || "N/A",
+    }));
+
+    ctx.body = {
+      ok: true,
+      data: {
+        orders: formattedOrders, // ✅ IMPORTANT: matches frontend
+      },
+    };
+
+  } catch (error) {
+    strapi.log.error(error);
+    return ctx.internalServerError("Failed to load orders.");
   }
+}
+
 }));

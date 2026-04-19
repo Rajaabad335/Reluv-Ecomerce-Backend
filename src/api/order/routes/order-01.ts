@@ -15,5 +15,14 @@ export default {
         auth: false,
       },
     },
+    {
+      method: "GET",
+      path: "/orders/get-all-orders",
+      handler: "order.getAllOrders",
+       config: {
+        auth: false,
+      },
+    },
+    
   ],
 };
