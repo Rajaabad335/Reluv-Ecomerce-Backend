@@ -377,6 +377,7 @@ export default factories.createCoreController('api::category.category', ({ strap
           required_field_codes: [],
           brands: [],
           sizes: [],
+          colors: [],
         };
         return;
       }
@@ -397,6 +398,7 @@ export default factories.createCoreController('api::category.category', ({ strap
           required_field_codes: [],
           brands: [],
           sizes: [],
+          colors: [],
         };
         return;
       }
@@ -479,6 +481,26 @@ export default factories.createCoreController('api::category.category', ({ strap
         if (attribute.isRequired) requiredFieldCodes.push(mapped.code);
         return mapped;
       });
+      const [brands, sizes, colors] = await Promise.all([
+        strapi.entityService.findMany('api::brand.brand', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        }),
+        strapi.entityService.findMany('api::size.size', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name'],
+          sort: ['name:asc'],
+          limit: 500,
+        }),
+        strapi.entityService.findMany('api::color.color', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        }),
+      ]);
 
       ctx.body = {
         code: 0,
@@ -490,8 +512,23 @@ export default factories.createCoreController('api::category.category', ({ strap
         },
         attributes: mappedAttributes,
         required_field_codes: requiredFieldCodes,
-        brands: [],
-        sizes: [],
+        brands: brands.map((brand: any) => ({
+          id: brand.id,
+          title: brand.name,
+          value: brand.name,
+          slug: brand.slug,
+        })),
+        sizes: sizes.map((size: any) => ({
+          id: size.id,
+          title: size.name,
+          value: size.name,
+        })),
+        colors: colors.map((color: any) => ({
+          id: color.id,
+          title: color.name,
+          value: color.name,
+          slug: color.slug,
+        })),
       };
     } catch (error) {
       strapi.log.error(error);
@@ -587,6 +624,27 @@ export default factories.createCoreController('api::category.category', ({ strap
             id: size.id,
             title: size.name,
             value: size.name,
+          })),
+        };
+        return;
+      }
+
+      if (code === 'color' || code === 'colour') {
+        const colors = await strapi.entityService.findMany('api::color.color', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        });
+        ctx.body = {
+          code: 0,
+          message: null,
+          data_code: code,
+          options: colors.map((color: any) => ({
+            id: color.id,
+            title: color.name,
+            value: color.name,
+            slug: color.slug,
           })),
         };
         return;

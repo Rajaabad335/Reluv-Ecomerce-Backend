@@ -314,6 +314,11 @@ export default factories.createCoreController(
         const rawBrandValue =
           dynamicValuesByLowerKey.get("brand") ?? body.brand;
         const rawSizeValue = dynamicValuesByLowerKey.get("size") ?? body.size;
+        const rawColorValue =
+          dynamicValuesByLowerKey.get("color") ??
+          dynamicValuesByLowerKey.get("colour") ??
+          body.color ??
+          body.colour;
 
         const categoryPromise = strapi.entityService.findMany(
           "api::category.category",
@@ -362,12 +367,44 @@ export default factories.createCoreController(
           return sizeRows?.[0]?.id ? Number(sizeRows[0].id) : null;
         })();
 
-        const [categoryRows, resolvedBrandId, resolvedSizeId] =
-          await Promise.all([categoryPromise, brandPromise, sizePromise]);
+        let colorId: number | null = null;
+        const colorPromise = (async () => {
+          if (rawColorValue == null || String(rawColorValue).trim() === "")
+            return null;
+          const asColorId = Number(rawColorValue);
+          const rawColorText = String(rawColorValue).trim();
+          const colorFilters =
+            Number.isInteger(asColorId) && asColorId > 0
+              ? { id: { $eq: asColorId } }
+              : {
+                  $or: [
+                    { slug: { $eq: rawColorText.toLowerCase() } },
+                    { name: { $eqi: rawColorText } },
+                  ],
+                };
+          const colorRows = await strapi.entityService.findMany(
+            "api::color.color",
+            {
+              filters: colorFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return colorRows?.[0]?.id ? Number(colorRows[0].id) : null;
+        })();
+
+        const [categoryRows, resolvedBrandId, resolvedSizeId, resolvedColorId] =
+          await Promise.all([
+            categoryPromise,
+            brandPromise,
+            sizePromise,
+            colorPromise,
+          ]);
 
         if (!categoryRows?.[0]) return ctx.badRequest("Invalid categoryId.");
         brandId = resolvedBrandId;
         sizeId = resolvedSizeId;
+        colorId = resolvedColorId;
 
         const createdProduct = await strapi.db
           .query("api::product.product")
@@ -382,6 +419,7 @@ export default factories.createCoreController(
               users_permissions_user: body?.userId ? Number(body.userId) : null,
               ...(brandId ? { brand: brandId } : {}),
               ...(sizeId ? { size: sizeId } : {}),
+              ...(colorId ? { color: colorId } : {}),
             },
           });
 
@@ -395,7 +433,7 @@ export default factories.createCoreController(
         const attributeEntries = dynamicEntries
           .filter(
             ([code]) =>
-              !["brand", "size", "condition"].includes(
+              !["brand", "size", "color", "colour", "condition"].includes(
                 String(code).trim().toLowerCase(),
               ),
           )
@@ -547,6 +585,7 @@ export default factories.createCoreController(
               "category",
               "brand",
               "size",
+              "color",
               "images",
               "users_permissions_user",
             ],
@@ -566,6 +605,7 @@ export default factories.createCoreController(
             category: product?.category?.name ?? null,
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
+            color: product?.color?.name ?? null,
             images: Array.isArray(product.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
@@ -601,6 +641,7 @@ export default factories.createCoreController(
               category: { fields: ["name"] },
               brand: { fields: ["name"] },
               size: { fields: ["name"] },
+              color: { fields: ["name"] },
               images: { fields: ["id", "url"] },
               users_permissions_user: {
                 fields: ["id", "username", "rating_avg", "city", "country"],
@@ -628,6 +669,7 @@ export default factories.createCoreController(
             category: product?.category?.name ?? null,
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
+            color: product?.color?.name ?? null,
             images: Array.isArray(product?.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
@@ -725,6 +767,11 @@ export default factories.createCoreController(
           andFilters.push({
             $or: [
               {
+                color: {
+                  name: { $eqi: colourInput },
+                },
+              },
+              {
                 product_attribute_values: {
                   category_attribute: {
                     code: { $eqi: "colour" },
@@ -816,6 +863,7 @@ export default factories.createCoreController(
               category: { fields: ["name", "slug"] },
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
+              color: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -864,7 +912,10 @@ export default factories.createCoreController(
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
             color:
-              dynamicByCode.get("colour") || dynamicByCode.get("color") || null,
+              product?.color?.name ??
+              dynamicByCode.get("colour") ??
+              dynamicByCode.get("color") ??
+              null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
             images: Array.isArray(product.images)
@@ -921,6 +972,7 @@ export default factories.createCoreController(
                 { brand: { name: { $containsi: searchTerm } } },
                 { category: { name: { $containsi: searchTerm } } },
                 { size: { name: { $containsi: searchTerm } } },
+                { color: { name: { $containsi: searchTerm } } },
               ],
             },
             fields: [
@@ -935,6 +987,7 @@ export default factories.createCoreController(
               category: { fields: ["name", "slug"] },
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
+              color: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -984,7 +1037,10 @@ export default factories.createCoreController(
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
             color:
-              dynamicByCode.get("colour") || dynamicByCode.get("color") || null,
+              product?.color?.name ??
+              dynamicByCode.get("colour") ??
+              dynamicByCode.get("color") ??
+              null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
             images: Array.isArray(product.images)
@@ -1111,6 +1167,7 @@ export default factories.createCoreController(
               category: { fields: ["name", "slug"] },
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
+              color: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -1153,7 +1210,10 @@ export default factories.createCoreController(
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
             color:
-              dynamicByCode.get("colour") || dynamicByCode.get("color") || null,
+              product?.color?.name ??
+              dynamicByCode.get("colour") ??
+              dynamicByCode.get("color") ??
+              null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
             images: Array.isArray(product.images)
@@ -1216,6 +1276,7 @@ export default factories.createCoreController(
             populate: {
               brand: { fields: ["name"] },
               size: { fields: ["name"] },
+              color: { fields: ["name"] },
               product_attribute_values: {
                 fields: ["valueText"],
                 populate: {
@@ -1244,6 +1305,9 @@ export default factories.createCoreController(
         const colors: string[] = [];
         const materials: string[] = [];
         for (const product of products) {
+          const relationColor = String(product?.color?.name ?? "").trim();
+          if (relationColor) colors.push(relationColor);
+
           const pavs = Array.isArray(product?.product_attribute_values)
             ? product.product_attribute_values
             : [];
@@ -1258,13 +1322,16 @@ export default factories.createCoreController(
           }
         }
 
+        const normalizedColors = uniqueSorted(colors);
+
         ctx.body = {
           ok: true,
           options: {
             brand: brands,
             size: sizes,
             condition: conditions,
-            colour: uniqueSorted(colors),
+            colour: normalizedColors,
+            color: normalizedColors,
             material: uniqueSorted(materials),
             sortBy: ["Newest", "Price: Low to high", "Price: High to low"],
           },

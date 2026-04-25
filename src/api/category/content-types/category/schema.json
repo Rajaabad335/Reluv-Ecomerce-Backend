@@ -61,6 +61,12 @@
       "relation": "manyToMany",
       "target": "api::brand.brand",
       "inversedBy": "categories"
+    },
+    "colors": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::color.color",
+      "inversedBy": "categories"
     }
   }
 }
