@@ -32,6 +32,13 @@ const normalizeCondition = (value: any): ConditionValue | null => {
   return null;
 };
 
+const conditionToLabel = (value: string): string =>
+  String(value || "")
+    .trim()
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 const toBlocks = (value: any): any => {
   const text = String(value ?? "").trim();
   return [
@@ -393,18 +400,66 @@ export default factories.createCoreController(
           return colorRows?.[0]?.id ? Number(colorRows[0].id) : null;
         })();
 
-        const [categoryRows, resolvedBrandId, resolvedSizeId, resolvedColorId] =
-          await Promise.all([
-            categoryPromise,
-            brandPromise,
-            sizePromise,
-            colorPromise,
-          ]);
+        let conditionId: number | null = null;
+        const conditionPromise = (async () => {
+          const rawConditionText = String(conditionRawValue ?? "").trim();
+          if (!rawConditionText) return null;
+
+          const asConditionId = Number(rawConditionText);
+          const normalizedCondition = normalizeCondition(rawConditionText);
+          const normalizedConditionSlug = normalizedCondition
+            ? conditionToLabel(normalizedCondition)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "")
+            : null;
+
+          const conditionFilters =
+            Number.isInteger(asConditionId) && asConditionId > 0
+              ? { id: { $eq: asConditionId } }
+              : {
+                  $or: [
+                    { slug: { $eq: rawConditionText.toLowerCase() } },
+                    { name: { $eqi: rawConditionText } },
+                    ...(normalizedConditionSlug
+                      ? [
+                          { slug: { $eq: normalizedConditionSlug } },
+                          { name: { $eqi: conditionToLabel(normalizedCondition) } },
+                        ]
+                      : []),
+                  ],
+                };
+
+          const conditionRows = await strapi.entityService.findMany(
+            "api::condition.condition",
+            {
+              filters: conditionFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return conditionRows?.[0]?.id ? Number(conditionRows[0].id) : null;
+        })();
+
+        const [
+          categoryRows,
+          resolvedBrandId,
+          resolvedSizeId,
+          resolvedColorId,
+          resolvedConditionId,
+        ] = await Promise.all([
+          categoryPromise,
+          brandPromise,
+          sizePromise,
+          colorPromise,
+          conditionPromise,
+        ]);
 
         if (!categoryRows?.[0]) return ctx.badRequest("Invalid categoryId.");
         brandId = resolvedBrandId;
         sizeId = resolvedSizeId;
         colorId = resolvedColorId;
+        conditionId = resolvedConditionId;
 
         const createdProduct = await strapi.db
           .query("api::product.product")
@@ -420,6 +475,7 @@ export default factories.createCoreController(
               ...(brandId ? { brand: brandId } : {}),
               ...(sizeId ? { size: sizeId } : {}),
               ...(colorId ? { color: colorId } : {}),
+              ...(conditionId ? { product_condition: conditionId } : {}),
             },
           });
 
@@ -586,6 +642,7 @@ export default factories.createCoreController(
               "brand",
               "size",
               "color",
+              "product_condition",
               "images",
               "users_permissions_user",
             ],
@@ -601,7 +658,7 @@ export default factories.createCoreController(
             id: product.id,
             title: product.title,
             price: product.price,
-            condition: product?.condition,
+            condition: product?.product_condition?.name ?? product?.condition,
             category: product?.category?.name ?? null,
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
@@ -642,6 +699,7 @@ export default factories.createCoreController(
               brand: { fields: ["name"] },
               size: { fields: ["name"] },
               color: { fields: ["name"] },
+              product_condition: { fields: ["name"] },
               images: { fields: ["id", "url"] },
               users_permissions_user: {
                 fields: ["id", "username", "rating_avg", "city", "country"],
@@ -663,7 +721,7 @@ export default factories.createCoreController(
             title: product.title,
             description: blocksToText(product.description),
             price: product.price,
-            condition: product.condition,
+            condition: product?.product_condition?.name ?? product?.condition,
             likeCount: Number(product.likeCount ?? 0) || 0,
             createdAt: product.createdAt,
             category: product?.category?.name ?? null,
@@ -737,7 +795,7 @@ export default factories.createCoreController(
 
         if (brandInput) {
           andFilters.push({
-            brand: { name: { $eqi: brandInput } },
+              brand: { name: { $eqi: brandInput } },
           });
         }
 
@@ -749,11 +807,14 @@ export default factories.createCoreController(
 
         if (conditionInput) {
           const normalizedCondition = normalizeCondition(conditionInput);
-          if (normalizedCondition) {
-            andFilters.push({ condition: { $eq: normalizedCondition } });
-          } else {
-            andFilters.push({ condition: { $eqi: conditionInput } });
-          }
+          andFilters.push({
+            $or: [
+              ...(normalizedCondition
+                ? [{ condition: { $eq: normalizedCondition } }]
+                : [{ condition: { $eqi: conditionInput } }]),
+              { product_condition: { name: { $eqi: conditionInput } } },
+            ],
+          });
         }
 
         if (minPrice != null || maxPrice != null) {
@@ -864,6 +925,7 @@ export default factories.createCoreController(
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
               color: { fields: ["name", "slug"] },
+              product_condition: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -905,7 +967,7 @@ export default factories.createCoreController(
             id: product.id,
             title: product.title,
             price: product.price,
-            condition: product?.condition,
+            condition: product?.product_condition?.name ?? product?.condition,
             category: product?.category?.name ?? null,
             subCategory: null,
             item: null,
@@ -973,6 +1035,7 @@ export default factories.createCoreController(
                 { category: { name: { $containsi: searchTerm } } },
                 { size: { name: { $containsi: searchTerm } } },
                 { color: { name: { $containsi: searchTerm } } },
+                { product_condition: { name: { $containsi: searchTerm } } },
               ],
             },
             fields: [
@@ -988,6 +1051,7 @@ export default factories.createCoreController(
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
               color: { fields: ["name", "slug"] },
+              product_condition: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -1030,7 +1094,7 @@ export default factories.createCoreController(
             id: product.id,
             title: product.title,
             price: product.price,
-            condition: product?.condition,
+            condition: product?.product_condition?.name ?? product?.condition,
             category: product?.category?.name ?? null,
             subCategory: null,
             item: product?.title ?? null,
@@ -1168,6 +1232,7 @@ export default factories.createCoreController(
               brand: { fields: ["name", "slug"] },
               size: { fields: ["name"] },
               color: { fields: ["name", "slug"] },
+              product_condition: { fields: ["name", "slug"] },
               images: { fields: ["id", "url"] },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
@@ -1205,7 +1270,7 @@ export default factories.createCoreController(
             id: product.id,
             title: product.title,
             price: product.price,
-            condition: product?.condition,
+            condition: product?.product_condition?.name ?? product?.condition,
             category: product?.category?.name ?? null,
             brand: product?.brand?.name ?? null,
             size: product?.size?.name ?? null,
@@ -1277,6 +1342,7 @@ export default factories.createCoreController(
               brand: { fields: ["name"] },
               size: { fields: ["name"] },
               color: { fields: ["name"] },
+              product_condition: { fields: ["name"] },
               product_attribute_values: {
                 fields: ["valueText"],
                 populate: {
@@ -1299,7 +1365,12 @@ export default factories.createCoreController(
         const brands = uniqueSorted(products.map((p) => p?.brand?.name));
         const sizes = uniqueSorted(products.map((p) => p?.size?.name));
         const conditions = uniqueSorted(
-          products.map((p) => String(p?.condition || "").replace(/_/g, " ")),
+          products.map((p) =>
+            String(
+              p?.product_condition?.name ??
+                conditionToLabel(String(p?.condition || "")),
+            ),
+          ),
         );
 
         const colors: string[] = [];

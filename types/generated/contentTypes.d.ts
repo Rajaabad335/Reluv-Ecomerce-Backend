@@ -492,6 +492,40 @@ export interface ApiColorColor extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiConditionCondition extends Struct.CollectionTypeSchema {
+  collectionName: 'conditions';
+  info: {
+    displayName: 'condition';
+    pluralName: 'conditions';
+    singularName: 'condition';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    categories: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::category.category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::condition.condition'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCategoryAttributeOptionCategoryAttributeOption
   extends Struct.CollectionTypeSchema {
   collectionName: 'category_attribute_options';
@@ -593,6 +627,10 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   attributes: {
     brands: Schema.Attribute.Relation<'manyToMany', 'api::brand.brand'>;
     colors: Schema.Attribute.Relation<'manyToMany', 'api::color.color'>;
+    conditions: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::condition.condition'
+    >;
     categories: Schema.Attribute.Relation<
       'oneToMany',
       'api::category.category'
@@ -828,6 +866,10 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    product_condition: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::condition.condition'
+    >;
     product_attribute_values: Schema.Attribute.Relation<
       'oneToMany',
       'api::product-attribute-value.product-attribute-value'
@@ -1481,6 +1523,7 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::brand.brand': ApiBrandBrand;
       'api::color.color': ApiColorColor;
+      'api::condition.condition': ApiConditionCondition;
       'api::category-attribute-option.category-attribute-option': ApiCategoryAttributeOptionCategoryAttributeOption;
       'api::category-attribute.category-attribute': ApiCategoryAttributeCategoryAttribute;
       'api::category.category': ApiCategoryCategory;

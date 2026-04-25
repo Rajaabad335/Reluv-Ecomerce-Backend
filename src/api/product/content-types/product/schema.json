@@ -30,6 +30,12 @@
         "satisfactory"
       ]
     },
+    "product_condition": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::condition.condition",
+      "inversedBy": "products"
+    },
     "productStatus": {
       "type": "enumeration",
       "required": true,

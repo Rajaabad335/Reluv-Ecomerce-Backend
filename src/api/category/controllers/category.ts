@@ -378,6 +378,7 @@ export default factories.createCoreController('api::category.category', ({ strap
           brands: [],
           sizes: [],
           colors: [],
+          conditions: [],
         };
         return;
       }
@@ -399,6 +400,7 @@ export default factories.createCoreController('api::category.category', ({ strap
           brands: [],
           sizes: [],
           colors: [],
+          conditions: [],
         };
         return;
       }
@@ -481,7 +483,7 @@ export default factories.createCoreController('api::category.category', ({ strap
         if (attribute.isRequired) requiredFieldCodes.push(mapped.code);
         return mapped;
       });
-      const [brands, sizes, colors] = await Promise.all([
+      const [brands, sizes, colors, conditions] = await Promise.all([
         strapi.entityService.findMany('api::brand.brand', {
           filters: { categories: { id: { $in: allCategoryIds } } },
           fields: ['id', 'name', 'slug'],
@@ -495,6 +497,12 @@ export default factories.createCoreController('api::category.category', ({ strap
           limit: 500,
         }),
         strapi.entityService.findMany('api::color.color', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        }),
+        strapi.entityService.findMany('api::condition.condition', {
           filters: { categories: { id: { $in: allCategoryIds } } },
           fields: ['id', 'name', 'slug'],
           sort: ['name:asc'],
@@ -528,6 +536,12 @@ export default factories.createCoreController('api::category.category', ({ strap
           title: color.name,
           value: color.name,
           slug: color.slug,
+        })),
+        conditions: conditions.map((condition: any) => ({
+          id: condition.id,
+          title: condition.name,
+          value: condition.name,
+          slug: condition.slug,
         })),
       };
     } catch (error) {
@@ -645,6 +659,27 @@ export default factories.createCoreController('api::category.category', ({ strap
             title: color.name,
             value: color.name,
             slug: color.slug,
+          })),
+        };
+        return;
+      }
+
+      if (code === 'condition') {
+        const conditions = await strapi.entityService.findMany('api::condition.condition', {
+          filters: { categories: { id: { $in: allCategoryIds } } },
+          fields: ['id', 'name', 'slug'],
+          sort: ['name:asc'],
+          limit: 500,
+        });
+        ctx.body = {
+          code: 0,
+          message: null,
+          data_code: code,
+          options: conditions.map((condition: any) => ({
+            id: condition.id,
+            title: condition.name,
+            value: condition.name,
+            slug: condition.slug,
           })),
         };
         return;
