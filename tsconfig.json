@@ -12,6 +12,8 @@
     "resolveJsonModule": true,
     "noEmitOnError": true,
     "noImplicitThis": true,
+    "sourceMap": true,
+    "inlineSources": true,
     "outDir": "dist",
     "rootDir": "."
   },

@@ -461,71 +461,6 @@ export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface ApiColorColor extends Struct.CollectionTypeSchema {
-  collectionName: 'colors';
-  info: {
-    displayName: 'color';
-    pluralName: 'colors';
-    singularName: 'color';
-  };
-  options: {
-    draftAndPublish: true;
-  };
-  attributes: {
-    categories: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::category.category'
-    >;
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::color.color'> &
-      Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
-    publishedAt: Schema.Attribute.DateTime;
-    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
-export interface ApiConditionCondition extends Struct.CollectionTypeSchema {
-  collectionName: 'conditions';
-  info: {
-    displayName: 'condition';
-    pluralName: 'conditions';
-    singularName: 'condition';
-  };
-  options: {
-    draftAndPublish: true;
-  };
-  attributes: {
-    categories: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::category.category'
-    >;
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<
-      'oneToMany',
-      'api::condition.condition'
-    > &
-      Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
-    publishedAt: Schema.Attribute.DateTime;
-    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
 export interface ApiCategoryAttributeOptionCategoryAttributeOption
   extends Struct.CollectionTypeSchema {
   collectionName: 'category_attribute_options';
@@ -626,11 +561,6 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
   };
   attributes: {
     brands: Schema.Attribute.Relation<'manyToMany', 'api::brand.brand'>;
-    colors: Schema.Attribute.Relation<'manyToMany', 'api::color.color'>;
-    conditions: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::condition.condition'
-    >;
     categories: Schema.Attribute.Relation<
       'oneToMany',
       'api::category.category'
@@ -639,6 +569,11 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     category_attributes: Schema.Attribute.Relation<
       'oneToMany',
       'api::category-attribute.category-attribute'
+    >;
+    colors: Schema.Attribute.Relation<'manyToMany', 'api::color.color'>;
+    conditions: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::condition.condition'
     >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -656,6 +591,71 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     sizes: Schema.Attribute.Relation<'oneToMany', 'api::size.size'>;
     slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
     sortOrder: Schema.Attribute.Integer;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiColorColor extends Struct.CollectionTypeSchema {
+  collectionName: 'colors';
+  info: {
+    displayName: 'color';
+    pluralName: 'colors';
+    singularName: 'color';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    categories: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::category.category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::color.color'> &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiConditionCondition extends Struct.CollectionTypeSchema {
+  collectionName: 'conditions';
+  info: {
+    displayName: 'condition';
+    pluralName: 'conditions';
+    singularName: 'condition';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    categories: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::category.category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::condition.condition'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -842,8 +842,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
   attributes: {
     brand: Schema.Attribute.Relation<'manyToOne', 'api::brand.brand'>;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
-    color: Schema.Attribute.Relation<'manyToOne', 'api::color.color'>;
     city: Schema.Attribute.String;
+    color: Schema.Attribute.Relation<'manyToOne', 'api::color.color'>;
     condition: Schema.Attribute.Enumeration<
       ['new_with_tags', 'new_without_tags', 'very_good', 'good', 'satisfactory']
     > &
@@ -866,13 +866,13 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
-    product_condition: Schema.Attribute.Relation<
-      'manyToOne',
-      'api::condition.condition'
-    >;
     product_attribute_values: Schema.Attribute.Relation<
       'oneToMany',
       'api::product-attribute-value.product-attribute-value'
+    >;
+    product_condition: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::condition.condition'
     >;
     productStatus: Schema.Attribute.Enumeration<
       ['draft', 'active', 'reserved', 'sold', 'hidden']
@@ -1522,11 +1522,11 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::brand.brand': ApiBrandBrand;
-      'api::color.color': ApiColorColor;
-      'api::condition.condition': ApiConditionCondition;
       'api::category-attribute-option.category-attribute-option': ApiCategoryAttributeOptionCategoryAttributeOption;
       'api::category-attribute.category-attribute': ApiCategoryAttributeCategoryAttribute;
       'api::category.category': ApiCategoryCategory;
+      'api::color.color': ApiColorColor;
+      'api::condition.condition': ApiConditionCondition;
       'api::conversation.conversation': ApiConversationConversation;
       'api::message.message': ApiMessageMessage;
       'api::order.order': ApiOrderOrder;

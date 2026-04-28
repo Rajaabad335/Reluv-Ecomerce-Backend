@@ -98,6 +98,90 @@ const normalizeCode = (value: any): string =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
+const toLookupValues = (value: any): string[] => {
+  if (value == null) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item ?? "").trim())
+      .filter((item) => item.length > 0);
+  }
+  if (typeof value === "object") {
+    const candidates = [value.id, value.value, value.slug, value.name, value.title];
+    return candidates
+      .map((item) => String(item ?? "").trim())
+      .filter((item) => item.length > 0);
+  }
+  const text = String(value).trim();
+  return text ? [text] : [];
+};
+
+const getFirstScalarText = (value: any): string => {
+  const lookupValues = toLookupValues(value);
+  return lookupValues[0] ?? "";
+};
+
+const createPublishedPav = async (strapi: any, data: Record<string, any>) => {
+  if (typeof strapi?.documents === "function") {
+    return strapi
+      .documents("api::product-attribute-value.product-attribute-value")
+      .create({
+        data,
+        status: "published",
+      });
+  }
+
+  return strapi.entityService.create(
+    "api::product-attribute-value.product-attribute-value",
+    {
+      data,
+    },
+  );
+};
+
+const extractDynamicEntries = (input: any): Array<{ code: string; rawValue: any }> => {
+  if (!input) return [];
+
+  if (Array.isArray(input)) {
+    return input
+      .map((row: any) => {
+        if (!row || typeof row !== "object") return null;
+        const code =
+          row.code ??
+          row.key ??
+          row.attributeCode ??
+          row.attribute_code ??
+          row?.attribute?.code ??
+          row?.attribute?.key ??
+          row?.name;
+        const rawValue =
+          row.value ??
+          row.selectedValue ??
+          row.selected_value ??
+          row.optionValue ??
+          row.option_value ??
+          row.option?.value ??
+          row.option?.id ??
+          row.id ??
+          null;
+        const normalizedCode = normalizeCode(code);
+        if (!normalizedCode) return null;
+        return { code: normalizedCode, rawValue };
+      })
+      .filter((row): row is { code: string; rawValue: any } => Boolean(row));
+  }
+
+  if (typeof input === "object") {
+    return Object.entries(input)
+      .map(([code, rawValue]) => ({
+        code: normalizeCode(code),
+        rawValue,
+      }))
+      .filter((row) => Boolean(row.code));
+  }
+
+  return [];
+};
+
 let categorySchemaPromise: Promise<any> | null = null;
 
 const getCategorySchema = async (strapi: any) => {
@@ -265,6 +349,25 @@ export default factories.createCoreController(
           }
           return {};
         })();
+        const rawAttributeValues = (() => {
+          if (body.attributeValues && typeof body.attributeValues === "object")
+            return body.attributeValues;
+          if (typeof body.attributeValues === "string") {
+            try {
+              const parsed = JSON.parse(body.attributeValues);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          if (body.attributes && typeof body.attributes === "object")
+            return body.attributes;
+          if (typeof body.attributes === "string") {
+            try {
+              const parsed = JSON.parse(body.attributes);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          return null;
+        })();
         const imageIds = (() => {
           const rawImageIds = body.imageIds;
           if (Array.isArray(rawImageIds)) {
@@ -292,14 +395,12 @@ export default factories.createCoreController(
           }
           return [] as number[];
         })();
-        const dynamicEntries = Object.entries(
-          rawDynamicValues as Record<string, any>,
-        );
+        const dynamicEntries = [
+          ...extractDynamicEntries(rawDynamicValues),
+          ...extractDynamicEntries(rawAttributeValues),
+        ];
         const dynamicValuesByLowerKey = new Map<string, any>(
-          dynamicEntries.map(([key, value]) => [
-            String(key).trim().toLowerCase(),
-            value,
-          ]),
+          dynamicEntries.map(({ code, rawValue }) => [code, rawValue]),
         );
 
         if (!title) return ctx.badRequest("title is required.");
@@ -319,8 +420,17 @@ export default factories.createCoreController(
         }
 
         const rawBrandValue =
-          dynamicValuesByLowerKey.get("brand") ?? body.brand;
-        const rawSizeValue = dynamicValuesByLowerKey.get("size") ?? body.size;
+          dynamicValuesByLowerKey.get("brand") ??
+          dynamicValuesByLowerKey.get("brand_id") ??
+          dynamicValuesByLowerKey.get("brandid") ??
+          body.brand ??
+          body.brandId;
+        const rawSizeValue =
+          dynamicValuesByLowerKey.get("size") ??
+          dynamicValuesByLowerKey.get("size_id") ??
+          dynamicValuesByLowerKey.get("sizeid") ??
+          body.size ??
+          body.sizeId;
         const rawColorValue =
           dynamicValuesByLowerKey.get("color") ??
           dynamicValuesByLowerKey.get("colour") ??
@@ -338,13 +448,25 @@ export default factories.createCoreController(
 
         let brandId: number | null = null;
         const brandPromise = (async () => {
-          if (rawBrandValue == null || String(rawBrandValue).trim() === "")
+          const lookupValues = toLookupValues(rawBrandValue);
+          if (lookupValues.length === 0)
             return null;
-          const asBrandId = Number(rawBrandValue);
-          const brandFilters =
-            Number.isInteger(asBrandId) && asBrandId > 0
-              ? { id: { $eq: asBrandId } }
-              : { slug: { $eq: String(rawBrandValue).trim().toLowerCase() } };
+          const idCandidate = lookupValues
+            .map((item) => Number(item))
+            .find((item) => Number.isInteger(item) && item > 0) as
+            | number
+            | undefined;
+          const textValues = lookupValues
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+          const brandFilters = idCandidate
+            ? { id: { $eq: idCandidate } }
+            : {
+                $or: [
+                  { slug: { $in: textValues.map((item) => item.toLowerCase()) } },
+                  ...textValues.map((item) => ({ name: { $eqi: item } })),
+                ],
+              };
 
           const brandRows = await strapi.entityService.findMany(
             "api::brand.brand",
@@ -359,14 +481,29 @@ export default factories.createCoreController(
 
         let sizeId: number | null = null;
         const sizePromise = (async () => {
-          if (rawSizeValue == null || String(rawSizeValue).trim() === "")
+          const lookupValues = toLookupValues(rawSizeValue);
+          if (lookupValues.length === 0)
             return null;
-          const asSizeId = Number(rawSizeValue);
-          if (!Number.isInteger(asSizeId) || asSizeId <= 0) return null;
+          const idCandidate = lookupValues
+            .map((item) => Number(item))
+            .find((item) => Number.isInteger(item) && item > 0) as
+            | number
+            | undefined;
+          const textValues = lookupValues
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+          const sizeFilters = idCandidate
+            ? { id: { $eq: idCandidate } }
+            : {
+                $or: [
+                  { slug: { $in: textValues.map((item) => item.toLowerCase()) } },
+                  ...textValues.map((item) => ({ name: { $eqi: item } })),
+                ],
+              };
           const sizeRows = await strapi.entityService.findMany(
             "api::size.size",
             {
-              filters: { id: { $eq: asSizeId } },
+              filters: sizeFilters,
               fields: ["id"],
               limit: 1,
             },
@@ -488,35 +625,77 @@ export default factories.createCoreController(
 
         const attributeEntries = dynamicEntries
           .filter(
-            ([code]) =>
+            ({ code }) =>
               !["brand", "size", "color", "colour", "condition"].includes(
-                String(code).trim().toLowerCase(),
+                String(code ?? "").trim().toLowerCase(),
               ),
           )
-          .map(([code, rawValue]) => ({ code: String(code), rawValue }))
+          .map(({ code, rawValue }) => ({
+            code: normalizeCode(code),
+            rawValue,
+          }))
           .filter(
-            ({ rawValue }) =>
-              rawValue != null && String(rawValue).trim() !== "",
+            ({ code, rawValue }) =>
+              Boolean(code) && toLookupValues(rawValue).length > 0,
           );
 
         if (attributeEntries.length > 0) {
           const uniqueCodes = [
             ...new Set(attributeEntries.map((entry) => entry.code)),
           ];
-          const categoryAttributes = await strapi.entityService.findMany(
+          const categoryScopedAttributes = await strapi.entityService.findMany(
             "api::category-attribute.category-attribute",
             {
-              filters: { code: { $in: uniqueCodes } },
-              fields: ["id", "code", "type"],
+              filters: {
+                category: { id: { $eq: categoryId } },
+              },
+              fields: ["id", "code", "name", "type"],
               limit: 1000,
             },
           );
 
           const attributeByCode = new Map<string, any>();
-          for (const attr of categoryAttributes as any[]) {
-            const code = String(attr.code || "").trim();
-            if (!code) continue;
-            if (!attributeByCode.has(code)) attributeByCode.set(code, attr);
+          for (const attr of categoryScopedAttributes as any[]) {
+            const key = normalizeCode(attr.code || attr.name);
+            if (!key) continue;
+            if (!attributeByCode.has(key)) attributeByCode.set(key, attr);
+          }
+
+          const missingCodes = uniqueCodes.filter((code) => !attributeByCode.has(code));
+          if (missingCodes.length > 0) {
+            const fallbackAttributes = await strapi.entityService.findMany(
+              "api::category-attribute.category-attribute",
+              {
+                filters: { code: { $in: missingCodes } },
+                fields: ["id", "code", "name", "type"],
+                limit: 1000,
+              },
+            );
+
+            for (const attr of fallbackAttributes as any[]) {
+              const key = normalizeCode(attr.code || attr.name);
+              if (!key) continue;
+              if (!attributeByCode.has(key)) attributeByCode.set(key, attr);
+            }
+          }
+
+          const stillMissingCodes = uniqueCodes.filter((code) => !attributeByCode.has(code));
+          if (stillMissingCodes.length > 0) {
+            const broadFallbackAttributes = await strapi.entityService.findMany(
+              "api::category-attribute.category-attribute",
+              {
+                fields: ["id", "code", "name", "type"],
+                limit: 5000,
+              },
+            );
+            for (const attr of broadFallbackAttributes as any[]) {
+              const keyFromCode = normalizeCode(attr.code);
+              const keyFromName = normalizeCode(attr.name);
+              if (keyFromCode && !attributeByCode.has(keyFromCode))
+                attributeByCode.set(keyFromCode, attr);
+              if (keyFromName && !attributeByCode.has(keyFromName))
+                attributeByCode.set(keyFromName, attr);
+            }
           }
 
           const enumAttributeIds = [
@@ -530,6 +709,7 @@ export default factories.createCoreController(
           ];
 
           const optionIdByAttrAndValue = new Map<string, number>();
+          const optionIdByAttrAndId = new Map<string, number>();
           if (enumAttributeIds.length > 0) {
             const enumOptions = await strapi.entityService.findMany(
               "api::category-attribute-option.category-attribute-option",
@@ -560,10 +740,12 @@ export default factories.createCoreController(
               )
                 continue;
               optionIdByAttrAndValue.set(`${attrId}::${value}`, optionId);
+              optionIdByAttrAndId.set(`${attrId}::${optionId}`, optionId);
             }
           }
 
           const pavCreatePromises: Promise<any>[] = [];
+          let createdPavCount = 0;
           for (const { code, rawValue } of attributeEntries) {
             const categoryAttribute = attributeByCode.get(code);
             if (!categoryAttribute) continue;
@@ -575,47 +757,71 @@ export default factories.createCoreController(
             let optionId: number | null = null;
 
             if (valueType === "number") {
-              const asNumber = Number(rawValue);
+              const asNumber = Number(getFirstScalarText(rawValue));
               if (!Number.isFinite(asNumber)) continue;
               valueNumber = String(asNumber);
             } else if (valueType === "boolean") {
+              const booleanText = getFirstScalarText(rawValue).toLowerCase();
               valueBoolean =
-                String(rawValue).toLowerCase() === "true" ||
+                booleanText === "true" ||
+                booleanText === "yes" ||
                 rawValue === true ||
                 rawValue === 1 ||
                 rawValue === "1";
             } else if (valueType === "enum") {
-              const rawText = String(rawValue).trim();
-              valueText = rawText;
+              const candidates = toLookupValues(rawValue);
+              const selectedAttrId = Number(categoryAttribute.id);
               optionId =
-                optionIdByAttrAndValue.get(
-                  `${Number(categoryAttribute.id)}::${rawText.toLowerCase()}`,
-                ) ?? null;
+                candidates
+                  .map((candidate) => candidate.trim())
+                  .map(
+                    (candidate) =>
+                      optionIdByAttrAndValue.get(
+                        `${selectedAttrId}::${candidate.toLowerCase()}`,
+                      ) ??
+                      optionIdByAttrAndId.get(
+                        `${selectedAttrId}::${Number(candidate)}`,
+                      ) ??
+                      null,
+                  )
+                  .find((candidate) => Number.isInteger(candidate) && candidate > 0) ??
+                null;
+              valueText = candidates[0] ? String(candidates[0]).trim() : null;
             } else {
-              valueText = String(rawValue).trim();
+              valueText = getFirstScalarText(rawValue);
+            }
+
+            if (
+              valueText == null &&
+              valueNumber == null &&
+              valueBoolean == null &&
+              !optionId
+            ) {
+              continue;
             }
 
             pavCreatePromises.push(
-              strapi.db
-                .query("api::product-attribute-value.product-attribute-value")
-                .create({
-                  data: {
-                    product: createdProduct.id,
-                    category_attribute: categoryAttribute.id,
-                    ...(valueText != null ? { valueText } : {}),
-                    ...(valueNumber != null ? { valueNumber } : {}),
-                    ...(valueBoolean != null ? { valueBoolean } : {}),
-                    ...(optionId
-                      ? { category_attribute_option: optionId }
-                      : {}),
-                  },
-                }),
+              createPublishedPav(strapi, {
+                product: createdProduct.id,
+                category_attribute: categoryAttribute.id,
+                ...(valueText != null ? { valueText } : {}),
+                ...(valueNumber != null ? { valueNumber } : {}),
+                ...(valueBoolean != null ? { valueBoolean } : {}),
+                ...(optionId ? { category_attribute_option: optionId } : {}),
+              }).then((result: any) => {
+                if (result) createdPavCount += 1;
+                return result;
+              }),
             );
           }
 
           if (pavCreatePromises.length > 0) {
             await Promise.all(pavCreatePromises);
           }
+
+          strapi.log.info(
+            `[createSellNow] product=${createdProduct.id} pav_created=${createdPavCount} entries=${attributeEntries.length}`,
+          );
         }
 
         ctx.body = {
@@ -700,6 +906,13 @@ export default factories.createCoreController(
               size: { fields: ["name"] },
               color: { fields: ["name"] },
               product_condition: { fields: ["name"] },
+              product_attribute_values: {
+                fields: ["id", "valueText", "valueNumber", "valueBoolean"],
+                populate: {
+                  category_attribute: { fields: ["id", "code", "name"] },
+                  category_attribute_option: { fields: ["id", "value"] },
+                },
+              },
               images: { fields: ["id", "url"] },
               users_permissions_user: {
                 fields: ["id", "username", "rating_avg", "city", "country"],
@@ -730,6 +943,19 @@ export default factories.createCoreController(
             color: product?.color?.name ?? null,
             images: Array.isArray(product?.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+              : [],
+            attributes: Array.isArray(product?.product_attribute_values)
+              ? product.product_attribute_values.map((pav: any) => ({
+                  id: pav?.id,
+                  code: pav?.category_attribute?.code ?? null,
+                  name: pav?.category_attribute?.name ?? null,
+                  value:
+                    pav?.category_attribute_option?.value ??
+                    pav?.valueText ??
+                    pav?.valueNumber ??
+                    pav?.valueBoolean ??
+                    null,
+                }))
               : [],
             user: product?.users_permissions_user,
           },
@@ -1355,20 +1581,30 @@ export default factories.createCoreController(
           },
         )) as any[];
 
-        const uniqueSorted = (values: string[]): string[] =>
-          [
-            ...new Set(
-              values.map((v) => String(v || "").trim()).filter(Boolean),
-            ),
-          ].sort((a, b) => a.localeCompare(b));
+        const uniqueSorted = (values: string[]): string[] => {
+          const seen = new Map<string, string>();
+          for (const rawValue of values) {
+            const value = String(rawValue || "")
+              .trim()
+              .replace(/\s+/g, " ");
+            if (!value) continue;
+            const key = value.toLowerCase();
+            if (!seen.has(key)) seen.set(key, value);
+          }
+          return Array.from(seen.values()).sort((a, b) =>
+            a.localeCompare(b, undefined, { sensitivity: "base" }),
+          );
+        };
 
         const brands = uniqueSorted(products.map((p) => p?.brand?.name));
         const sizes = uniqueSorted(products.map((p) => p?.size?.name));
         const conditions = uniqueSorted(
           products.map((p) =>
-            String(
-              p?.product_condition?.name ??
-                conditionToLabel(String(p?.condition || "")),
+            conditionToLabel(
+              String(
+                p?.product_condition?.name ??
+                  conditionToLabel(String(p?.condition || "")),
+              ),
             ),
           ),
         );
