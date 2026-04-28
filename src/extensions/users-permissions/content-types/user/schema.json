@@ -72,6 +72,12 @@
       "target": "api::product.product",
       "mappedBy": "users_permissions_user"
     },
+    "fav_products": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::product.product",
+      "mappedBy": "users_permissions_user"
+    },
     "received_reviews": {
       "type": "relation",
       "relation": "oneToMany",
