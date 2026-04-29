@@ -841,7 +841,8 @@ export default factories.createCoreController(
         const query = ctx.query || {};
         const products = (await strapi.entityService.findMany(
           "api::product.product",
-          {
+          { 
+            filters: { users_permissions_user: { id: { $ne : null }} },
             fields: ["id", "title", "price", "condition", "createdAt"],
             populate: [
               "category",
