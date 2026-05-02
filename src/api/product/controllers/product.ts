@@ -106,7 +106,13 @@ const toLookupValues = (value: any): string[] => {
       .filter((item) => item.length > 0);
   }
   if (typeof value === "object") {
-    const candidates = [value.id, value.value, value.slug, value.name, value.title];
+    const candidates = [
+      value.id,
+      value.value,
+      value.slug,
+      value.name,
+      value.title,
+    ];
     return candidates
       .map((item) => String(item ?? "").trim())
       .filter((item) => item.length > 0);
@@ -138,7 +144,9 @@ const createPublishedPav = async (strapi: any, data: Record<string, any>) => {
   );
 };
 
-const extractDynamicEntries = (input: any): Array<{ code: string; rawValue: any }> => {
+const extractDynamicEntries = (
+  input: any,
+): Array<{ code: string; rawValue: any }> => {
   if (!input) return [];
 
   if (Array.isArray(input)) {
@@ -449,8 +457,7 @@ export default factories.createCoreController(
         let brandId: number | null = null;
         const brandPromise = (async () => {
           const lookupValues = toLookupValues(rawBrandValue);
-          if (lookupValues.length === 0)
-            return null;
+          if (lookupValues.length === 0) return null;
           const idCandidate = lookupValues
             .map((item) => Number(item))
             .find((item) => Number.isInteger(item) && item > 0) as
@@ -463,7 +470,9 @@ export default factories.createCoreController(
             ? { id: { $eq: idCandidate } }
             : {
                 $or: [
-                  { slug: { $in: textValues.map((item) => item.toLowerCase()) } },
+                  {
+                    slug: { $in: textValues.map((item) => item.toLowerCase()) },
+                  },
                   ...textValues.map((item) => ({ name: { $eqi: item } })),
                 ],
               };
@@ -482,8 +491,7 @@ export default factories.createCoreController(
         let sizeId: number | null = null;
         const sizePromise = (async () => {
           const lookupValues = toLookupValues(rawSizeValue);
-          if (lookupValues.length === 0)
-            return null;
+          if (lookupValues.length === 0) return null;
           const idCandidate = lookupValues
             .map((item) => Number(item))
             .find((item) => Number.isInteger(item) && item > 0) as
@@ -496,7 +504,9 @@ export default factories.createCoreController(
             ? { id: { $eq: idCandidate } }
             : {
                 $or: [
-                  { slug: { $in: textValues.map((item) => item.toLowerCase()) } },
+                  {
+                    slug: { $in: textValues.map((item) => item.toLowerCase()) },
+                  },
                   ...textValues.map((item) => ({ name: { $eqi: item } })),
                 ],
               };
@@ -561,7 +571,11 @@ export default factories.createCoreController(
                     ...(normalizedConditionSlug
                       ? [
                           { slug: { $eq: normalizedConditionSlug } },
-                          { name: { $eqi: conditionToLabel(normalizedCondition) } },
+                          {
+                            name: {
+                              $eqi: conditionToLabel(normalizedCondition),
+                            },
+                          },
                         ]
                       : []),
                   ],
@@ -627,7 +641,9 @@ export default factories.createCoreController(
           .filter(
             ({ code }) =>
               !["brand", "size", "color", "colour", "condition"].includes(
-                String(code ?? "").trim().toLowerCase(),
+                String(code ?? "")
+                  .trim()
+                  .toLowerCase(),
               ),
           )
           .map(({ code, rawValue }) => ({
@@ -661,7 +677,9 @@ export default factories.createCoreController(
             if (!attributeByCode.has(key)) attributeByCode.set(key, attr);
           }
 
-          const missingCodes = uniqueCodes.filter((code) => !attributeByCode.has(code));
+          const missingCodes = uniqueCodes.filter(
+            (code) => !attributeByCode.has(code),
+          );
           if (missingCodes.length > 0) {
             const fallbackAttributes = await strapi.entityService.findMany(
               "api::category-attribute.category-attribute",
@@ -679,7 +697,9 @@ export default factories.createCoreController(
             }
           }
 
-          const stillMissingCodes = uniqueCodes.filter((code) => !attributeByCode.has(code));
+          const stillMissingCodes = uniqueCodes.filter(
+            (code) => !attributeByCode.has(code),
+          );
           if (stillMissingCodes.length > 0) {
             const broadFallbackAttributes = await strapi.entityService.findMany(
               "api::category-attribute.category-attribute",
@@ -784,8 +804,9 @@ export default factories.createCoreController(
                       ) ??
                       null,
                   )
-                  .find((candidate) => Number.isInteger(candidate) && candidate > 0) ??
-                null;
+                  .find(
+                    (candidate) => Number.isInteger(candidate) && candidate > 0,
+                  ) ?? null;
               valueText = candidates[0] ? String(candidates[0]).trim() : null;
             } else {
               valueText = getFirstScalarText(rawValue);
@@ -841,9 +862,18 @@ export default factories.createCoreController(
         const query = ctx.query || {};
         const products = (await strapi.entityService.findMany(
           "api::product.product",
-          { 
-            filters: { users_permissions_user: { id: { $ne : null }} },
-            fields: ["id", "title", "price", "condition", "createdAt"],
+          {
+            filters: { users_permissions_user: { id: { $ne: null } } },
+
+            fields: [
+              "id",
+              "documentId", // ✅ correct place
+              "title",
+              "price",
+              "condition",
+              "createdAt",
+            ] as any[],
+
             populate: [
               "category",
               "brand",
@@ -853,6 +883,7 @@ export default factories.createCoreController(
               "images",
               "users_permissions_user",
             ],
+
             sort: { createdAt: "desc" },
             limit: 20,
             offset: query?.offset ? Number(query?.offset) : 0,
@@ -863,6 +894,7 @@ export default factories.createCoreController(
           ok: true,
           products: products.map((product: any) => ({
             id: product.id,
+            documentId: product.documentId, // ✅ include documentId in response
             title: product.title,
             price: product.price,
             condition: product?.product_condition?.name ?? product?.condition,
@@ -1022,7 +1054,7 @@ export default factories.createCoreController(
 
         if (brandInput) {
           andFilters.push({
-              brand: { name: { $eqi: brandInput } },
+            brand: { name: { $eqi: brandInput } },
           });
         }
 
@@ -1398,7 +1430,7 @@ export default factories.createCoreController(
             limit: pageSize + 1,
           },
         );
-        console.log(members)
+        console.log(members);
 
         const hasMore = members.length > pageSize;
         const pageSlice = hasMore ? members.slice(0, pageSize) : members;
