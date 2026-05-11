@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+import { createNotification } from '../../../lib/createNotification';
 
 const conversationUid = 'api::conversation.conversation' as any;
 const messageUid = 'api::message.message' as any;
@@ -106,6 +107,24 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: created.sender
             ? { id: created.sender.id, username: created.sender.username, avatar: created.sender.avatar ?? null }
             : null,
+        });
+      }
+
+      // Notify the other participant
+      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
+        populate: { buyer: { fields: ['id'] }, seller: { fields: ['id'] } },
+      }) as any;
+      const recipientId = conversation?.buyer?.id === userId
+        ? conversation?.seller?.id
+        : conversation?.buyer?.id;
+      if (recipientId) {
+        createNotification({
+          strapi,
+          recipientId,
+          type: 'new_message',
+          title: 'New message',
+          body: content.slice(0, 80),
+          link: '/Messages',
         });
       }
 

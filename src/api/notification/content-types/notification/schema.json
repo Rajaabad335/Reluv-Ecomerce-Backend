@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "notifications",
+  "info": {
+    "singularName": "notification",
+    "pluralName": "notifications",
+    "displayName": "Notification"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "type": {
+      "type": "enumeration",
+      "enum": ["welcome", "login", "product_created", "new_message", "new_follower", "order_update", "review"],
+      "required": true
+    },
+    "title": { "type": "string", "required": true },
+    "body": { "type": "text" },
+    "read": { "type": "boolean", "default": false },
+    "link": { "type": "string" },
+    "recipient": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    }
+  }
+}

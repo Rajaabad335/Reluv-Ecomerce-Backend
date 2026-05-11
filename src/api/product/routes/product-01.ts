@@ -74,5 +74,11 @@ export default {
       path: "/products/user/:userId",
       handler: "product.getProductsByUserId",
     },
+    {
+      method: "DELETE",
+      path: "/products/:id/mine",
+      handler: "product.deleteMyProduct",
+      config: { auth: { scope: ["delete"] } },
+    },
   ],
 };

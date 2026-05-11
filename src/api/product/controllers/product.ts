@@ -3,6 +3,7 @@
  */
 
 import { factories } from "@strapi/strapi";
+import { createNotification } from "../../../lib/createNotification";
 
 type ConditionValue =
   | "new_with_tags"
@@ -852,6 +853,19 @@ export default factories.createCoreController(
             title: createdProduct.title,
           },
         };
+
+        // Fire-and-forget product_created notification
+        const sellerId = body?.userId ? Number(body.userId) : null;
+        if (sellerId) {
+          createNotification({
+            strapi,
+            recipientId: sellerId,
+            type: "product_created",
+            title: "Product listed successfully! 👚",
+            body: `"${title}" is now live on Reluv.`,
+            link: `/products/${createdProduct.id}`,
+          });
+        }
       } catch (error) {
         strapi.log.error(error);
         return ctx.internalServerError("Failed to create product.");
@@ -1825,6 +1839,32 @@ export default factories.createCoreController(
         return ctx.internalServerError(
           "Failed to load product filter options.",
         );
+      }
+    },
+
+    async deleteMyProduct(ctx: any) {
+      try {
+        const userId = ctx.state?.user?.id;
+        if (!userId) return ctx.unauthorized("Authentication required.");
+
+        const id = Number(ctx.params?.id);
+        if (!id) return ctx.badRequest("Product id is required.");
+
+        const product = await strapi.db.query("api::product.product").findOne({
+          where: { id },
+          populate: ["users_permissions_user"],
+        });
+
+        if (!product) return ctx.notFound("Product not found.");
+        if (product.users_permissions_user?.id !== userId)
+          return ctx.forbidden("You can only delete your own products.");
+
+        await strapi.db.query("api::product.product").delete({ where: { id } });
+
+        ctx.body = { ok: true };
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to delete product.");
       }
     },
   }),
