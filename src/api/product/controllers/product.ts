@@ -867,7 +867,7 @@ export default factories.createCoreController(
 
             fields: [
               "id",
-              "documentId", // ✅ correct place
+              "documentId",
               "title",
               "price",
               "condition",
@@ -894,7 +894,7 @@ export default factories.createCoreController(
           ok: true,
           products: products.map((product: any) => ({
             id: product.id,
-            documentId: product.documentId, // ✅ include documentId in response
+            documentId: product.documentId,
             title: product.title,
             price: product.price,
             condition: product?.product_condition?.name ?? product?.condition,
@@ -1224,6 +1224,7 @@ export default factories.createCoreController(
 
           return {
             id: product.id,
+            documentId: product.documentId,
             title: product.title,
             price: product.price,
             condition: product?.product_condition?.name ?? product?.condition,
@@ -1351,6 +1352,7 @@ export default factories.createCoreController(
 
           return {
             id: product.id,
+            documentId: product.documentId,
             title: product.title,
             price: product.price,
             condition: product?.product_condition?.name ?? product?.condition,
@@ -1527,6 +1529,7 @@ export default factories.createCoreController(
 
           return {
             id: product.id,
+            documentId: product.documentId,
             title: product.title,
             price: product.price,
             condition: product?.product_condition?.name ?? product?.condition,
