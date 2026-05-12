@@ -22,9 +22,15 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["pending", "accepted", "declined", "expired"],
+      "enum": ["pending", "accepted", "declined", "expired", "completed"],
       "default": "pending",
       "required": true
+    },
+    "expiresAt": {
+      "type": "datetime"
+    },
+    "acceptedAt": {
+      "type": "datetime"
     },
     "product": {
       "type": "relation",
@@ -42,6 +48,11 @@
       "target": "plugin::users-permissions.user"
     },
     "productTitle": { "type": "string" },
-    "productImage": { "type": "string" }
+    "productImage": { "type": "string" },
+    "order": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::order.order"
+    }
   }
 }

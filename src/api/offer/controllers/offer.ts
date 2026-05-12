@@ -2,6 +2,7 @@ import { factories } from "@strapi/strapi";
 
 const MIN_RATIO = 0.5; // offer must be >= 50% of original price
 const MAX_RATIO = 1.5; // offer must be <= 150% of original price
+const OFFER_EXPIRY_HOURS = 48; // Offer expires after 48 hours of acceptance
 
 export default factories.createCoreController(
   "api::offer.offer",
@@ -82,7 +83,7 @@ export default factories.createCoreController(
         "api::notification.notification" as any,
         {
           data: {
-            type: "order_update",
+            type: "offer_received",
             title: "New Offer Received",
             body: `You received an offer of ${offerPrice} on "${(product as any).title}".`,
             read: false,
@@ -155,10 +156,19 @@ export default factories.createCoreController(
       if ((offer as any).status !== "pending")
         return ctx.badRequest("Offer is no longer pending.");
 
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + OFFER_EXPIRY_HOURS * 60 * 60 * 1000);
+
       const updated = await strapi.entityService.update(
         "api::offer.offer" as any,
         offerId,
-        { data: { status: action } }
+        {
+          data: {
+            status: action,
+            acceptedAt: action === "accepted" ? now.toISOString() : null,
+            expiresAt: action === "accepted" ? expiresAt.toISOString() : null,
+          },
+        }
       );
 
       const buyerId = (offer as any).buyer?.id;
@@ -171,18 +181,18 @@ export default factories.createCoreController(
         "api::notification.notification" as any,
         {
           data: {
-            type: "order_update",
+            type: action === "accepted" ? "offer_accepted" : "offer_declined",
             title:
               action === "accepted" ? "Offer Accepted! 🎉" : "Offer Declined",
             body:
               action === "accepted"
-                ? `Your offer of ${offerPrice} on "${productTitle}" was accepted! Proceed to checkout.`
+                ? `Your offer of ${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
                 : `Your offer on "${productTitle}" was declined by the seller.`,
             read: false,
             link:
               action === "accepted"
-                ? `/products/${productId}`
-                : `/Orders?tab=offers`,
+                ? `/Orders?tab=offers&highlight=${offerId}`
+                : `/products/${productId}`,
             recipient: buyerId,
           },
         }
@@ -196,6 +206,96 @@ export default factories.createCoreController(
       }
 
       return ctx.send({ data: updated });
+    },
+
+    // POST /api/offers/:id/complete
+    async completeOffer(ctx: any) {
+      const offerId = Number(ctx.params.id);
+      const { orderId, buyerId } = ctx.request.body;
+
+      if (!offerId || !orderId || !buyerId) {
+        return ctx.badRequest("offerId, orderId, and buyerId are required.");
+      }
+
+      const offer = await strapi.entityService.findOne(
+        "api::offer.offer" as any,
+        offerId,
+        { populate: ["buyer", "product"] }
+      );
+
+      if (!offer) return ctx.notFound("Offer not found.");
+      if ((offer as any).buyer?.id !== buyerId)
+        return ctx.forbidden("Not your offer.");
+      if ((offer as any).status !== "accepted")
+        return ctx.badRequest("Offer is not in accepted state.");
+
+      // Check if offer has expired
+      const expiresAt = (offer as any).expiresAt;
+      if (expiresAt && new Date(expiresAt) < new Date()) {
+        await strapi.entityService.update(
+          "api::offer.offer" as any,
+          offerId,
+          { data: { status: "expired" } }
+        );
+        return ctx.badRequest("This offer has expired.");
+      }
+
+      // Mark offer as completed and link to order
+      await strapi.entityService.update(
+        "api::offer.offer" as any,
+        offerId,
+        {
+          data: {
+            status: "completed",
+            order: orderId,
+          },
+        }
+      );
+
+      return ctx.send({ ok: true });
+    },
+
+    // GET /api/offers/check-expiry (cron job endpoint)
+    async checkExpiredOffers(ctx: any) {
+      try {
+        const now = new Date();
+        const expiredOffers = await strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: {
+              status: "accepted",
+              expiresAt: { $lt: now.toISOString() },
+            },
+            populate: ["product"],
+            limit: 100,
+          }
+        );
+
+        let expiredCount = 0;
+        for (const offer of expiredOffers as any[]) {
+          await strapi.entityService.update(
+            "api::offer.offer" as any,
+            offer.id,
+            { data: { status: "expired" } }
+          );
+
+          // Unreserve product
+          if (offer.product?.id) {
+            await strapi.entityService.update(
+              "api::product.product",
+              offer.product.id,
+              { data: { productStatus: "active" } }
+            );
+          }
+
+          expiredCount++;
+        }
+
+        return ctx.send({ ok: true, expiredCount });
+      } catch (error) {
+        strapi.log.error("Error checking expired offers:", error);
+        return ctx.internalServerError("Failed to check expired offers.");
+      }
     },
   })
 );

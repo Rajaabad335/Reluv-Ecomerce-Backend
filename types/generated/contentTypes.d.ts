@@ -803,6 +803,7 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    acceptedAt: Schema.Attribute.DateTime;
     buyer: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
@@ -810,11 +811,13 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    expiresAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::offer.offer'> &
       Schema.Attribute.Private;
     message: Schema.Attribute.Text;
     offerPrice: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
     originalPrice: Schema.Attribute.Decimal & Schema.Attribute.Required;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     productImage: Schema.Attribute.String;
@@ -825,7 +828,7 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     status: Schema.Attribute.Enumeration<
-      ['pending', 'accepted', 'declined', 'expired']
+      ['pending', 'accepted', 'declined', 'expired', 'completed']
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;

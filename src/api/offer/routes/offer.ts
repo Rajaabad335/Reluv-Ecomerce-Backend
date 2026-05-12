@@ -24,5 +24,17 @@ export default {
       handler: "offer.respondToOffer",
       config: { auth: false },
     },
+    {
+      method: "POST",
+      path: "/offers/:id/complete",
+      handler: "offer.completeOffer",
+      config: { auth: false },
+    },
+    {
+      method: "GET",
+      path: "/offers/check-expiry",
+      handler: "offer.checkExpiredOffers",
+      config: { auth: false },
+    },
   ],
 };
