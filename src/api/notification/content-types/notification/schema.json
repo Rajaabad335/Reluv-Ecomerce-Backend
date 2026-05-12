@@ -11,7 +11,7 @@
   "attributes": {
     "type": {
       "type": "enumeration",
-      "enum": ["welcome", "login", "product_created", "new_message", "new_follower", "order_update", "review"],
+      "enum": ["welcome", "login", "product_created", "new_message", "new_follower", "order_update", "review", "offer_received", "offer_accepted", "offer_declined"],
       "required": true
     },
     "title": { "type": "string", "required": true },
