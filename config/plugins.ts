@@ -6,15 +6,25 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
       provider: 'nodemailer',
       providerOptions: {
         host: env('SMTP_HOST', 'smtp.gmail.com'),
-        port: env.int('SMTP_PORT', 587),
-        secure: false,
+        port: env.int('SMTP_PORT', 465),
+
+        secure: true,
         family: 4,
-        tls: { rejectUnauthorized: false },
+
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+
         auth: {
           user: env('SMTP_USER'),
           pass: env('SMTP_PASS'),
         },
+
+        tls: {
+          rejectUnauthorized: false,
+        },
       },
+
       settings: {
         defaultFrom: env('EMAIL_FROM', 'noreply@reluv.com'),
         defaultReplyTo: env('EMAIL_FROM', 'noreply@reluv.com'),
