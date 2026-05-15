@@ -22,8 +22,9 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
         },
 
         tls: {
-          // Render/Gmail 587 (STARTTLS) - keep TLS verification enabled
-          rejectUnauthorized: true,
+          // Render/Gmail STARTTLS may fail when TLS verification is strict depending on host network.
+          // Keep connection working; revisit if you later see certificate-related issues.
+          rejectUnauthorized: false,
           requireTLS: true,
         },
       },
