@@ -6,9 +6,10 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
       provider: 'nodemailer',
       providerOptions: {
         host: env('SMTP_HOST', 'smtp.gmail.com'),
-        port: env.int('SMTP_PORT', 465),
+        port: env.int('SMTP_PORT', 587),
 
-        secure: true,
+        // Use STARTTLS for 587; TLS direct for 465
+        secure: env.int('SMTP_PORT', 587) === 465,
         family: 4,
 
         connectionTimeout: 10000,
@@ -21,7 +22,9 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
         },
 
         tls: {
-          rejectUnauthorized: false,
+          // Render/Gmail 587 (STARTTLS) - keep TLS verification enabled
+          rejectUnauthorized: true,
+          requireTLS: true,
         },
       },
 
