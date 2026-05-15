@@ -8,6 +8,7 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin =>
         host: env('SMTP_HOST', 'smtp.gmail.com'),
         port: env.int('SMTP_PORT', 587),
         secure: false,
+        family: 4,
         tls: { rejectUnauthorized: false },
         auth: {
           user: env('SMTP_USER'),
