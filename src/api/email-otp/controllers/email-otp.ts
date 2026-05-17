@@ -1,4 +1,5 @@
 import { Core } from "@strapi/strapi";
+import { Resend } from "resend";
 import { createNotification } from "../../../lib/createNotification";
 
 // In-memory OTP store: email -> { otp, expiresAt, userData }
@@ -38,8 +39,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       password,
     });
 
-    await strapi.plugin("email").service("email").send({
-      to: email,
+    const resend = new Resend(process.env.RESEND_API_KEY as string);
+
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || "usamarahim61@gmail.com",
+      to: [email],
       subject: "Your Reluv verification code",
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">

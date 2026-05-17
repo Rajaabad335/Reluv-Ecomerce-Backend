@@ -1,7 +1,10 @@
 import { Core } from "@strapi/strapi";
+import { Resend } from "resend";
+
 
 // In-memory store: email -> { otp, expiresAt }
 const resetStore = new Map<string, { otp: string; expiresAt: number }>();
+
 
 const OTP_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -10,6 +13,8 @@ function generateOtp() {
 }
 
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   async sendOtp(ctx: any) {
     const { email } = ctx.request.body;
     if (!email) return ctx.badRequest("email is required");
@@ -27,9 +32,13 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     const otp = generateOtp();
     resetStore.set(email, { otp, expiresAt: Date.now() + OTP_TTL_MS });
 
-    await strapi.plugin("email").service("email").send({
-      to: email,
-      subject: "Reset your Reluv password",
+    // Send via Resend (instead of Strapi nodemailer)
+    const resend = new Resend(process.env.RESEND_API_KEY as string);
+
+    await resend.emails.send({
+      from: process.env.EMAIL_FROM || 'usamarahim61@gmail.com',
+      to: [email],
+      subject: 'Reset your Reluv password',
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#cb6f4d">Reset your password</h2>
@@ -39,6 +48,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         </div>
       `,
     });
+
 
     ctx.send({ ok: true });
   },
