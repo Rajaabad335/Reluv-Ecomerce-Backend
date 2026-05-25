@@ -122,7 +122,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       strapi,
       recipientId: user.id,
       type: "welcome",
-      title: "Welcome to Reluv! 🎉",
+      title: "Welcome to Reluv!",
       body: `Hi ${user.username}, your account is ready. Start buying and selling pre-loved fashion!`,
       link: "/",
     });

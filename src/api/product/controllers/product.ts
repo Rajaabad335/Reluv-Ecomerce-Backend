@@ -861,7 +861,7 @@ export default factories.createCoreController(
             strapi,
             recipientId: sellerId,
             type: "product_created",
-            title: "Product listed successfully! 👚",
+            title: "Product listed successfully!",
             body: `"${title}" is now live on Reluv.`,
             link: `/products/${createdProduct.id}`,
           });
