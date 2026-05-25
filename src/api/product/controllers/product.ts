@@ -191,7 +191,7 @@ const extractDynamicEntries = (
   return [];
 };
 
-let categorySchemaPromise: Promise<any> | null = null;
+let categorySchemaPromise = null;
 
 const getCategorySchema = async (strapi: any) => {
   if (categorySchemaPromise) return categorySchemaPromise;
@@ -765,7 +765,7 @@ export default factories.createCoreController(
             }
           }
 
-          const pavCreatePromises: Promise<any>[] = [];
+          const pavCreatePromises = [];
           let createdPavCount = 0;
           for (const { code, rawValue } of attributeEntries) {
             const categoryAttribute = attributeByCode.get(code);

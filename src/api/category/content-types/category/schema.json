@@ -73,6 +73,12 @@
       "relation": "manyToMany",
       "target": "api::condition.condition",
       "inversedBy": "categories"
+    },
+    "materials": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::material.material",
+      "mappedBy": "categories"
     }
   }
 }

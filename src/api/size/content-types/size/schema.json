@@ -7,7 +7,7 @@
     "displayName": "size"
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "pluginOptions": {},
   "attributes": {
@@ -31,6 +31,12 @@
       "relation": "oneToMany",
       "target": "api::product.product",
       "mappedBy": "size"
+    },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category",
+      "inversedBy": "sizes"
     }
   }
 }

@@ -16,12 +16,14 @@
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
   "dependencies": {
+    "@sendgrid/mail": "^8.1.6",
     "@strapi/plugin-cloud": "^5.43.0",
     "@strapi/plugin-users-permissions": "^5.43.0",
     "@strapi/provider-email-nodemailer": "^5.45.1",
     "@strapi/strapi": "^5.43.0",
     "axios": "^1.13.5",
     "better-sqlite3": "^12.6.2",
+    "nodemailer": "^8.0.7",
     "pg": "8.8.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",

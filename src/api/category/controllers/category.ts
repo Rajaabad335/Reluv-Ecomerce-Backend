@@ -615,8 +615,8 @@ export default factories.createCoreController('api::category.category', ({ strap
           data_code: code,
           options: brands.map((brand: any) => ({
             id: brand.id,
-            title: brand.name,
-            value: brand.name,
+            title: brand.name || brand.slug,
+            value: brand.name || brand.slug,
             slug: brand.slug,
           })),
         };
@@ -627,7 +627,7 @@ export default factories.createCoreController('api::category.category', ({ strap
         const sizes = await strapi.entityService.findMany('api::size.size', {
           filters: { categories: { id: { $in: allCategoryIds } } },
           fields: ['id', 'name'],
-          sort: ['name:asc'],
+          // sort: ['name:asc'],
           limit: 500,
         });
         ctx.body = {
@@ -677,8 +677,8 @@ export default factories.createCoreController('api::category.category', ({ strap
           data_code: code,
           options: conditions.map((condition: any) => ({
             id: condition.id,
-            title: condition.name,
-            value: condition.name,
+            title: condition.name || condition.slug,
+            value: condition.name || condition.slug,
             slug: condition.slug,
           })),
         };

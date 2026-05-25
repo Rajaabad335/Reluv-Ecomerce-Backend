@@ -1,10 +1,10 @@
 {
   "kind": "collectionType",
-  "collectionName": "colors",
+  "collectionName": "materials",
   "info": {
-    "singularName": "color",
-    "pluralName": "colors",
-    "displayName": "color"
+    "singularName": "material",
+    "pluralName": "materials",
+    "displayName": "Material"
   },
   "options": {
     "draftAndPublish": false
@@ -12,25 +12,23 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string",
-      "required": true
+      "type": "string"
     },
     "slug": {
       "type": "uid",
-      "targetField": "name",
-      "required": true
+      "targetField": "name"
     },
     "products": {
       "type": "relation",
       "relation": "oneToMany",
       "target": "api::product.product",
-      "mappedBy": "color"
+      "mappedBy": "material"
     },
     "categories": {
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::category.category",
-      "mappedBy": "colors"
+      "inversedBy": "materials"
     }
   }
 }

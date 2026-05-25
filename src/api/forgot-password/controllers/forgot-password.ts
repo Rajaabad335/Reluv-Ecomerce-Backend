@@ -1,5 +1,11 @@
 import { Core } from "@strapi/strapi";
-import { Resend } from "resend";
+import { sendMail } from "../../../lib/email/sendMail";
+
+
+
+
+
+
 
 
 // In-memory store: email -> { otp, expiresAt }
@@ -32,11 +38,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     const otp = generateOtp();
     resetStore.set(email, { otp, expiresAt: Date.now() + OTP_TTL_MS });
 
-    // Send via Resend (instead of Strapi nodemailer)
-    const resend = new Resend(process.env.RESEND_API_KEY as string);
-
-    await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'usamarahim61@gmail.com',
+    await sendMail({
       to: [email],
       subject: 'Reset your Reluv password',
       html: `
@@ -48,6 +50,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
         </div>
       `,
     });
+
 
 
     ctx.send({ ok: true });

@@ -438,7 +438,7 @@ export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
     singularName: 'brand';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     categories: Schema.Attribute.Relation<
@@ -470,7 +470,7 @@ export interface ApiCategoryAttributeOptionCategoryAttributeOption
     singularName: 'category-attribute-option';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     category_attribute: Schema.Attribute.Relation<
@@ -508,7 +508,7 @@ export interface ApiCategoryAttributeCategoryAttribute
     singularName: 'category-attribute';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
@@ -585,6 +585,10 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
       'api::category.category'
     > &
       Schema.Attribute.Private;
+    materials: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::material.material'
+    >;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
     publishedAt: Schema.Attribute.DateTime;
@@ -605,7 +609,7 @@ export interface ApiColorColor extends Struct.CollectionTypeSchema {
     singularName: 'color';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     categories: Schema.Attribute.Relation<
@@ -636,7 +640,7 @@ export interface ApiConditionCondition extends Struct.CollectionTypeSchema {
     singularName: 'condition';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     categories: Schema.Attribute.Relation<
@@ -697,6 +701,40 @@ export interface ApiConversationConversation
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiMaterialMaterial extends Struct.CollectionTypeSchema {
+  collectionName: 'materials';
+  info: {
+    displayName: 'Material';
+    pluralName: 'materials';
+    singularName: 'material';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    categories: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::category.category'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::material.material'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
+    publishedAt: Schema.Attribute.DateTime;
+    slug: Schema.Attribute.UID<'name'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -895,7 +933,7 @@ export interface ApiProductAttributeValueProductAttributeValue
     singularName: 'product-attribute-value';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     category_attribute: Schema.Attribute.Relation<
@@ -962,6 +1000,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       'api::product.product'
     > &
       Schema.Attribute.Private;
+    material: Schema.Attribute.Relation<'manyToOne', 'api::material.material'>;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
     product_attribute_values: Schema.Attribute.Relation<
       'oneToMany',
@@ -1043,13 +1082,14 @@ export interface ApiSizeSize extends Struct.CollectionTypeSchema {
     singularName: 'size';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
     categories: Schema.Attribute.Relation<
       'manyToMany',
       'api::category.category'
     >;
+    category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1629,6 +1669,7 @@ declare module '@strapi/strapi' {
       'api::color.color': ApiColorColor;
       'api::condition.condition': ApiConditionCondition;
       'api::conversation.conversation': ApiConversationConversation;
+      'api::material.material': ApiMaterialMaterial;
       'api::message.message': ApiMessageMessage;
       'api::notification.notification': ApiNotificationNotification;
       'api::offer.offer': ApiOfferOffer;

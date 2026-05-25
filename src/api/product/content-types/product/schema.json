@@ -111,6 +111,12 @@
       "relation": "oneToMany",
       "target": "api::conversation.conversation",
       "mappedBy": "product"
+    },
+    "material": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::material.material",
+      "inversedBy": "products"
     }
   }
 }

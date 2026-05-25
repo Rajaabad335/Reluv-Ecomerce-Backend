@@ -7,7 +7,7 @@
     "displayName": "condition"
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "pluginOptions": {},
   "attributes": {
