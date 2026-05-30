@@ -228,6 +228,42 @@ const getUploadAttributeSchema = async (strapi: any) => {
       optionPublishedAt: findColumn(optionColumns, ['published_at', 'publishedAt']),
     };
 
+    if (!schema.optionAttributeId) {
+      let linkRows: any[] = [];
+      try {
+        linkRows = await strapi.db.connection('information_schema.columns')
+          .select('table_name', 'column_name')
+          .where('table_name', 'like', 'category_attribute_options%lnk');
+      } catch (error) {
+        linkRows = [];
+      }
+
+      const linkByTable = new Map<string, string[]>();
+      for (const row of linkRows as any[]) {
+        const t = String(row.table_name);
+        const c = String(row.column_name);
+        const cols = linkByTable.get(t) ?? [];
+        cols.push(c);
+        linkByTable.set(t, cols);
+      }
+
+      for (const [tableName, cols] of linkByTable) {
+        const isIdCol = (c: string) => c.endsWith('_id') || c.endsWith('Id');
+        const optionCol = cols.find((c) => c.toLowerCase().includes('category_attribute_option') && isIdCol(c)) ?? null;
+        const attrCol = cols.find((c) => c.toLowerCase().includes('category_attribute') && !c.toLowerCase().includes('option') && isIdCol(c)) ?? null;
+        if (optionCol && attrCol) {
+          schema = {
+            ...schema,
+            optionRelationMode: 'link',
+            optionLinkTable: tableName,
+            optionLinkOptionId: optionCol,
+            optionLinkAttributeId: attrCol,
+          };
+          break;
+        }
+      }
+    }
+
     if (!schema.attrCategoryId) {
       let linkRows: any[] = [];
       try {
@@ -448,13 +484,71 @@ export default factories.createCoreController('api::category.category', ({ strap
           ? result[0]
           : [];
 
+      const attributeIds = Array.from(new Set(
+        (attributeRows as any[])
+          .map((row: any) => Number(row.id))
+          .filter((id: number) => Number.isInteger(id) && id > 0)
+      ));
+
+      const optionsByAttributeId = new Map<number, any[]>();
+      if (attributeIds.length > 0 && (rawSchema.optionAttributeId || rawSchema.optionRelationMode === 'link')) {
+        const optionPlaceholders = attributeIds.map(() => '?').join(', ');
+        const caoAlias = 'cao';
+        const lcaoAlias = 'lcao';
+        const optionAttributeIdExpr = rawSchema.optionRelationMode === 'link'
+          ? `${lcaoAlias}.${qi(strapi, rawSchema.optionLinkAttributeId)}`
+          : `${caoAlias}.${qi(strapi, rawSchema.optionAttributeId)}`;
+        const optionJoinClause = rawSchema.optionRelationMode === 'link'
+          ? `JOIN ${qi(strapi, rawSchema.optionLinkTable)} ${lcaoAlias} ON ${lcaoAlias}.${qi(strapi, rawSchema.optionLinkOptionId)} = ${caoAlias}.${qi(strapi, 'id')}`
+          : '';
+        const optionSortSelect = rawSchema.optionSortOrder
+          ? `${caoAlias}.${qi(strapi, rawSchema.optionSortOrder)} AS sort_order_value`
+          : `NULL AS sort_order_value`;
+        const optionOrderBy = rawSchema.optionSortOrder
+          ? `${caoAlias}.${qi(strapi, rawSchema.optionSortOrder)} ASC, ${caoAlias}.${qi(strapi, 'value')} ASC`
+          : `${caoAlias}.${qi(strapi, 'value')} ASC`;
+        const optionsRawQuery = `
+          SELECT
+            ${caoAlias}.${qi(strapi, 'id')} AS id,
+            ${caoAlias}.${qi(strapi, 'value')} AS value,
+            ${optionSortSelect},
+            ${optionAttributeIdExpr} AS attribute_id_value
+          FROM ${qi(strapi, rawSchema.optionsTable)} ${caoAlias}
+          ${optionJoinClause}
+          WHERE ${optionAttributeIdExpr} IN (${optionPlaceholders})
+          ${rawSchema.optionPublishedAt ? `AND ${caoAlias}.${qi(strapi, rawSchema.optionPublishedAt)} IS NOT NULL` : ''}
+          ORDER BY ${optionOrderBy}
+        `;
+        const optionsResult = await strapi.db.connection.raw(optionsRawQuery, attributeIds);
+        const optionRows = Array.isArray(optionsResult?.rows)
+          ? optionsResult.rows
+          : Array.isArray(optionsResult?.[0])
+            ? optionsResult[0]
+            : [];
+
+        for (const optionRow of optionRows as any[]) {
+          const attrId = Number(optionRow.attribute_id_value ?? optionRow.category_attribute_id ?? optionRow.categoryAttributeId);
+          if (!Number.isInteger(attrId) || attrId <= 0) continue;
+          const value = String(optionRow.value ?? '');
+          const bucket = optionsByAttributeId.get(attrId) ?? [];
+          bucket.push({
+            id: Number(optionRow.id),
+            value,
+            title: value,
+            sortOrder: optionRow.sort_order_value == null ? null : Number(optionRow.sort_order_value),
+          });
+          optionsByAttributeId.set(attrId, bucket);
+        }
+      }
+
       const attributesByCategoryId = new Map<number, any[]>();
       for (const row of attributeRows as any[]) {
         const catId = Number(row.category_id_value ?? row.categoryId ?? row.categoryid);
+        const attrId = Number(row.id);
         if (!Number.isInteger(catId) || catId <= 0) continue;
         const bucket = attributesByCategoryId.get(catId) ?? [];
         bucket.push({
-          id: Number(row.id),
+          id: attrId,
           name: String(row.name ?? ''),
           type: String(row.type ?? 'string'),
           isRequired: isTruthy(row.is_required_value ?? row.isRequired ?? row.isrequired),
@@ -464,7 +558,7 @@ export default factories.createCoreController('api::category.category', ({ strap
           displayType: row.display_type_value == null ? null : String(row.display_type_value),
           selectionType: row.selection_type_value == null ? null : String(row.selection_type_value),
           selectionLimit: row.selection_limit_value == null ? null : Number(row.selection_limit_value),
-          category_attribute_options: [],
+          category_attribute_options: optionsByAttributeId.get(attrId) ?? [],
         });
         attributesByCategoryId.set(catId, bucket);
       }
