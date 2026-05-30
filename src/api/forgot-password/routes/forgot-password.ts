@@ -18,5 +18,23 @@ export default {
       handler: "forgot-password.resetPassword",
       config: { auth: false },
     },
+    {
+      method: "POST",
+      path: "/email-change/send-otp",
+      handler: "forgot-password.sendEmailChangeOtp",
+      config: { auth: false },
+    },
+    {
+      method: "POST",
+      path: "/email-change/verify-otp",
+      handler: "forgot-password.verifyEmailChangeOtp",
+      config: { auth: false },
+    },
+    {
+      method: "POST",
+      path: "/email-change/confirm",
+      handler: "forgot-password.confirmNewEmail",
+      config: { auth: false },
+    },
   ],
 };

@@ -877,7 +877,7 @@ export default factories.createCoreController(
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
-            filters: { users_permissions_user: { id: { $ne: null } } },
+            filters: { users_permissions_user: { id: { $ne: null }, holidayMode: { $ne: true } }},
 
             fields: [
               "id",
@@ -937,7 +937,7 @@ export default factories.createCoreController(
         const productData = (await strapi.entityService.findMany(
           "api::product.product",
           {
-            filters: { id: { $eq: id } },
+            filters: { id: { $eq: id },  users_permissions_user: { holidayMode: { $ne: true } }},
             fields: [
               "id",
               "title",
@@ -1180,7 +1180,7 @@ export default factories.createCoreController(
             : sortBy === "price_desc"
               ? { price: "desc" as const }
               : { createdAt: "desc" as const };
-
+        filters.users_permissions_user = { holidayMode: { $ne: true } };
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
@@ -1303,6 +1303,7 @@ export default factories.createCoreController(
           {
             filters: {
               productStatus: { $eq: "active" },
+              users_permissions_user: { holidayMode: { $ne: true } },
               $or: [
                 { title: { $containsi: searchTerm } },
                 { brand: { name: { $containsi: searchTerm } } },
@@ -1492,7 +1493,7 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
-              users_permissions_user: { id: { $eq: userId } },
+              users_permissions_user: { id: { $eq: userId } , holidayMode: { $ne: true }},
             },
             fields: [
               "id",
@@ -1608,7 +1609,7 @@ export default factories.createCoreController(
             ];
           }
         }
-
+         filters.users_permissions_user = { holidayMode: { $ne: true } };
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
