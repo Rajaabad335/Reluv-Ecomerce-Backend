@@ -438,6 +438,18 @@ export default factories.createCoreController(
           dynamicValuesByLowerKey.get("size") ??
           dynamicValuesByLowerKey.get("size_id") ??
           dynamicValuesByLowerKey.get("sizeid") ??
+          dynamicValuesByLowerKey.get("size_men") ??
+          dynamicValuesByLowerKey.get("size_women") ??
+          dynamicValuesByLowerKey.get("size_kids") ??
+          dynamicValuesByLowerKey.get("shoe_size_women") ??
+          dynamicValuesByLowerKey.get("shoe_size_men") ??
+          dynamicValuesByLowerKey.get("shoe_size_kids") ??
+
+
+
+
+          
+          
           body.size ??
           body.sizeId;
         const rawColorValue =
@@ -641,7 +653,7 @@ export default factories.createCoreController(
         const attributeEntries = dynamicEntries
           .filter(
             ({ code }) =>
-              !["brand", "size", "color", "colour", "condition"].includes(
+              ![].includes(
                 String(code ?? "")
                   .trim()
                   .toLowerCase(),
@@ -888,15 +900,22 @@ export default factories.createCoreController(
               "createdAt",
             ] as any[],
 
-            populate: [
-              "category",
-              "brand",
-              "size",
-              "color",
-              "product_condition",
-              "images",
-              "users_permissions_user",
-            ],
+            populate: {
+              category: { fields: ["name"] },
+              brand: { fields: ["name"] },
+              size: { fields: ["name"] },
+              color: { fields: ["name"] },
+              product_condition: { fields: ["name"] },
+              images: { fields: ["id", "url"] },
+              users_permissions_user: true,
+              product_attribute_values: {
+                fields: ["valueText", "valueNumber", "valueBoolean"],
+                populate: {
+                  category_attribute: { fields: ["code", "name"] },
+                  category_attribute_option: { fields: ["value"] },
+                },
+              },
+            },
 
             sort: { createdAt: "desc" },
             limit: 20,
@@ -906,21 +925,54 @@ export default factories.createCoreController(
 
         ctx.body = {
           ok: true,
-          products: products.map((product: any) => ({
-            id: product.id,
-            documentId: product.documentId,
-            title: product.title,
-            price: product.price,
-            condition: product?.product_condition?.name ?? product?.condition,
-            category: product?.category?.name ?? null,
-            brand: product?.brand?.name ?? null,
-            size: product?.size?.name ?? null,
-            color: product?.color?.name ?? null,
-            images: Array.isArray(product.images)
-              ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
-              : [],
-            userId: product?.users_permissions_user ?? null,
-          })),
+          products: products.map((product: any) => {
+            const dynamicByCode = new Map<string, string>();
+            const pavs = Array.isArray(product?.product_attribute_values)
+              ? product.product_attribute_values
+              : [];
+
+            for (const pav of pavs) {
+              const code = normalizeCode(
+                pav?.category_attribute?.code || pav?.category_attribute?.name,
+              );
+              if (!code) continue;
+              const textValue = String(
+                pav?.category_attribute_option?.value ??
+                  pav?.valueText ??
+                  pav?.valueNumber ??
+                  pav?.valueBoolean ??
+                  "",
+              ).trim();
+              if (!textValue) continue;
+              if (!dynamicByCode.has(code)) dynamicByCode.set(code, textValue);
+            }
+
+            return {
+              id: product.id,
+              documentId: product.documentId,
+              title: product.title,
+              price: product.price,
+              condition:
+                dynamicByCode.get("condition") ??
+                product?.product_condition?.name ??
+                product?.condition,
+              category: product?.category?.name ?? null,
+              brand: dynamicByCode.get("brand") ?? product?.brand?.name ?? null,
+              size: dynamicByCode.get("size") ?? product?.size?.name ?? null,
+              color:
+                dynamicByCode.get("colour") ??
+                dynamicByCode.get("color") ??
+                product?.color?.name ??
+                null,
+              images: Array.isArray(product.images)
+                ? product.images.map((img: any) => ({
+                    id: img.id,
+                    url: img.url,
+                  }))
+                : [],
+              userId: product?.users_permissions_user ?? null,
+            };
+          }),
         };
       } catch (error) {
         strapi.log.error(error);
@@ -981,13 +1033,13 @@ export default factories.createCoreController(
             title: product.title,
             description: blocksToText(product.description),
             price: product.price,
-            condition: product?.product_condition?.name ?? product?.condition,
+            // condition: product?.product_condition?.name ?? product?.condition,
             likeCount: Number(product.likeCount ?? 0) || 0,
             createdAt: product.createdAt,
             category: product?.category?.name ?? null,
-            brand: product?.brand?.name ?? null,
-            size: product?.size?.name ?? null,
-            color: product?.color?.name ?? null,
+            // brand: product?.brand?.name ?? null,
+            // size: product?.size?.name ?? null,
+            // color: product?.color?.name ?? null,
             images: Array.isArray(product?.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
@@ -1068,13 +1120,77 @@ export default factories.createCoreController(
 
         if (brandInput) {
           andFilters.push({
-            brand: { name: { $eqi: brandInput } },
+            $or: [
+              { brand: { name: { $eqi: brandInput } } },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "brand" } },
+                  valueText: { $eqi: brandInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "brands" } },
+                  valueText: { $eqi: brandInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "brand" } },
+                  category_attribute_option: { value: { $eqi: brandInput } },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "brands" } },
+                  category_attribute_option: { value: { $eqi: brandInput } },
+                },
+              },
+            ],
           });
         }
 
         if (sizeInput) {
           andFilters.push({
-            size: { name: { $eqi: sizeInput } },
+            $or: [
+              { size: { name: { $eqi: sizeInput } } },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "size" } },
+                  valueText: { $eqi: sizeInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { name: { $eqi: "Size" } },
+                  valueText: { $eqi: sizeInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "sizes" } },
+                  valueText: { $eqi: sizeInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "size" } },
+                  category_attribute_option: { value: { $eqi: sizeInput } },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { name: { $eqi: "Size" } },
+                  category_attribute_option: { value: { $eqi: sizeInput } },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "sizes" } },
+                  category_attribute_option: { value: { $eqi: sizeInput } },
+                },
+              },
+            ],
           });
         }
 
@@ -1086,6 +1202,42 @@ export default factories.createCoreController(
                 ? [{ condition: { $eq: normalizedCondition } }]
                 : [{ condition: { $eqi: conditionInput } }]),
               { product_condition: { name: { $eqi: conditionInput } } },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "condition" } },
+                  valueText: { $eqi: conditionInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "conditions" } },
+                  valueText: { $eqi: conditionInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "product_condition" } },
+                  valueText: { $eqi: conditionInput },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "condition" } },
+                  category_attribute_option: { value: { $eqi: conditionInput } },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "conditions" } },
+                  category_attribute_option: { value: { $eqi: conditionInput } },
+                },
+              },
+              {
+                product_attribute_values: {
+                  category_attribute: { code: { $eqi: "product_condition" } },
+                  category_attribute_option: { value: { $eqi: conditionInput } },
+                },
+              },
             ],
           });
         }
@@ -1203,7 +1355,7 @@ export default factories.createCoreController(
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
                 populate: {
-                  category_attribute: { fields: ["code"] },
+                  category_attribute: { fields: ["code", "name"] },
                   category_attribute_option: { fields: ["value"] },
                 },
               },
@@ -1223,7 +1375,9 @@ export default factories.createCoreController(
             ? product.product_attribute_values
             : [];
           for (const pav of pavs) {
-            const code = normalizeCode(pav?.category_attribute?.code);
+            const code = normalizeCode(
+              pav?.category_attribute?.code || pav?.category_attribute?.name,
+            );
             if (!code) continue;
             const textValue = String(
               pav?.category_attribute_option?.value ??
@@ -1241,16 +1395,29 @@ export default factories.createCoreController(
             documentId: product.documentId,
             title: product.title,
             price: product.price,
-            condition: product?.product_condition?.name ?? product?.condition,
+            condition:
+              dynamicByCode.get("condition") ??
+              dynamicByCode.get("conditions") ??
+              dynamicByCode.get("product_condition") ??
+              product?.product_condition?.name ??
+              product?.condition,
             category: product?.category?.name ?? null,
             subCategory: null,
             item: null,
-            brand: product?.brand?.name ?? null,
-            size: product?.size?.name ?? null,
+            brand:
+              dynamicByCode.get("brand") ??
+              dynamicByCode.get("brands") ??
+              product?.brand?.name ??
+              null,
+            size:
+              dynamicByCode.get("size") ??
+              dynamicByCode.get("sizes") ??
+              product?.size?.name ??
+              null,
             color:
-              product?.color?.name ??
               dynamicByCode.get("colour") ??
               dynamicByCode.get("color") ??
+              product?.color?.name ??
               null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
@@ -1576,12 +1743,10 @@ export default factories.createCoreController(
       try {
         const query = ctx.query || {};
         const categoryInput = String(
-          query.item || query.subCategory || query.category || "",
+          query.category || query.subCategory || query.item || "",
         ).trim();
-
-        const filters: any = {
-          productStatus: { $eq: "active" },
-        };
+        let categoryIdsForOptions: number[] = [];
+        let categoryAttributeFilters: any = {};
 
         if (categoryInput) {
           const categoryIds = await getCategoryIdsWithDescendants(
@@ -1589,47 +1754,22 @@ export default factories.createCoreController(
             categoryInput,
           );
           if (categoryIds.length > 0) {
-            filters.$and = [
-              {
-                category: { id: { $in: categoryIds } },
-              },
-            ];
+            categoryIdsForOptions = categoryIds;
+            categoryAttributeFilters = {
+              category: { id: { $in: categoryIdsForOptions } },
+            };
           } else {
-            filters.$and = [
-              {
-                category: {
-                  $or: [
-                    { slug: { $eqi: categoryInput } },
-                    { name: { $eqi: categoryInput } },
-                    { name: { $containsi: categoryInput } },
-                  ],
-                },
+            categoryAttributeFilters = {
+              category: {
+                $or: [
+                  { slug: { $eqi: categoryInput } },
+                  { name: { $eqi: categoryInput } },
+                  { name: { $containsi: categoryInput } },
+                ],
               },
-            ];
+            };
           }
         }
-
-        const products = (await strapi.entityService.findMany(
-          "api::product.product",
-          {
-            filters,
-            fields: ["id", "condition"],
-            populate: {
-              brand: { fields: ["name"] },
-              size: { fields: ["name"] },
-              color: { fields: ["name"] },
-              product_condition: { fields: ["name"] },
-              product_attribute_values: {
-                fields: ["valueText"],
-                populate: {
-                  category_attribute: { fields: ["code"] },
-                  category_attribute_option: { fields: ["value"] },
-                },
-              },
-            },
-            limit: 5000,
-          },
-        )) as any[];
 
         const uniqueSorted = (values: string[]): string[] => {
           const seen = new Map<string, string>();
@@ -1646,40 +1786,91 @@ export default factories.createCoreController(
           );
         };
 
-        const brands = uniqueSorted(products.map((p) => p?.brand?.name));
-        const sizes = uniqueSorted(products.map((p) => p?.size?.name));
-        const conditions = uniqueSorted(
-          products.map((p) =>
-            conditionToLabel(
-              String(
-                p?.product_condition?.name ??
-                  conditionToLabel(String(p?.condition || "")),
-              ),
-            ),
-          ),
-        );
+        const attributeOptionValuesByCode = new Map<string, string[]>();
+        const attributeOptionObjectsByCode = new Map<string, any[]>();
 
-        const colors: string[] = [];
-        const materials: string[] = [];
-        for (const product of products) {
-          const relationColor = String(product?.color?.name ?? "").trim();
-          if (relationColor) colors.push(relationColor);
+        const categoryAttributes = (await strapi.entityService.findMany(
+          "api::category-attribute.category-attribute",
+          {
+            filters: categoryAttributeFilters,
+            fields: ["id", "code", "name", "type"],
+            populate: {
+              category_attribute_options: {
+                fields: ["id", "value", "sortOrder"],
+              },
+            },
+            limit: 5000,
+          } as any,
+        )) as any[];
 
-          const pavs = Array.isArray(product?.product_attribute_values)
-            ? product.product_attribute_values
+        for (const attribute of categoryAttributes) {
+          const code = normalizeCode(attribute?.code || attribute?.name);
+          if (!code) continue;
+          const options = Array.isArray(attribute?.category_attribute_options)
+            ? [...attribute.category_attribute_options]
             : [];
-          for (const pav of pavs) {
-            const code = normalizeCode(pav?.category_attribute?.code);
-            const value = String(
-              pav?.category_attribute_option?.value ?? pav?.valueText ?? "",
-            ).trim();
+          options.sort((a: any, b: any) => {
+            const aSort = a?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+            const bSort = b?.sortOrder ?? Number.MAX_SAFE_INTEGER;
+            if (aSort !== bSort) return Number(aSort) - Number(bSort);
+            return String(a?.value ?? "").localeCompare(
+              String(b?.value ?? ""),
+              undefined,
+              { sensitivity: "base" },
+            );
+          });
+
+          for (const option of options) {
+            const value = String(option?.value ?? "").trim();
+            const id = Number(option?.id);
             if (!value) continue;
-            if (code === "color" || code === "colour") colors.push(value);
-            if (code === "material") materials.push(value);
+
+            const values = attributeOptionValuesByCode.get(code) ?? [];
+            values.push(value);
+            attributeOptionValuesByCode.set(code, values);
+
+            const objects = attributeOptionObjectsByCode.get(code) ?? [];
+            objects.push({
+              id: Number.isInteger(id) ? id : null,
+              title: value,
+              value,
+            });
+            attributeOptionObjectsByCode.set(code, objects);
           }
         }
 
-        const normalizedColors = uniqueSorted(colors);
+        const uniqueOptionObjects = (options: any[]): any[] => {
+          const seen = new Map<string, any>();
+          for (const option of options) {
+            const value = String(option?.value ?? "").trim();
+            if (!value) continue;
+            const key = value.toLowerCase();
+            if (!seen.has(key)) seen.set(key, option);
+          }
+          return Array.from(seen.values());
+        };
+
+        const getOptionValues = (...codes: string[]) =>
+          uniqueSorted(
+            codes.flatMap((code) => attributeOptionValuesByCode.get(code) ?? []),
+          );
+
+        const brands = getOptionValues("brand", "brands");
+        const sizes = getOptionValues("size", "sizes", "size_men" ,"size_women" , "size_kids","shoe_size_women", "shoe_size_men", "shoe_size_kids");
+        const conditions = uniqueSorted(
+          getOptionValues(
+            "condition",
+            "conditions",
+            "product_condition",
+          ).map((value) => conditionToLabel(value)),
+        );
+        const normalizedColors = getOptionValues("colour", "color", "colors");
+        const normalizedMaterials = getOptionValues("material", "materials");
+
+        const categoryAttributeOptions: Record<string, any[]> = {};
+        for (const [code, options] of attributeOptionObjectsByCode) {
+          categoryAttributeOptions[code] = uniqueOptionObjects(options);
+        }
 
         ctx.body = {
           ok: true,
@@ -1689,8 +1880,9 @@ export default factories.createCoreController(
             condition: conditions,
             colour: normalizedColors,
             color: normalizedColors,
-            material: uniqueSorted(materials),
+            material: normalizedMaterials,
             sortBy: ["Newest", "Price: Low to high", "Price: High to low"],
+            category_attribute_options: categoryAttributeOptions,
           },
         };
       } catch (error) {

@@ -1,0 +1,1606 @@
+[
+  {
+    "name": "Brand",
+    "code": "brand",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select brand",
+    "description": "Item brand",
+    "options": [
+      {
+        "value": "Sretsis",
+        "sortOrder": 1
+      },
+      {
+        "value": "Kloset",
+        "sortOrder": 2
+      },
+      {
+        "value": "Greyhound Original",
+        "sortOrder": 3
+      },
+      {
+        "value": "ASAVA",
+        "sortOrder": 4
+      },
+      {
+        "value": "Issue",
+        "sortOrder": 5
+      },
+      {
+        "value": "Flynow",
+        "sortOrder": 6
+      },
+      {
+        "value": "Nagara",
+        "sortOrder": 7
+      },
+      {
+        "value": "Pomelo",
+        "sortOrder": 8
+      },
+      {
+        "value": "Jaspal",
+        "sortOrder": 9
+      },
+      {
+        "value": "CC Double O",
+        "sortOrder": 10
+      },
+      {
+        "value": "Fly Now",
+        "sortOrder": 11
+      },
+      {
+        "value": "Senada",
+        "sortOrder": 12
+      },
+      {
+        "value": "Disaya",
+        "sortOrder": 13
+      },
+      {
+        "value": "Vatanika",
+        "sortOrder": 14
+      },
+      {
+        "value": "Atelier Yé",
+        "sortOrder": 15
+      },
+      {
+        "value": "Gentlewoman",
+        "sortOrder": 16
+      },
+      {
+        "value": "Whaelse",
+        "sortOrder": 17
+      },
+      {
+        "value": "Lyn Around",
+        "sortOrder": 18
+      },
+      {
+        "value": "Vickteerut",
+        "sortOrder": 19
+      },
+      {
+        "value": "Tawan Udomsak",
+        "sortOrder": 20
+      },
+      {
+        "value": "Landmée",
+        "sortOrder": 21
+      },
+      {
+        "value": "Gongdid Design",
+        "sortOrder": 22
+      },
+      {
+        "value": "SSYS",
+        "sortOrder": 23
+      },
+      {
+        "value": "Oh My Cod",
+        "sortOrder": 24
+      },
+      {
+        "value": "Wearе Srey",
+        "sortOrder": 25
+      },
+      {
+        "value": "Zara",
+        "sortOrder": 26
+      },
+      {
+        "value": "H&M",
+        "sortOrder": 27
+      },
+      {
+        "value": "Mango",
+        "sortOrder": 28
+      },
+      {
+        "value": "Uniqlo",
+        "sortOrder": 29
+      },
+      {
+        "value": "Pull&Bear",
+        "sortOrder": 30
+      },
+      {
+        "value": "Bershka",
+        "sortOrder": 31
+      },
+      {
+        "value": "Stradivarius",
+        "sortOrder": 32
+      },
+      {
+        "value": "Massimo Dutti",
+        "sortOrder": 33
+      },
+      {
+        "value": "Topshop",
+        "sortOrder": 34
+      },
+      {
+        "value": "ASOS",
+        "sortOrder": 35
+      },
+      {
+        "value": "Shein",
+        "sortOrder": 36
+      },
+      {
+        "value": "Pomelo",
+        "sortOrder": 37
+      },
+      {
+        "value": "Cotton On",
+        "sortOrder": 38
+      },
+      {
+        "value": "Forever 21",
+        "sortOrder": 39
+      },
+      {
+        "value": "Monki",
+        "sortOrder": 40
+      },
+      {
+        "value": "& Other Stories",
+        "sortOrder": 41
+      },
+      {
+        "value": "COS",
+        "sortOrder": 42
+      },
+      {
+        "value": "Arket",
+        "sortOrder": 43
+      },
+      {
+        "value": "Levi's",
+        "sortOrder": 44
+      },
+      {
+        "value": "Tommy Hilfiger",
+        "sortOrder": 45
+      },
+      {
+        "value": "Calvin Klein",
+        "sortOrder": 46
+      },
+      {
+        "value": "Ralph Lauren",
+        "sortOrder": 47
+      },
+      {
+        "value": "Michael Kors",
+        "sortOrder": 48
+      },
+      {
+        "value": "Coach",
+        "sortOrder": 49
+      },
+      {
+        "value": "Kate Spade",
+        "sortOrder": 50
+      },
+      {
+        "value": "Tory Burch",
+        "sortOrder": 51
+      },
+      {
+        "value": "Theory",
+        "sortOrder": 52
+      },
+      {
+        "value": "Diane von Furstenberg",
+        "sortOrder": 53
+      },
+      {
+        "value": "Ted Baker",
+        "sortOrder": 54
+      },
+      {
+        "value": "Karen Millen",
+        "sortOrder": 55
+      },
+      {
+        "value": "Phase Eight",
+        "sortOrder": 56
+      },
+      {
+        "value": "Reiss",
+        "sortOrder": 57
+      },
+      {
+        "value": "Gucci",
+        "sortOrder": 58
+      },
+      {
+        "value": "Prada",
+        "sortOrder": 59
+      },
+      {
+        "value": "Louis Vuitton",
+        "sortOrder": 60
+      },
+      {
+        "value": "Chanel",
+        "sortOrder": 61
+      },
+      {
+        "value": "Dior",
+        "sortOrder": 62
+      },
+      {
+        "value": "Hermès",
+        "sortOrder": 63
+      },
+      {
+        "value": "Valentino",
+        "sortOrder": 64
+      },
+      {
+        "value": "Versace",
+        "sortOrder": 65
+      },
+      {
+        "value": "Balenciaga",
+        "sortOrder": 66
+      },
+      {
+        "value": "Bottega Veneta",
+        "sortOrder": 67
+      },
+      {
+        "value": "Burberry",
+        "sortOrder": 68
+      },
+      {
+        "value": "Givenchy",
+        "sortOrder": 69
+      },
+      {
+        "value": "Saint Laurent",
+        "sortOrder": 70
+      },
+      {
+        "value": "Celine",
+        "sortOrder": 71
+      },
+      {
+        "value": "Fendi",
+        "sortOrder": 72
+      },
+      {
+        "value": "Loewe",
+        "sortOrder": 73
+      },
+      {
+        "value": "Alexander McQueen",
+        "sortOrder": 74
+      },
+      {
+        "value": "Stella McCartney",
+        "sortOrder": 75
+      },
+      {
+        "value": "Off-White",
+        "sortOrder": 76
+      },
+      {
+        "value": "Acne Studios",
+        "sortOrder": 77
+      },
+      {
+        "value": "Toteme",
+        "sortOrder": 78
+      },
+      {
+        "value": "Jacquemus",
+        "sortOrder": 79
+      },
+      {
+        "value": "Muji",
+        "sortOrder": 80
+      },
+      {
+        "value": "GU",
+        "sortOrder": 81
+      },
+      {
+        "value": "Lowrys Farm",
+        "sortOrder": 82
+      },
+      {
+        "value": "Global Work",
+        "sortOrder": 83
+      },
+      {
+        "value": "Earth Music & Ecology",
+        "sortOrder": 84
+      },
+      {
+        "value": "Lily Brown",
+        "sortOrder": 85
+      },
+      {
+        "value": "Snidel",
+        "sortOrder": 86
+      },
+      {
+        "value": "Moussy",
+        "sortOrder": 87
+      },
+      {
+        "value": "SLY",
+        "sortOrder": 88
+      },
+      {
+        "value": "Spick and Span",
+        "sortOrder": 89
+      },
+      {
+        "value": "Iena",
+        "sortOrder": 90
+      },
+      {
+        "value": "Rope",
+        "sortOrder": 91
+      },
+      {
+        "value": "United Arrows",
+        "sortOrder": 92
+      },
+      {
+        "value": "Beams",
+        "sortOrder": 93
+      },
+      {
+        "value": "MLB (Korea)",
+        "sortOrder": 94
+      },
+      {
+        "value": "Ader Error",
+        "sortOrder": 95
+      },
+      {
+        "value": "Matin Kim",
+        "sortOrder": 96
+      },
+      {
+        "value": "Maje",
+        "sortOrder": 97
+      },
+      {
+        "value": "Sandro",
+        "sortOrder": 98
+      },
+      {
+        "value": "A.P.C",
+        "sortOrder": 99
+      },
+      {
+        "value": "Lululemon",
+        "sortOrder": 100
+      },
+      {
+        "value": "Gymshark",
+        "sortOrder": 101
+      },
+      {
+        "value": "Nike",
+        "sortOrder": 102
+      },
+      {
+        "value": "Adidas",
+        "sortOrder": 103
+      },
+      {
+        "value": "Under Armour",
+        "sortOrder": 104
+      },
+      {
+        "value": "Puma",
+        "sortOrder": 105
+      },
+      {
+        "value": "Fila",
+        "sortOrder": 106
+      },
+      {
+        "value": "Reebok",
+        "sortOrder": 107
+      },
+      {
+        "value": "New Balance",
+        "sortOrder": 108
+      },
+      {
+        "value": "Other / No brand",
+        "sortOrder": 109
+      }
+    ]
+  },
+  {
+    "name": "Condition",
+    "code": "condition",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select condition",
+    "description": "Condition of the item",
+    "options": [
+      {
+        "value": "New with tags",
+        "sortOrder": 1
+      },
+      {
+        "value": "New without tags",
+        "sortOrder": 2
+      },
+      {
+        "value": "Very good",
+        "sortOrder": 3
+      },
+      {
+        "value": "Good",
+        "sortOrder": 4
+      },
+      {
+        "value": "Satisfactory",
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Colour",
+    "code": "colour",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "multiple",
+    "isRequired": false,
+    "placeholder": "Select colour",
+    "description": "Colour of the item",
+    "options": [
+      {
+        "value": "Black",
+        "sortOrder": 1
+      },
+      {
+        "value": "White",
+        "sortOrder": 2
+      },
+      {
+        "value": "Grey",
+        "sortOrder": 3
+      },
+      {
+        "value": "Beige",
+        "sortOrder": 4
+      },
+      {
+        "value": "Cream",
+        "sortOrder": 5
+      },
+      {
+        "value": "Brown",
+        "sortOrder": 6
+      },
+      {
+        "value": "Camel",
+        "sortOrder": 7
+      },
+      {
+        "value": "Tan",
+        "sortOrder": 8
+      },
+      {
+        "value": "Red",
+        "sortOrder": 9
+      },
+      {
+        "value": "Burgundy",
+        "sortOrder": 10
+      },
+      {
+        "value": "Maroon",
+        "sortOrder": 11
+      },
+      {
+        "value": "Pink",
+        "sortOrder": 12
+      },
+      {
+        "value": "Hot Pink",
+        "sortOrder": 13
+      },
+      {
+        "value": "Baby Pink",
+        "sortOrder": 14
+      },
+      {
+        "value": "Coral",
+        "sortOrder": 15
+      },
+      {
+        "value": "Orange",
+        "sortOrder": 16
+      },
+      {
+        "value": "Yellow",
+        "sortOrder": 17
+      },
+      {
+        "value": "Mustard",
+        "sortOrder": 18
+      },
+      {
+        "value": "Green",
+        "sortOrder": 19
+      },
+      {
+        "value": "Olive",
+        "sortOrder": 20
+      },
+      {
+        "value": "Khaki",
+        "sortOrder": 21
+      },
+      {
+        "value": "Mint",
+        "sortOrder": 22
+      },
+      {
+        "value": "Blue",
+        "sortOrder": 23
+      },
+      {
+        "value": "Navy",
+        "sortOrder": 24
+      },
+      {
+        "value": "Royal Blue",
+        "sortOrder": 25
+      },
+      {
+        "value": "Sky Blue",
+        "sortOrder": 26
+      },
+      {
+        "value": "Light Blue",
+        "sortOrder": 27
+      },
+      {
+        "value": "Purple",
+        "sortOrder": 28
+      },
+      {
+        "value": "Lavender",
+        "sortOrder": 29
+      },
+      {
+        "value": "Gold",
+        "sortOrder": 30
+      },
+      {
+        "value": "Silver",
+        "sortOrder": 31
+      },
+      {
+        "value": "Bronze",
+        "sortOrder": 32
+      },
+      {
+        "value": "Multicolour",
+        "sortOrder": 33
+      },
+      {
+        "value": "Printed",
+        "sortOrder": 34
+      },
+      {
+        "value": "Other",
+        "sortOrder": 35
+      }
+    ]
+  },
+  {
+    "name": "Size",
+    "code": "size_women",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select size",
+    "description": "Size of the item",
+    "options": [
+      {
+        "value": "XXS (32)",
+        "sortOrder": 1
+      },
+      {
+        "value": "XS (34)",
+        "sortOrder": 2
+      },
+      {
+        "value": "S (36)",
+        "sortOrder": 3
+      },
+      {
+        "value": "M (38)",
+        "sortOrder": 4
+      },
+      {
+        "value": "L (40)",
+        "sortOrder": 5
+      },
+      {
+        "value": "XL (42)",
+        "sortOrder": 6
+      },
+      {
+        "value": "XXL (44)",
+        "sortOrder": 7
+      },
+      {
+        "value": "3XL (46)",
+        "sortOrder": 8
+      },
+      {
+        "value": "4XL (48)",
+        "sortOrder": 9
+      },
+      {
+        "value": "One size",
+        "sortOrder": 10
+      }
+    ]
+  },
+  {
+    "name": "Size",
+    "code": "size_men",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select size",
+    "description": "Size of the item",
+    "options": [
+      {
+        "value": "XS",
+        "sortOrder": 1
+      },
+      {
+        "value": "S",
+        "sortOrder": 2
+      },
+      {
+        "value": "M",
+        "sortOrder": 3
+      },
+      {
+        "value": "L",
+        "sortOrder": 4
+      },
+      {
+        "value": "XL",
+        "sortOrder": 5
+      },
+      {
+        "value": "XXL",
+        "sortOrder": 6
+      },
+      {
+        "value": "3XL",
+        "sortOrder": 7
+      },
+      {
+        "value": "4XL",
+        "sortOrder": 8
+      },
+      {
+        "value": "One size",
+        "sortOrder": 9
+      }
+    ]
+  },
+  {
+    "name": "Size",
+    "code": "size_kids",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select size",
+    "description": "Size of the item",
+    "options": [
+      {
+        "value": "0-3 months",
+        "sortOrder": 1
+      },
+      {
+        "value": "3-6 months",
+        "sortOrder": 2
+      },
+      {
+        "value": "6-12 months",
+        "sortOrder": 3
+      },
+      {
+        "value": "12-18 months",
+        "sortOrder": 4
+      },
+      {
+        "value": "18-24 months",
+        "sortOrder": 5
+      },
+      {
+        "value": "2 years",
+        "sortOrder": 6
+      },
+      {
+        "value": "3 years",
+        "sortOrder": 7
+      },
+      {
+        "value": "4 years",
+        "sortOrder": 8
+      },
+      {
+        "value": "5 years",
+        "sortOrder": 9
+      },
+      {
+        "value": "6 years",
+        "sortOrder": 10
+      },
+      {
+        "value": "7 years",
+        "sortOrder": 11
+      },
+      {
+        "value": "8 years",
+        "sortOrder": 12
+      },
+      {
+        "value": "9 years",
+        "sortOrder": 13
+      },
+      {
+        "value": "10 years",
+        "sortOrder": 14
+      },
+      {
+        "value": "11 years",
+        "sortOrder": 15
+      },
+      {
+        "value": "12 years",
+        "sortOrder": 16
+      },
+      {
+        "value": "13 years",
+        "sortOrder": 17
+      },
+      {
+        "value": "14 years",
+        "sortOrder": 18
+      },
+      {
+        "value": "15 years",
+        "sortOrder": 19
+      },
+      {
+        "value": "16 years",
+        "sortOrder": 20
+      }
+    ]
+  },
+  {
+    "name": "Shoe Size",
+    "code": "shoe_size_women",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select shoe size",
+    "description": "Shoe Size of the item",
+    "options": [
+      {
+        "value": "EU 34",
+        "sortOrder": 1
+      },
+      {
+        "value": "EU 35",
+        "sortOrder": 2
+      },
+      {
+        "value": "EU 36",
+        "sortOrder": 3
+      },
+      {
+        "value": "EU 37",
+        "sortOrder": 4
+      },
+      {
+        "value": "EU 38",
+        "sortOrder": 5
+      },
+      {
+        "value": "EU 39",
+        "sortOrder": 6
+      },
+      {
+        "value": "EU 40",
+        "sortOrder": 7
+      },
+      {
+        "value": "EU 41",
+        "sortOrder": 8
+      },
+      {
+        "value": "EU 42",
+        "sortOrder": 9
+      },
+      {
+        "value": "EU 43",
+        "sortOrder": 10
+      }
+    ]
+  },
+  {
+    "name": "Shoe Size",
+    "code": "shoe_size_men",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select shoe size",
+    "description": "Shoe Size of the item",
+    "options": [
+      {
+        "value": "EU 38",
+        "sortOrder": 1
+      },
+      {
+        "value": "EU 39",
+        "sortOrder": 2
+      },
+      {
+        "value": "EU 40",
+        "sortOrder": 3
+      },
+      {
+        "value": "EU 41",
+        "sortOrder": 4
+      },
+      {
+        "value": "EU 42",
+        "sortOrder": 5
+      },
+      {
+        "value": "EU 43",
+        "sortOrder": 6
+      },
+      {
+        "value": "EU 44",
+        "sortOrder": 7
+      },
+      {
+        "value": "EU 45",
+        "sortOrder": 8
+      },
+      {
+        "value": "EU 46",
+        "sortOrder": 9
+      },
+      {
+        "value": "EU 47",
+        "sortOrder": 10
+      },
+      {
+        "value": "EU 48",
+        "sortOrder": 11
+      }
+    ]
+  },
+  {
+    "name": "Shoe Size",
+    "code": "shoe_size_kids",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": true,
+    "placeholder": "Select shoe size",
+    "description": "Shoe Size of the item",
+    "options": [
+      {
+        "value": "EU 16",
+        "sortOrder": 1
+      },
+      {
+        "value": "EU 17",
+        "sortOrder": 2
+      },
+      {
+        "value": "EU 18",
+        "sortOrder": 3
+      },
+      {
+        "value": "EU 19",
+        "sortOrder": 4
+      },
+      {
+        "value": "EU 20",
+        "sortOrder": 5
+      },
+      {
+        "value": "EU 21",
+        "sortOrder": 6
+      },
+      {
+        "value": "EU 22",
+        "sortOrder": 7
+      },
+      {
+        "value": "EU 23",
+        "sortOrder": 8
+      },
+      {
+        "value": "EU 24",
+        "sortOrder": 9
+      },
+      {
+        "value": "EU 25",
+        "sortOrder": 10
+      },
+      {
+        "value": "EU 26",
+        "sortOrder": 11
+      },
+      {
+        "value": "EU 27",
+        "sortOrder": 12
+      },
+      {
+        "value": "EU 28",
+        "sortOrder": 13
+      },
+      {
+        "value": "EU 29",
+        "sortOrder": 14
+      },
+      {
+        "value": "EU 30",
+        "sortOrder": 15
+      },
+      {
+        "value": "EU 31",
+        "sortOrder": 16
+      },
+      {
+        "value": "EU 32",
+        "sortOrder": 17
+      },
+      {
+        "value": "EU 33",
+        "sortOrder": 18
+      },
+      {
+        "value": "EU 34",
+        "sortOrder": 19
+      },
+      {
+        "value": "EU 35",
+        "sortOrder": 20
+      },
+      {
+        "value": "EU 36",
+        "sortOrder": 21
+      },
+      {
+        "value": "EU 37",
+        "sortOrder": 22
+      },
+      {
+        "value": "EU 38",
+        "sortOrder": 23
+      }
+    ]
+  },
+  {
+    "name": "Material",
+    "code": "material",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "multiple",
+    "isRequired": false,
+    "placeholder": "Select material",
+    "description": "Material of the item",
+    "options": [
+      {
+        "value": "Cotton",
+        "sortOrder": 1
+      },
+      {
+        "value": "Polyester",
+        "sortOrder": 2
+      },
+      {
+        "value": "Wool",
+        "sortOrder": 3
+      },
+      {
+        "value": "Denim",
+        "sortOrder": 4
+      },
+      {
+        "value": "Linen",
+        "sortOrder": 5
+      },
+      {
+        "value": "Silk",
+        "sortOrder": 6
+      },
+      {
+        "value": "Leather",
+        "sortOrder": 7
+      },
+      {
+        "value": "Faux Leather",
+        "sortOrder": 8
+      },
+      {
+        "value": "Velvet",
+        "sortOrder": 9
+      },
+      {
+        "value": "Knit",
+        "sortOrder": 10
+      },
+      {
+        "value": "Satin",
+        "sortOrder": 11
+      },
+      {
+        "value": "Chiffon",
+        "sortOrder": 12
+      },
+      {
+        "value": "Fleece",
+        "sortOrder": 13
+      },
+      {
+        "value": "Nylon",
+        "sortOrder": 14
+      },
+      {
+        "value": "Cashmere",
+        "sortOrder": 15
+      },
+      {
+        "value": "Rayon",
+        "sortOrder": 16
+      },
+      {
+        "value": "Viscose",
+        "sortOrder": 17
+      },
+      {
+        "value": "Bamboo",
+        "sortOrder": 18
+      },
+      {
+        "value": "Modal",
+        "sortOrder": 19
+      },
+      {
+        "value": "Spandex / Lycra",
+        "sortOrder": 20
+      },
+      {
+        "value": "Other",
+        "sortOrder": 21
+      }
+    ]
+  },
+  {
+    "name": "Fit",
+    "code": "fit",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select fit",
+    "description": "Fit of the item",
+    "options": [
+      {
+        "value": "Slim fit",
+        "sortOrder": 1
+      },
+      {
+        "value": "Regular fit",
+        "sortOrder": 2
+      },
+      {
+        "value": "Relaxed fit",
+        "sortOrder": 3
+      },
+      {
+        "value": "Oversized",
+        "sortOrder": 4
+      },
+      {
+        "value": "Petite",
+        "sortOrder": 5
+      },
+      {
+        "value": "Tall",
+        "sortOrder": 6
+      },
+      {
+        "value": "Curvy",
+        "sortOrder": 7
+      },
+      {
+        "value": "Athletic fit",
+        "sortOrder": 8
+      }
+    ]
+  },
+  {
+    "name": "Length",
+    "code": "length",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select length",
+    "description": "Length of the item",
+    "options": [
+      {
+        "value": "Mini",
+        "sortOrder": 1
+      },
+      {
+        "value": "Midi",
+        "sortOrder": 2
+      },
+      {
+        "value": "Maxi",
+        "sortOrder": 3
+      },
+      {
+        "value": "Knee-length",
+        "sortOrder": 4
+      },
+      {
+        "value": "Cropped",
+        "sortOrder": 5
+      },
+      {
+        "value": "Regular",
+        "sortOrder": 6
+      },
+      {
+        "value": "Long",
+        "sortOrder": 7
+      }
+    ]
+  },
+  {
+    "name": "Neckline",
+    "code": "neckline",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select neckline",
+    "description": "Neckline of the item",
+    "options": [
+      {
+        "value": "Round neck",
+        "sortOrder": 1
+      },
+      {
+        "value": "V-neck",
+        "sortOrder": 2
+      },
+      {
+        "value": "Turtleneck",
+        "sortOrder": 3
+      },
+      {
+        "value": "Off-shoulder",
+        "sortOrder": 4
+      },
+      {
+        "value": "Halterneck",
+        "sortOrder": 5
+      },
+      {
+        "value": "Strapless",
+        "sortOrder": 6
+      },
+      {
+        "value": "Collared",
+        "sortOrder": 7
+      },
+      {
+        "value": "Square neck",
+        "sortOrder": 8
+      },
+      {
+        "value": "Other",
+        "sortOrder": 9
+      }
+    ]
+  },
+  {
+    "name": "Sleeve Length",
+    "code": "sleeve_length",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select sleeve length",
+    "description": "Sleeve Length of the item",
+    "options": [
+      {
+        "value": "Sleeveless",
+        "sortOrder": 1
+      },
+      {
+        "value": "Short sleeve",
+        "sortOrder": 2
+      },
+      {
+        "value": "3/4 sleeve",
+        "sortOrder": 3
+      },
+      {
+        "value": "Long sleeve",
+        "sortOrder": 4
+      },
+      {
+        "value": "Other",
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Pattern",
+    "code": "pattern",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select pattern",
+    "description": "Pattern of the item",
+    "options": [
+      {
+        "value": "Plain",
+        "sortOrder": 1
+      },
+      {
+        "value": "Striped",
+        "sortOrder": 2
+      },
+      {
+        "value": "Checked / Plaid",
+        "sortOrder": 3
+      },
+      {
+        "value": "Floral",
+        "sortOrder": 4
+      },
+      {
+        "value": "Animal print",
+        "sortOrder": 5
+      },
+      {
+        "value": "Geometric",
+        "sortOrder": 6
+      },
+      {
+        "value": "Abstract",
+        "sortOrder": 7
+      },
+      {
+        "value": "Tie-dye",
+        "sortOrder": 8
+      },
+      {
+        "value": "Camo",
+        "sortOrder": 9
+      },
+      {
+        "value": "Polka dot",
+        "sortOrder": 10
+      },
+      {
+        "value": "Other",
+        "sortOrder": 11
+      }
+    ]
+  },
+  {
+    "name": "Occasion",
+    "code": "occasion",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "multiple",
+    "isRequired": false,
+    "placeholder": "Select occasion",
+    "description": "Occasion of the item",
+    "options": [
+      {
+        "value": "Casual",
+        "sortOrder": 1
+      },
+      {
+        "value": "Work / Office",
+        "sortOrder": 2
+      },
+      {
+        "value": "Evening",
+        "sortOrder": 3
+      },
+      {
+        "value": "Party",
+        "sortOrder": 4
+      },
+      {
+        "value": "Sport",
+        "sortOrder": 5
+      },
+      {
+        "value": "Beach",
+        "sortOrder": 6
+      },
+      {
+        "value": "Travel",
+        "sortOrder": 7
+      },
+      {
+        "value": "Other",
+        "sortOrder": 8
+      }
+    ]
+  },
+  {
+    "name": "Heel Height",
+    "code": "heel_height",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select heel height",
+    "description": "Heel Height of the item",
+    "options": [
+      {
+        "value": "Flat (0-1 cm)",
+        "sortOrder": 1
+      },
+      {
+        "value": "Low (1-3 cm)",
+        "sortOrder": 2
+      },
+      {
+        "value": "Mid (3-6 cm)",
+        "sortOrder": 3
+      },
+      {
+        "value": "High (6-9 cm)",
+        "sortOrder": 4
+      },
+      {
+        "value": "Very high (9 cm+)",
+        "sortOrder": 5
+      }
+    ]
+  },
+  {
+    "name": "Gender",
+    "code": "gender_kids",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select gender",
+    "description": "Gender of the item",
+    "options": [
+      {
+        "value": "Girls",
+        "sortOrder": 1
+      },
+      {
+        "value": "Boys",
+        "sortOrder": 2
+      },
+      {
+        "value": "Unisex",
+        "sortOrder": 3
+      }
+    ]
+  },
+  {
+    "name": "Storage",
+    "code": "phone_storage",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select storage",
+    "description": "Storage of the item",
+    "options": [
+      {
+        "value": "16GB",
+        "sortOrder": 1
+      },
+      {
+        "value": "32GB",
+        "sortOrder": 2
+      },
+      {
+        "value": "64GB",
+        "sortOrder": 3
+      },
+      {
+        "value": "128GB",
+        "sortOrder": 4
+      },
+      {
+        "value": "256GB",
+        "sortOrder": 5
+      },
+      {
+        "value": "512GB",
+        "sortOrder": 6
+      },
+      {
+        "value": "1TB",
+        "sortOrder": 7
+      },
+      {
+        "value": "Other",
+        "sortOrder": 8
+      }
+    ]
+  },
+  {
+    "name": "Format",
+    "code": "book_format",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select format",
+    "description": "Format of the item",
+    "options": [
+      {
+        "value": "Hardback",
+        "sortOrder": 1
+      },
+      {
+        "value": "Paperback",
+        "sortOrder": 2
+      },
+      {
+        "value": "Ebook",
+        "sortOrder": 3
+      },
+      {
+        "value": "Other",
+        "sortOrder": 4
+      }
+    ]
+  },
+  {
+    "name": "Platform",
+    "code": "game_platform",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select platform",
+    "description": "Platform of the item",
+    "options": [
+      {
+        "value": "PlayStation 5",
+        "sortOrder": 1
+      },
+      {
+        "value": "PlayStation 4",
+        "sortOrder": 2
+      },
+      {
+        "value": "Xbox Series X/S",
+        "sortOrder": 3
+      },
+      {
+        "value": "Xbox One",
+        "sortOrder": 4
+      },
+      {
+        "value": "Nintendo Switch",
+        "sortOrder": 5
+      },
+      {
+        "value": "PC",
+        "sortOrder": 6
+      },
+      {
+        "value": "Other",
+        "sortOrder": 7
+      }
+    ]
+  },
+  {
+    "name": "Camera Type",
+    "code": "camera_type",
+    "type": "enum",
+    "displayType": "list",
+    "selectionType": "single",
+    "isRequired": false,
+    "placeholder": "Select camera type",
+    "description": "Camera Type of the item",
+    "options": [
+      {
+        "value": "DSLR",
+        "sortOrder": 1
+      },
+      {
+        "value": "Mirrorless",
+        "sortOrder": 2
+      },
+      {
+        "value": "Film",
+        "sortOrder": 3
+      },
+      {
+        "value": "Instant",
+        "sortOrder": 4
+      },
+      {
+        "value": "Action Camera",
+        "sortOrder": 5
+      },
+      {
+        "value": "Compact",
+        "sortOrder": 6
+      },
+      {
+        "value": "Other",
+        "sortOrder": 7
+      }
+    ]
+  }
+]
