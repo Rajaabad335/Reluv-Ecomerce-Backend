@@ -889,7 +889,13 @@ export default factories.createCoreController(
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
-            filters: { users_permissions_user: { id: { $ne: null }, holidayMode: { $ne: true } }},
+            filters: {
+              users_permissions_user: { id: { $ne: null } },
+              $or: [
+                { users_permissions_user: { holidayMode: { $eq: false } } },
+                { users_permissions_user: { holidayMode: { $null: true } } },
+              ],
+            },
 
             fields: [
               "id",
@@ -907,7 +913,9 @@ export default factories.createCoreController(
               color: { fields: ["name"] },
               product_condition: { fields: ["name"] },
               images: { fields: ["id", "url"] },
-              users_permissions_user: true,
+              users_permissions_user: {
+                fields: ["id", "username", "email", "holidayMode"],
+              },
               product_attribute_values: {
                 fields: ["valueText", "valueNumber", "valueBoolean"],
                 populate: {
@@ -971,6 +979,8 @@ export default factories.createCoreController(
                   }))
                 : [],
               userId: product?.users_permissions_user ?? null,
+              holidayMode:
+                product?.users_permissions_user?.holidayMode ?? false,
             };
           }),
         };
