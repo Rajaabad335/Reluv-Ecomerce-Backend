@@ -61,6 +61,7 @@ export default {
       if (!accessToken) return ctx.badRequest('Google access token is required.');
 
       const profile = await verifyGoogleAccessToken(accessToken);
+      console.log('Google token verified. Profile:', profile); // Debugging line
       const email = String(profile.email ?? '').trim().toLowerCase();
       const emailVerified = profile.email_verified === true || profile.email_verified === 'true';
       const expectedClientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
