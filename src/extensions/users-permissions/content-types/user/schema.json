@@ -150,6 +150,15 @@
       "type": "boolean",
       "default": false
     },
+    "googlePicture": {
+      "type": "string"
+    },
+    "googleAddress": {
+      "type": "json"
+    },
+    "googleProfile": {
+      "type": "json"
+    },
     "fullName": {
       "type": "string"
     },

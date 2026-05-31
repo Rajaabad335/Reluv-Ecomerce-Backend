@@ -2,13 +2,51 @@ const userUid = 'plugin::users-permissions.user' as any;
 const roleUid = 'plugin::users-permissions.role' as any;
 
 const GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
+const GOOGLE_PEOPLE_API_URL = 'https://people.googleapis.com/v1/people/me?personFields=addresses,phoneNumbers';
 
 type GoogleTokenInfo = {
   aud?: string;
+  sub?: string;
   email?: string;
   email_verified?: string | boolean;
   name?: string;
   picture?: string;
+};
+
+type GooglePersonAddress = {
+  formattedValue?: string;
+  streetAddress?: string;
+  city?: string;
+  region?: string;
+  postalCode?: string;
+  country?: string;
+};
+
+type GooglePersonPhoneNumber = {
+  value?: string;
+};
+
+type GooglePeopleInfo = {
+  addresses?: GooglePersonAddress[];
+  phoneNumbers?: GooglePersonPhoneNumber[];
+};
+
+type GoogleUserInfo = GoogleTokenInfo & GooglePeopleInfo & {
+  given_name?: string;
+  family_name?: string;
+  locale?: string;
+  address?: {
+    formatted?: string;
+    street_address?: string;
+    locality?: string;
+    region?: string;
+    postal_code?: string;
+    country?: string;
+  };
+  gender?: string;
+  birthdate?: string;
+  phone_number?: string;
 };
 
 const normalizeUsername = (value: string) => {
@@ -54,14 +92,145 @@ const verifyGoogleAccessToken = async (accessToken: string): Promise<GoogleToken
   return response.json() as Promise<GoogleTokenInfo>;
 };
 
+const fetchGoogleUserInfo = async (accessToken: string): Promise<GoogleUserInfo | null> => {
+  const response = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) return null;
+
+  return response.json() as Promise<GoogleUserInfo>;
+};
+
+const fetchGooglePeopleInfo = async (
+  accessToken: string,
+  logger?: { warn: (message: string, data?: any) => void }
+): Promise<GooglePeopleInfo | null> => {
+  try {
+    const response = await fetch(GOOGLE_PEOPLE_API_URL, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      logger?.warn(`Google People API failed with status ${response.status}`, {
+        url: GOOGLE_PEOPLE_API_URL,
+        status: response.status,
+        body: errorBody,
+      });
+      return null;
+    }
+
+    const data = (await response.json()) as GooglePeopleInfo;
+
+    if (!data.addresses?.length && !data.phoneNumbers?.length) {
+      logger?.warn('Google People API returned no addresses or phoneNumbers', {
+        url: GOOGLE_PEOPLE_API_URL,
+        addresses: data.addresses,
+        phoneNumbers: data.phoneNumbers,
+      });
+    } else {
+      logger?.warn('Google People API returned people data', {
+        url: GOOGLE_PEOPLE_API_URL,
+        addressesCount: data.addresses?.length ?? 0,
+        phoneNumbersCount: data.phoneNumbers?.length ?? 0,
+      });
+    }
+
+    return data;
+  } catch (error) {
+    logger?.warn('Google People API request threw an exception', error);
+    return null;
+  }
+};
+
+const getGoogleAddressFromPeople = (addresses?: GooglePersonAddress[]) => {
+  if (!addresses?.length) return undefined;
+
+  const address = addresses.find((item) => item.formattedValue || item.city || item.country) || addresses[0];
+
+  return compactObject({
+    formatted: address.formattedValue,
+    street_address: address.streetAddress,
+    locality: address.city,
+    region: address.region,
+    postal_code: address.postalCode,
+    country: address.country,
+  }) as Record<string, any>;
+};
+
+const getGooglePhoneNumberFromPeople = (phoneNumbers?: GooglePersonPhoneNumber[]) => {
+  const phone = phoneNumbers?.find((item) => item?.value);
+  return phone?.value ? String(phone.value).trim() : undefined;
+};
+
+const compactObject = (value: Record<string, any>) =>
+  Object.fromEntries(
+    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && entryValue !== '')
+  );
+
+const normalizeGoogleGender = (value?: string) => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+
+  if (normalized === 'male') return 'Male';
+  if (normalized === 'female') return 'Female';
+  if (normalized) return 'other';
+
+  return undefined;
+};
+
+const normalizeGoogleBirthdate = (value?: string) => {
+  const normalized = String(value ?? '').trim();
+
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : undefined;
+};
+
+const buildGoogleProfileData = (profile: GoogleUserInfo, existingUser?: any) => {
+  const addressFromPeople = getGoogleAddressFromPeople(profile.addresses);
+  const address = profile.address || addressFromPeople || null;
+  const phoneNumber = profile.phone_number || getGooglePhoneNumberFromPeople(profile.phoneNumbers);
+  const fullName = profile.name ? String(profile.name).trim() : undefined;
+  const city = address?.locality ? String(address.locality).trim() : undefined;
+  const country = address?.country ? String(address.country).trim() : undefined;
+  const googleProfile = compactObject({
+    sub: profile.sub,
+    email: profile.email,
+    email_verified: profile.email_verified,
+    name: profile.name,
+    given_name: profile.given_name,
+    family_name: profile.family_name,
+    picture: profile.picture,
+    locale: profile.locale,
+    gender: profile.gender,
+    birthdate: profile.birthdate,
+    phone_number: phoneNumber,
+  });
+
+  return compactObject({
+    googleLinked: true,
+    confirmed: true,
+    fullName: existingUser?.fullName || fullName,
+    googlePicture: profile.picture,
+    googleAddress: address,
+    googleProfile,
+    city: existingUser?.city || city,
+    country: existingUser?.country || country,
+    gender: existingUser?.gender || normalizeGoogleGender(profile.gender),
+    birthday: existingUser?.birthday || normalizeGoogleBirthdate(profile.birthdate),
+    phoneNumber: existingUser?.phoneNumber || phoneNumber,
+  });
+};
+
 export default {
   async login(ctx: any) {
     try {
       const accessToken = String(ctx.request.body?.access_token ?? '').trim();
       if (!accessToken) return ctx.badRequest('Google access token is required.');
 
-      const profile = await verifyGoogleAccessToken(accessToken);
-      console.log('Google token verified. Profile:', profile); // Debugging line
+      const tokenProfile = await verifyGoogleAccessToken(accessToken);
+      const userInfo = await fetchGoogleUserInfo(accessToken);
+      const peopleInfo = await fetchGooglePeopleInfo(accessToken, strapi?.log);
+      const profile = { ...tokenProfile, ...(userInfo || {}), ...(peopleInfo || {}) };
       const email = String(profile.email ?? '').trim().toLowerCase();
       const emailVerified = profile.email_verified === true || profile.email_verified === 'true';
       const expectedClientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
@@ -89,10 +258,7 @@ export default {
       if (user) {
         user = await strapi.db.query(userUid).update({
           where: { id: user.id },
-          data: {
-            googleLinked: true,
-            confirmed: true,
-          },
+          data: buildGoogleProfileData(profile, user),
           populate: ['role'],
         });
       } else {
@@ -118,8 +284,7 @@ export default {
             email,
             provider: 'google',
             role: defaultRole.id,
-            confirmed: true,
-            googleLinked: true,
+            ...buildGoogleProfileData(profile),
           },
           populate: ['role'],
         });
