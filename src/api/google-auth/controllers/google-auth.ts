@@ -1,9 +1,10 @@
-const userUid = 'plugin::users-permissions.user' as any;
-const roleUid = 'plugin::users-permissions.role' as any;
+const userUid = "plugin::users-permissions.user" as any;
+const roleUid = "plugin::users-permissions.role" as any;
 
-const GOOGLE_TOKENINFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
-const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
-const GOOGLE_PEOPLE_API_URL = 'https://people.googleapis.com/v1/people/me?personFields=addresses,phoneNumbers';
+const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
+const GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
+const GOOGLE_PEOPLE_API_URL =
+  "https://people.googleapis.com/v1/people/me?personFields=addresses,phoneNumbers";
 
 type GoogleTokenInfo = {
   aud?: string;
@@ -32,31 +33,32 @@ type GooglePeopleInfo = {
   phoneNumbers?: GooglePersonPhoneNumber[];
 };
 
-type GoogleUserInfo = GoogleTokenInfo & GooglePeopleInfo & {
-  given_name?: string;
-  family_name?: string;
-  locale?: string;
-  address?: {
-    formatted?: string;
-    street_address?: string;
-    locality?: string;
-    region?: string;
-    postal_code?: string;
-    country?: string;
+type GoogleUserInfo = GoogleTokenInfo &
+  GooglePeopleInfo & {
+    given_name?: string;
+    family_name?: string;
+    locale?: string;
+    address?: {
+      formatted?: string;
+      street_address?: string;
+      locality?: string;
+      region?: string;
+      postal_code?: string;
+      country?: string;
+    };
+    gender?: string;
+    birthdate?: string;
+    phone_number?: string;
   };
-  gender?: string;
-  birthdate?: string;
-  phone_number?: string;
-};
 
 const normalizeUsername = (value: string) => {
   const normalized = value
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9_.-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9_.-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
 
-  return normalized.length >= 3 ? normalized : `${normalized || 'user'}123`;
+  return normalized.length >= 3 ? normalized : `${normalized || "user"}123`;
 };
 
 const findAvailableUsername = async (strapi: any, base: string) => {
@@ -66,7 +68,7 @@ const findAvailableUsername = async (strapi: any, base: string) => {
     const username = index === 0 ? normalized : `${normalized}${index + 1}`;
     const existing = await strapi.db.query(userUid).findOne({
       where: { username },
-      select: ['id'],
+      select: ["id"],
     });
 
     if (!existing) return username;
@@ -77,22 +79,28 @@ const findAvailableUsername = async (strapi: any, base: string) => {
 
 const sanitizeUser = async (strapi: any, user: any, ctx: any) => {
   const schema = strapi.getModel(userUid);
-  return strapi.contentAPI.sanitize.output(user, schema, { auth: ctx.state.auth });
+  return strapi.contentAPI.sanitize.output(user, schema, {
+    auth: ctx.state.auth,
+  });
 };
 
-const verifyGoogleAccessToken = async (accessToken: string): Promise<GoogleTokenInfo> => {
+const verifyGoogleAccessToken = async (
+  accessToken: string,
+): Promise<GoogleTokenInfo> => {
   const response = await fetch(
-    `${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`
+    `${GOOGLE_TOKENINFO_URL}?access_token=${encodeURIComponent(accessToken)}`,
   );
 
   if (!response.ok) {
-    throw new Error('Google token is invalid or expired.');
+    throw new Error("Google token is invalid or expired.");
   }
 
   return response.json() as Promise<GoogleTokenInfo>;
 };
 
-const fetchGoogleUserInfo = async (accessToken: string): Promise<GoogleUserInfo | null> => {
+const fetchGoogleUserInfo = async (
+  accessToken: string,
+): Promise<GoogleUserInfo | null> => {
   const response = await fetch(GOOGLE_USERINFO_URL, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -104,7 +112,7 @@ const fetchGoogleUserInfo = async (accessToken: string): Promise<GoogleUserInfo 
 
 const fetchGooglePeopleInfo = async (
   accessToken: string,
-  logger?: { warn: (message: string, data?: any) => void }
+  logger?: { warn: (message: string, data?: any) => void },
 ): Promise<GooglePeopleInfo | null> => {
   try {
     const response = await fetch(GOOGLE_PEOPLE_API_URL, {
@@ -124,13 +132,13 @@ const fetchGooglePeopleInfo = async (
     const data = (await response.json()) as GooglePeopleInfo;
 
     if (!data.addresses?.length && !data.phoneNumbers?.length) {
-      logger?.warn('Google People API returned no addresses or phoneNumbers', {
+      logger?.warn("Google People API returned no addresses or phoneNumbers", {
         url: GOOGLE_PEOPLE_API_URL,
         addresses: data.addresses,
         phoneNumbers: data.phoneNumbers,
       });
     } else {
-      logger?.warn('Google People API returned people data', {
+      logger?.warn("Google People API returned people data", {
         url: GOOGLE_PEOPLE_API_URL,
         addressesCount: data.addresses?.length ?? 0,
         phoneNumbersCount: data.phoneNumbers?.length ?? 0,
@@ -139,7 +147,7 @@ const fetchGooglePeopleInfo = async (
 
     return data;
   } catch (error) {
-    logger?.warn('Google People API request threw an exception', error);
+    logger?.warn("Google People API request threw an exception", error);
     return null;
   }
 };
@@ -147,7 +155,10 @@ const fetchGooglePeopleInfo = async (
 const getGoogleAddressFromPeople = (addresses?: GooglePersonAddress[]) => {
   if (!addresses?.length) return undefined;
 
-  const address = addresses.find((item) => item.formattedValue || item.city || item.country) || addresses[0];
+  const address =
+    addresses.find(
+      (item) => item.formattedValue || item.city || item.country,
+    ) || addresses[0];
 
   return compactObject({
     formatted: address.formattedValue,
@@ -159,36 +170,48 @@ const getGoogleAddressFromPeople = (addresses?: GooglePersonAddress[]) => {
   }) as Record<string, any>;
 };
 
-const getGooglePhoneNumberFromPeople = (phoneNumbers?: GooglePersonPhoneNumber[]) => {
+const getGooglePhoneNumberFromPeople = (
+  phoneNumbers?: GooglePersonPhoneNumber[],
+) => {
   const phone = phoneNumbers?.find((item) => item?.value);
   return phone?.value ? String(phone.value).trim() : undefined;
 };
 
 const compactObject = (value: Record<string, any>) =>
   Object.fromEntries(
-    Object.entries(value).filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && entryValue !== '')
+    Object.entries(value).filter(
+      ([, entryValue]) =>
+        entryValue !== undefined && entryValue !== null && entryValue !== "",
+    ),
   );
 
 const normalizeGoogleGender = (value?: string) => {
-  const normalized = String(value ?? '').trim().toLowerCase();
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
 
-  if (normalized === 'male') return 'Male';
-  if (normalized === 'female') return 'Female';
-  if (normalized) return 'other';
+  if (normalized === "male") return "Male";
+  if (normalized === "female") return "Female";
+  if (normalized) return "other";
 
   return undefined;
 };
 
 const normalizeGoogleBirthdate = (value?: string) => {
-  const normalized = String(value ?? '').trim();
+  const normalized = String(value ?? "").trim();
 
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : undefined;
 };
 
-const buildGoogleProfileData = (profile: GoogleUserInfo, existingUser?: any) => {
+const buildGoogleProfileData = (
+  profile: GoogleUserInfo,
+  existingUser?: any,
+) => {
   const addressFromPeople = getGoogleAddressFromPeople(profile.addresses);
   const address = profile.address || addressFromPeople || null;
-  const phoneNumber = profile.phone_number || getGooglePhoneNumberFromPeople(profile.phoneNumbers);
+  const phoneNumber =
+    profile.phone_number ||
+    getGooglePhoneNumberFromPeople(profile.phoneNumbers);
   const fullName = profile.name ? String(profile.name).trim() : undefined;
   const city = address?.locality ? String(address.locality).trim() : undefined;
   const country = address?.country ? String(address.country).trim() : undefined;
@@ -216,7 +239,8 @@ const buildGoogleProfileData = (profile: GoogleUserInfo, existingUser?: any) => 
     city: existingUser?.city || city,
     country: existingUser?.country || country,
     gender: existingUser?.gender || normalizeGoogleGender(profile.gender),
-    birthday: existingUser?.birthday || normalizeGoogleBirthdate(profile.birthdate),
+    birthday:
+      existingUser?.birthday || normalizeGoogleBirthdate(profile.birthdate),
     phoneNumber: existingUser?.phoneNumber || phoneNumber,
   });
 };
@@ -224,50 +248,67 @@ const buildGoogleProfileData = (profile: GoogleUserInfo, existingUser?: any) => 
 export default {
   async login(ctx: any) {
     try {
-      const accessToken = String(ctx.request.body?.access_token ?? '').trim();
-      if (!accessToken) return ctx.badRequest('Google access token is required.');
+      const accessToken = String(ctx.request.body?.access_token ?? "").trim();
+      if (!accessToken)
+        return ctx.badRequest("Google access token is required.");
 
       const tokenProfile = await verifyGoogleAccessToken(accessToken);
       const userInfo = await fetchGoogleUserInfo(accessToken);
       const peopleInfo = await fetchGooglePeopleInfo(accessToken, strapi?.log);
-      const profile = { ...tokenProfile, ...(userInfo || {}), ...(peopleInfo || {}) };
-      const email = String(profile.email ?? '').trim().toLowerCase();
-      const emailVerified = profile.email_verified === true || profile.email_verified === 'true';
-      const expectedClientId = process.env.GOOGLE_CLIENT_ID || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+      const profile = {
+        ...tokenProfile,
+        ...(userInfo || {}),
+        ...(peopleInfo || {}),
+      };
+      const email = String(profile.email ?? "")
+        .trim()
+        .toLowerCase();
+      const emailVerified =
+        profile.email_verified === true || profile.email_verified === "true";
+      const expectedClientId =
+        process.env.GOOGLE_CLIENT_ID ||
+        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
       if (!email || !emailVerified) {
-        return ctx.unauthorized('Google account email is not verified.');
+        return ctx.unauthorized("Google account email is not verified.");
       }
 
       if (expectedClientId && profile.aud !== expectedClientId) {
-        return ctx.unauthorized('Google token was issued for a different app.');
+        return ctx.unauthorized("Google token was issued for a different app.");
       }
 
       const existingUsers = await strapi.db.query(userUid).findMany({
         where: { email },
-        populate: ['role'],
+        populate: ["role"],
       });
 
       let user =
-        existingUsers.find((candidate: any) => candidate.provider === 'google') || existingUsers[0];
+        existingUsers.find(
+          (candidate: any) => candidate.provider === "google",
+        ) || existingUsers[0];
 
       if (user?.blocked) {
-        return ctx.forbidden('Your account has been blocked by an administrator.');
+        return ctx.forbidden(
+          "Your account has been blocked by an administrator.",
+        );
       }
 
       if (user) {
         user = await strapi.db.query(userUid).update({
           where: { id: user.id },
-          data: buildGoogleProfileData(profile, user),
-          populate: ['role'],
+          data: {
+            accountType: "user",
+            ...buildGoogleProfileData(profile, user),
+          },
+          populate: ["role"],
         });
       } else {
         const advancedSettings = (await strapi
-          .store({ type: 'plugin', name: 'users-permissions', key: 'advanced' })
+          .store({ type: "plugin", name: "users-permissions", key: "advanced" })
           .get()) as { allow_register?: boolean; default_role?: string } | null;
 
         if (!advancedSettings?.allow_register) {
-          return ctx.forbidden('Register action is currently disabled.');
+          return ctx.forbidden("Register action is currently disabled.");
         }
 
         const defaultRole = await strapi.db.query(roleUid).findOne({
@@ -275,29 +316,36 @@ export default {
         });
 
         if (!defaultRole) {
-          return ctx.internalServerError('Default user role was not found.');
+          return ctx.internalServerError("Default user role was not found.");
         }
 
         user = await strapi.db.query(userUid).create({
           data: {
-            username: await findAvailableUsername(strapi, profile.name || email.split('@')[0]),
+            username: await findAvailableUsername(
+              strapi,
+              profile.name || email.split("@")[0],
+            ),
             email,
-            provider: 'google',
+            accountType: "user",
+            provider: "google",
             role: defaultRole.id,
             ...buildGoogleProfileData(profile),
           },
-          populate: ['role'],
+          populate: ["role"],
         });
       }
 
-      const jwt = strapi.plugin('users-permissions').service('jwt').issue({ id: user.id });
+      const jwt = strapi
+        .plugin("users-permissions")
+        .service("jwt")
+        .issue({ id: user.id });
       ctx.body = {
         jwt,
         user: await sanitizeUser(strapi, user, ctx),
       };
     } catch (error: any) {
-      strapi.log.error('Google login failed', error);
-      return ctx.badRequest(error?.message || 'Google login failed.');
+      strapi.log.error("Google login failed", error);
+      return ctx.badRequest(error?.message || "Google login failed.");
     }
   },
 };

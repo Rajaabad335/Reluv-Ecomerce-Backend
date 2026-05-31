@@ -1681,7 +1681,10 @@ export interface PluginUsersPermissionsUser
     >;
     fullName: Schema.Attribute.String;
     gender: Schema.Attribute.Enumeration<['Male', 'Female', 'other']>;
+    googleAddress: Schema.Attribute.JSON;
     googleLinked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    googlePicture: Schema.Attribute.String;
+    googleProfile: Schema.Attribute.JSON;
     holidayMode: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     isShowCity: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     language: Schema.Attribute.Enumeration<['en', 'th']> &

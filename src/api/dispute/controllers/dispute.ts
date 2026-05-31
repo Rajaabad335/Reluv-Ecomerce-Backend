@@ -10,8 +10,8 @@ async fileDispute(ctx) {
     const { body } = ctx.request;
 
     // Validate required fields
-    if (!body.order || !body.sellerId || !body.buyerId || !body.reason) {
-      return ctx.badRequest("Missing required fields: order, sellerId, buyerId, reason");
+    if (!body.order || !body.raisedBy || !body.reason) {
+      return ctx.badRequest("Missing required fields: order, raisedBy, reason");
     }
 
     // Check for existing dispute
@@ -21,7 +21,7 @@ async fileDispute(ctx) {
         filters: { 
           order:  body.order,
           recievedBy: { id: body.sellerId },  // ✅ must be object with id
-          raisedBy: { id: body.buyerId },      // ✅ must be object with id
+          raisedBy: { id: body.raisedBy },      // ✅ must be object with id
         } as any,
       }
     );
@@ -37,9 +37,9 @@ async fileDispute(ctx) {
       data: {
         order: body.order,           // ✅ scalar ID works for create
         recievedBy: body.sellerId,   // ✅ scalar ID works for create
-        raisedBy: body.buyerId,      // ✅ scalar ID works for create
+        raisedBy: body.raisedBy,      // ✅ scalar ID works for create
         reason: body.reason,         // ✅ required enum field
-        description: body.description ?? null,
+        description: body.details ?? null,
         status: "OPEN",              // ✅ explicit default (matches schema)
       } as any,
     });
