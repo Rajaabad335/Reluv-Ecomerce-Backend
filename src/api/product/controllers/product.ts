@@ -890,11 +890,17 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
-              users_permissions_user: { id: { $ne: null } },
-              $or: [
-                { users_permissions_user: { holidayMode: { $eq: false } } },
-                { users_permissions_user: { holidayMode: { $null: true } } },
-              ],
+              users_permissions_user: {
+                $and: [
+                  { id: { $ne: null } },
+                  {
+                    $or: [
+                      { holidayMode: { $eq: false } },
+                      { holidayMode: { $eq: null } },
+                    ],
+                  },
+                ],
+              },
             },
 
             fields: [
@@ -999,7 +1005,13 @@ export default factories.createCoreController(
         const productData = (await strapi.entityService.findMany(
           "api::product.product",
           {
-            filters: { id: { $eq: id },  users_permissions_user: { holidayMode: { $ne: true } }},
+            filters: {
+              id: { $eq: id },
+              $or: [
+                { users_permissions_user: { holidayMode: { $eq: false } } },
+                { users_permissions_user: { holidayMode: { $eq: null } } },
+              ],
+            },
             fields: [
               "id",
               "title",
@@ -1102,7 +1114,7 @@ export default factories.createCoreController(
         const sortBy = normalizeSort(query.sortBy || query.sort);
 
         const filters: any = {
-          productStatus: { $eq: "active" },
+          // productStatus: { $eq: "active" },
         };
         const andFilters: any[] = [];
 
@@ -1342,7 +1354,17 @@ export default factories.createCoreController(
             : sortBy === "price_desc"
               ? { price: "desc" as const }
               : { createdAt: "desc" as const };
-        filters.users_permissions_user = { holidayMode: { $ne: true } };
+        filters.users_permissions_user = {
+          $and: [
+            { id: { $ne: null } },
+            {
+              $or: [
+                { holidayMode: { $eq: false } },
+                { holidayMode: { $eq: null } },
+              ],
+            },
+          ],
+        };
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
@@ -1369,6 +1391,7 @@ export default factories.createCoreController(
                   category_attribute_option: { fields: ["value"] },
                 },
               },
+              users_permissions_user:{ fields:["holidayMode"]}
             },
             sort,
             start: offset,
@@ -1479,7 +1502,7 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
-              productStatus: { $eq: "active" },
+              // productStatus: { $eq: "active" },
               users_permissions_user: { holidayMode: { $ne: true } },
               $or: [
                 { title: { $containsi: searchTerm } },
