@@ -1086,7 +1086,7 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to fetch product details.");
       }
     },
-    async filterProducts(ctx: any) {
+   async filterProducts(ctx: any) {
       try {
         const query = ctx.query || {};
         const offset = Math.max(
@@ -1114,7 +1114,7 @@ export default factories.createCoreController(
         const sortBy = normalizeSort(query.sortBy || query.sort);
 
         const filters: any = {
-          // productStatus: { $eq: "active" },
+          productStatus: { $eq: "active" },
         };
         const andFilters: any[] = [];
 
@@ -1354,17 +1354,7 @@ export default factories.createCoreController(
             : sortBy === "price_desc"
               ? { price: "desc" as const }
               : { createdAt: "desc" as const };
-        filters.users_permissions_user = {
-          $and: [
-            { id: { $ne: null } },
-            {
-              $or: [
-                { holidayMode: { $eq: false } },
-                { holidayMode: { $eq: null } },
-              ],
-            },
-          ],
-        };
+
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
@@ -1391,7 +1381,6 @@ export default factories.createCoreController(
                   category_attribute_option: { fields: ["value"] },
                 },
               },
-              users_permissions_user:{ fields:["holidayMode"]}
             },
             sort,
             start: offset,
