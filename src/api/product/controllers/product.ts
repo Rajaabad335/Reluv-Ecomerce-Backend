@@ -1086,383 +1086,310 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to fetch product details.");
       }
     },
-   async filterProducts(ctx: any) {
-      try {
-        const query = ctx.query || {};
-        const offset = Math.max(
-          0,
-          Number(
-            query.offset ||
-              (Number(query.page || 1) - 1) * Number(query.pageSize || 20) ||
-              0,
-          ),
-        );
-        const pageSize = Math.min(
-          100,
-          parsePositiveInt(query.pageSize ?? query.limit, 20),
-        );
-        const categoryInput = String(
-          query.item || query.subCategory || query.category || "",
-        ).trim();
-        const brandInput = String(query.brand || "").trim();
-        const sizeInput = String(query.size || "").trim();
-        const conditionInput = String(query.condition || "").trim();
-        const colourInput = String(query.colour || query.color || "").trim();
-        const materialInput = String(query.material || "").trim();
-        const minPrice = parseNumberOrNull(query.minPrice);
-        const maxPrice = parseNumberOrNull(query.maxPrice);
-        const sortBy = normalizeSort(query.sortBy || query.sort);
+async filterProducts(ctx: any) {
+  const startTime = Date.now();
 
-        const filters: any = {
-          productStatus: { $eq: "active" },
-        };
-        const andFilters: any[] = [];
+  try {
+    const query = ctx.query || {};
 
-        if (categoryInput) {
-          const categoryIds = await getCategoryIdsWithDescendants(
-            strapi,
-            categoryInput,
-          );
-          if (categoryIds.length > 0) {
-            andFilters.push({
-              category: { id: { $in: categoryIds } },
-            });
-          } else {
-            andFilters.push({
-              category: {
-                $or: [
-                  { slug: { $eqi: categoryInput } },
-                  { name: { $eqi: categoryInput } },
-                  { name: { $containsi: categoryInput } },
-                ],
-              },
-            });
-          }
-        }
+    // ── Pagination ──────────────────────────────────────────────────────────
+    const pageSize = Math.min(100, parsePositiveInt(query.pageSize ?? query.limit, 20));
+    const offset = Math.max(
+      0,
+      Number(query.offset || (Number(query.page || 1) - 1) * pageSize || 0),
+    );
 
-        if (brandInput) {
-          andFilters.push({
+    // ── Raw inputs ───────────────────────────────────────────────────────────
+    const categoryInput  = String(query.item || query.subCategory || query.category || "").trim();
+    const brandInput     = String(query.brand     || "").trim();
+    const sizeInput      = String(query.size      || "").trim();
+    const conditionInput = String(query.condition || "").trim();
+    const colourInput    = String(query.colour || query.color || "").trim();
+    const materialInput  = String(query.material  || "").trim();
+    const minPrice       = parseNumberOrNull(query.minPrice);
+    const maxPrice       = parseNumberOrNull(query.maxPrice);
+    const sortBy         = normalizeSort(query.sortBy || query.sort);
+
+    // ── Base filter ──────────────────────────────────────────────────────────
+    const filters: any = { productStatus: { $eq: "active" } };
+    const andFilters: any[] = [];
+
+    // ── Category (with cached tree lookup) ───────────────────────────────────
+    if (categoryInput) {
+      // getCategoryIdsWithDescendants should be memoized/cached externally
+      const categoryIds = await getCategoryIdsWithDescendants(strapi, categoryInput);
+
+      if (categoryIds.length > 0) {
+        andFilters.push({ category: { id: { $in: categoryIds } } });
+      } else {
+        andFilters.push({
+          category: {
             $or: [
-              { brand: { name: { $eqi: brandInput } } },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "brand" } },
-                  valueText: { $eqi: brandInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "brands" } },
-                  valueText: { $eqi: brandInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "brand" } },
-                  category_attribute_option: { value: { $eqi: brandInput } },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "brands" } },
-                  category_attribute_option: { value: { $eqi: brandInput } },
-                },
-              },
+              { slug: { $eqi: categoryInput } },
+              { name: { $eqi: categoryInput } },
+              { name: { $containsi: categoryInput } },
             ],
-          });
-        }
-
-        if (sizeInput) {
-          andFilters.push({
-            $or: [
-              { size: { name: { $eqi: sizeInput } } },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "size" } },
-                  valueText: { $eqi: sizeInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { name: { $eqi: "Size" } },
-                  valueText: { $eqi: sizeInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "sizes" } },
-                  valueText: { $eqi: sizeInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "size" } },
-                  category_attribute_option: { value: { $eqi: sizeInput } },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { name: { $eqi: "Size" } },
-                  category_attribute_option: { value: { $eqi: sizeInput } },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "sizes" } },
-                  category_attribute_option: { value: { $eqi: sizeInput } },
-                },
-              },
-            ],
-          });
-        }
-
-        if (conditionInput) {
-          const normalizedCondition = normalizeCondition(conditionInput);
-          andFilters.push({
-            $or: [
-              ...(normalizedCondition
-                ? [{ condition: { $eq: normalizedCondition } }]
-                : [{ condition: { $eqi: conditionInput } }]),
-              { product_condition: { name: { $eqi: conditionInput } } },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "condition" } },
-                  valueText: { $eqi: conditionInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "conditions" } },
-                  valueText: { $eqi: conditionInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "product_condition" } },
-                  valueText: { $eqi: conditionInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "condition" } },
-                  category_attribute_option: { value: { $eqi: conditionInput } },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "conditions" } },
-                  category_attribute_option: { value: { $eqi: conditionInput } },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: { code: { $eqi: "product_condition" } },
-                  category_attribute_option: { value: { $eqi: conditionInput } },
-                },
-              },
-            ],
-          });
-        }
-
-        if (minPrice != null || maxPrice != null) {
-          const priceRange: any = {};
-          if (minPrice != null) priceRange.$gte = minPrice;
-          if (maxPrice != null) priceRange.$lte = maxPrice;
-          andFilters.push({ price: priceRange });
-        }
-
-        if (colourInput) {
-          andFilters.push({
-            $or: [
-              {
-                color: {
-                  name: { $eqi: colourInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "colour" },
-                  },
-                  valueText: { $eqi: colourInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "color" },
-                  },
-                  valueText: { $eqi: colourInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "colour" },
-                  },
-                  category_attribute_option: {
-                    value: { $eqi: colourInput },
-                  },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "color" },
-                  },
-                  category_attribute_option: {
-                    value: { $eqi: colourInput },
-                  },
-                },
-              },
-            ],
-          });
-        }
-
-        if (materialInput) {
-          andFilters.push({
-            $or: [
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "material" },
-                  },
-                  valueText: { $eqi: materialInput },
-                },
-              },
-              {
-                product_attribute_values: {
-                  category_attribute: {
-                    code: { $eqi: "material" },
-                  },
-                  category_attribute_option: {
-                    value: { $eqi: materialInput },
-                  },
-                },
-              },
-            ],
-          });
-        }
-
-        if (andFilters.length > 0) {
-          filters.$and = andFilters;
-        }
-
-        const sort =
-          sortBy === "price_asc"
-            ? { price: "asc" as const }
-            : sortBy === "price_desc"
-              ? { price: "desc" as const }
-              : { createdAt: "desc" as const };
-
-        const products = (await strapi.entityService.findMany(
-          "api::product.product",
-          {
-            filters,
-            fields: [
-              "id",
-              "title",
-              "price",
-              "condition",
-              "createdAt",
-              "likeCount",
-            ],
-            populate: {
-              category: { fields: ["name", "slug"] },
-              brand: { fields: ["name", "slug"] },
-              size: { fields: ["name"] },
-              color: { fields: ["name", "slug"] },
-              product_condition: { fields: ["name", "slug"] },
-              images: { fields: ["id", "url"] },
-              product_attribute_values: {
-                fields: ["valueText", "valueNumber", "valueBoolean"],
-                populate: {
-                  category_attribute: { fields: ["code", "name"] },
-                  category_attribute_option: { fields: ["value"] },
-                },
-              },
-            },
-            sort,
-            start: offset,
-            limit: pageSize + 1,
           },
-        )) as any[];
-
-        const hasMore = products.length > pageSize;
-        const pageSlice = hasMore ? products.slice(0, pageSize) : products;
-
-        const mapped = pageSlice.map((product: any) => {
-          const dynamicByCode = new Map<string, string>();
-          const pavs = Array.isArray(product?.product_attribute_values)
-            ? product.product_attribute_values
-            : [];
-          for (const pav of pavs) {
-            const code = normalizeCode(
-              pav?.category_attribute?.code || pav?.category_attribute?.name,
-            );
-            if (!code) continue;
-            const textValue = String(
-              pav?.category_attribute_option?.value ??
-                pav?.valueText ??
-                pav?.valueNumber ??
-                pav?.valueBoolean ??
-                "",
-            ).trim();
-            if (!textValue) continue;
-            if (!dynamicByCode.has(code)) dynamicByCode.set(code, textValue);
-          }
-
-          return {
-            id: product.id,
-            documentId: product.documentId,
-            title: product.title,
-            price: product.price,
-            condition:
-              dynamicByCode.get("condition") ??
-              dynamicByCode.get("conditions") ??
-              dynamicByCode.get("product_condition") ??
-              product?.product_condition?.name ??
-              product?.condition,
-            category: product?.category?.name ?? null,
-            subCategory: null,
-            item: null,
-            brand:
-              dynamicByCode.get("brand") ??
-              dynamicByCode.get("brands") ??
-              product?.brand?.name ??
-              null,
-            size:
-              dynamicByCode.get("size") ??
-              dynamicByCode.get("sizes") ??
-              product?.size?.name ??
-              null,
-            color:
-              dynamicByCode.get("colour") ??
-              dynamicByCode.get("color") ??
-              product?.color?.name ??
-              null,
-            material: dynamicByCode.get("material") || null,
-            likeCount: Number(product?.likeCount ?? 0) || 0,
-            images: Array.isArray(product.images)
-              ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
-              : [],
-          };
         });
-
-        ctx.body = {
-          ok: true,
-          products: mapped,
-          pagination: {
-            offset,
-            pageSize,
-            hasMore,
-          },
-        };
-      } catch (error) {
-        strapi.log.error(error);
-        return ctx.internalServerError("Failed to fetch filtered products.");
       }
-    },
+    }
+
+    // ── Brand ────────────────────────────────────────────────────────────────
+    if (brandInput) {
+      andFilters.push({
+        $or: [
+          { brand: { name: { $eqi: brandInput } } },
+          {
+            product_attribute_values: {
+              $and: [
+                { category_attribute: { code: { $in: ["brand", "brands"] } } },
+                {
+                  $or: [
+                    { valueText: { $eqi: brandInput } },
+                    { category_attribute_option: { value: { $eqi: brandInput } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    }
+
+    // ── Size ─────────────────────────────────────────────────────────────────
+    if (sizeInput) {
+      andFilters.push({
+        $or: [
+          { size: { name: { $eqi: sizeInput } } },
+          {
+            product_attribute_values: {
+              $and: [
+                {$or:[{ category_attribute: { code: { $in: ["size", "sizes"] } } },
+              {category_attribute: { name: { $eqi: "Size" } }}]},
+                {
+                  $or: [
+                    { valueText: { $eqi: sizeInput } },
+                    { category_attribute_option: { value: { $eqi: sizeInput } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    }
+
+    // ── Condition ────────────────────────────────────────────────────────────
+    if (conditionInput) {
+      const normalizedCondition = normalizeCondition(conditionInput);
+      andFilters.push({
+        $or: [
+          normalizedCondition
+            ? { condition: { $eq: normalizedCondition } }
+            : { condition: { $eqi: conditionInput } },
+          { product_condition: { name: { $eqi: conditionInput } } },
+          {
+            product_attribute_values: {
+              $and: [
+                {
+                  category_attribute: {
+                    code: { $in: ["condition", "conditions", "product_condition"] },
+                  },
+                },
+                {
+                  $or: [
+                    { valueText: { $eqi: conditionInput } },
+                    { category_attribute_option: { value: { $eqi: conditionInput } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    }
+
+    // ── Price range ───────────────────────────────────────────────────────────
+    if (minPrice != null || maxPrice != null) {
+      const priceRange: any = {};
+      if (minPrice != null) priceRange.$gte = minPrice;
+      if (maxPrice != null) priceRange.$lte = maxPrice;
+      andFilters.push({ price: priceRange });
+    }
+
+    // ── Colour ───────────────────────────────────────────────────────────────
+    if (colourInput) {
+      andFilters.push({
+        $or: [
+          { color: { name: { $eqi: colourInput } } },
+          {
+            product_attribute_values: {
+              $and: [
+                { category_attribute: { code: { $in: ["colour", "color"] } } },
+                {
+                  $or: [
+                    { valueText: { $eqi: colourInput } },
+                    { category_attribute_option: { value: { $eqi: colourInput } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    }
+
+    // ── Material ─────────────────────────────────────────────────────────────
+    if (materialInput) {
+      andFilters.push({
+        $or: [
+          {
+            product_attribute_values: {
+              $and: [
+                { category_attribute: { code: { $eqi: "material" } } },
+                {
+                  $or: [
+                    { valueText: { $eqi: materialInput } },
+                    { category_attribute_option: { value: { $eqi: materialInput } } },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      });
+    }
+
+    if (andFilters.length > 0) {
+      filters.$and = andFilters;
+    }
+
+    // ── Sort ─────────────────────────────────────────────────────────────────
+    const sort =
+      sortBy === "price_asc"  ? { price: "asc" as const }  :
+      sortBy === "price_desc" ? { price: "desc" as const } :
+                                { createdAt: "desc" as const };
+
+    // ── DB Query ─────────────────────────────────────────────────────────────
+    // We intentionally do NOT deep-populate product_attribute_values here
+    // for filtering — filtering happens above via Strapi filter syntax.
+    // We only populate what we need to map the response.
+    const [products, total] = await Promise.all([
+      strapi.entityService.findMany("api::product.product", {
+        filters,
+        fields: ["id", "title", "price", "condition", "createdAt", "likeCount"],
+        populate: {
+          category:          { fields: ["name", "slug"] },
+          brand:             { fields: ["name", "slug"] },
+          size:              { fields: ["name"] },
+          color:             { fields: ["name", "slug"] },
+          product_condition: { fields: ["name", "slug"] },
+          images:            { fields: ["id", "url"] },
+          // Minimal PAV population — only what mapping needs
+          product_attribute_values: {
+            fields: ["valueText", "valueNumber", "valueBoolean"],
+            populate: {
+              category_attribute:        { fields: ["code", "name"] },
+              category_attribute_option: { fields: ["value"] },
+            },
+          },
+        },
+        sort,
+        start:  offset,
+        limit:  pageSize + 1, // +1 to detect hasMore
+      }) as Promise<any[]>,
+
+      // Run count in parallel for proper pagination metadata
+      strapi.entityService.count("api::product.product", { filters }),
+    ]);
+
+    const hasMore   = products.length > pageSize;
+    const pageSlice = hasMore ? products.slice(0, pageSize) : products;
+
+    // ── Map response ─────────────────────────────────────────────────────────
+    const mapped = pageSlice.map((product: any) => {
+      // Build a code → value map from attribute values (first-write wins)
+      const byCode = new Map<string, string>();
+      const pavs: any[] = Array.isArray(product.product_attribute_values)
+        ? product.product_attribute_values
+        : [];
+
+      for (const pav of pavs) {
+        const rawCode = pav?.category_attribute?.code || pav?.category_attribute?.name;
+        const code    = normalizeCode(rawCode);
+        if (!code) continue;
+
+        const value = String(
+          pav?.category_attribute_option?.value ??
+          pav?.valueText ??
+          pav?.valueNumber ??
+          pav?.valueBoolean ??
+          "",
+        ).trim();
+
+        if (value && !byCode.has(code)) byCode.set(code, value);
+      }
+
+      // Helper: try multiple attribute codes, fall back to direct relation field
+      const fromAttr = (...codes: string[]) =>
+        codes.reduce<string | null>((acc, c) => acc ?? byCode.get(c) ?? null, null);
+
+      return {
+        id:         product.id,
+        documentId: product.documentId,
+        title:      product.title,
+        price:      product.price,
+        likeCount:  Number(product.likeCount ?? 0) || 0,
+        createdAt:  product.createdAt,
+
+        condition: fromAttr("condition", "conditions", "product_condition")
+                   ?? product?.product_condition?.name
+                   ?? product?.condition
+                   ?? null,
+
+        category:    product?.category?.name    ?? null,
+        subCategory: null,
+        item:        null,
+
+        brand: fromAttr("brand", "brands")
+               ?? product?.brand?.name
+               ?? null,
+
+        size: fromAttr("size", "sizes")
+              ?? product?.size?.name
+              ?? null,
+
+        color: fromAttr("colour", "color")
+               ?? product?.color?.name
+               ?? null,
+
+        material: fromAttr("material") ?? null,
+
+        images: Array.isArray(product.images)
+          ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+          : [],
+      };
+    });
+
+    strapi.log.debug(`filterProducts: ${Date.now() - startTime}ms | offset=${offset} size=${pageSize} total=${total}`);
+
+    ctx.body = {
+      ok:       true,
+      products: mapped,
+      pagination: {
+        offset,
+        pageSize,
+        total,           // ← now included for frontend pagination
+        hasMore,
+        page:      Math.floor(offset / pageSize) + 1,
+        totalPages: Math.ceil(total / pageSize),
+      },
+    };
+  } catch (error) {
+    strapi.log.error(`filterProducts error after ${Date.now() - startTime}ms:`, error);
+    return ctx.internalServerError("Failed to fetch filtered products.");
+  }
+},
     async searchProducts(ctx: any) {
       try {
         const query = ctx.query || {};
