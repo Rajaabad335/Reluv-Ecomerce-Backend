@@ -78,7 +78,7 @@ export default {
       method: "DELETE",
       path: "/products/:id/mine",
       handler: "product.deleteMyProduct",
-      config: { auth: { scope: ["delete"] } },
+      // config: { auth: { scope: ["delete"] } },
     },
   ],
 };
