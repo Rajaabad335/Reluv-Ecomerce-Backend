@@ -676,7 +676,7 @@ export default factories.createCoreController(
             "api::category-attribute.category-attribute",
             {
               filters: {
-                category: { id: { $eq: categoryId } },
+                categories: { id: { $eq: categoryId } },
               },
               fields: ["id", "code", "name", "type"],
               limit: 1000,

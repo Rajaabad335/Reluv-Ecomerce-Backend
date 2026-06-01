@@ -38,28 +38,28 @@
     },
     "displayType": {
       "type": "enumeration",
+      "default": "text",
       "enum": [
         "text",
         "list",
         "number",
         "boolean"
-      ],
-      "default": "text"
+      ]
     },
     "selectionType": {
       "type": "enumeration",
+      "default": "single",
       "enum": [
         "single",
         "multiple"
-      ],
-      "default": "single"
+      ]
     },
     "selectionLimit": {
       "type": "integer"
     },
-    "category": {
+    "categories": {
       "type": "relation",
-      "relation": "manyToOne",
+      "relation": "manyToMany",
       "target": "api::category.category",
       "inversedBy": "category_attributes"
     },

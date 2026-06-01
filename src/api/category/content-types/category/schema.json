@@ -52,9 +52,9 @@
     },
     "category_attributes": {
       "type": "relation",
-      "relation": "oneToMany",
+      "relation": "manyToMany",
       "target": "api::category-attribute.category-attribute",
-      "mappedBy": "category"
+      "mappedBy": "categories"
     },
     "brands": {
       "type": "relation",
