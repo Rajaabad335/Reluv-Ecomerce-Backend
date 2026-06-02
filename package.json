@@ -9,7 +9,7 @@
     "deploy": "strapi deploy",
     "dev": "strapi develop",
     "develop": "strapi develop",
-    "seed:category-attributes": "node seed-category-attributes.js",
+    "seed:category-attributes": "node seedCategoryAttributes.js",
     "start": "strapi start",
     "strapi": "strapi",
     "upgrade": "npx @strapi/upgrade latest",
