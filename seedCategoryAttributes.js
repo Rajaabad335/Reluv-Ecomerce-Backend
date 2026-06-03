@@ -1,268 +1,236 @@
 const fs = require("fs");
 const path = require("path");
-const { compileStrapi, createStrapi } = require("@strapi/core");
+require("dotenv").config();
+const pg = require("pg");
 
-const ATTRIBUTE_UID = "api::category-attribute.category-attribute";
-const CATEGORY_UID = "api::category.category";
-const OPTION_UID = "api::category-attribute-option.category-attribute-option";
-const LINK_TABLE = "category_attributes_categories_lnk";
-const PAGE_SIZE = 500;
-const INSERT_BATCH_SIZE = 1000;
-const OPTION_BATCH_SIZE = 25;
+const RELATION_BATCH_SIZE = 50;
+const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 
-const chunk = (items, size) => {
-  const chunks = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
-  return chunks;
-};
-
-const readJson = (fileName) => {
-  const filePath = path.join(process.cwd(), fileName);
-  if (!fs.existsSync(filePath)) throw new Error(`Seed file not found: ${filePath}`);
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-};
-
-async function findManyDocuments(strapi, uid, params = {}) {
-  const rows = [];
-  let start = 0;
-
-  while (true) {
-    const batch = await strapi.documents(uid).findMany({
-      ...params,
-      limit: PAGE_SIZE,
-      start,
-    });
-
-    if (!batch?.length) break;
-    rows.push(...batch);
-    if (batch.length < PAGE_SIZE) break;
-    start += PAGE_SIZE;
-  }
-
-  return rows;
-}
-
-async function getLinkColumns(strapi) {
-  const hasTable = await strapi.db.connection.schema.hasTable(LINK_TABLE);
-  if (!hasTable) {
-    throw new Error(
-      `Missing ${LINK_TABLE}. Run Strapi migrations first so the many-to-many relation table exists.`
-    );
-  }
-
-  const columns = await strapi.db.connection(LINK_TABLE).columnInfo();
-  return new Set(Object.keys(columns));
-}
-
-async function insertCategoryLinks(strapi, linkColumns, attributeId, categoryIds) {
-  if (!categoryIds.length) return 0;
-
-  const existingRows = await strapi.db
-    .connection(LINK_TABLE)
-    .select("category_id")
-    .where("category_attribute_id", attributeId)
-    .whereIn("category_id", categoryIds);
-
-  const existingIds = new Set(existingRows.map((row) => Number(row.category_id)));
-  const missingIds = categoryIds.filter((id) => !existingIds.has(Number(id)));
-  if (!missingIds.length) return 0;
-
-  let inserted = 0;
-  for (const batch of chunk(missingIds, INSERT_BATCH_SIZE)) {
-    const rows = batch.map((categoryId, index) => {
-      const row = {
-        category_attribute_id: attributeId,
-        category_id: categoryId,
-      };
-
-      if (linkColumns.has("category_attribute_ord")) row.category_attribute_ord = index;
-      if (linkColumns.has("category_ord")) row.category_ord = 0;
-
-      return row;
-    });
-
-    await strapi.db.connection(LINK_TABLE).insert(rows);
-    inserted += rows.length;
-  }
-
-  return inserted;
-}
-
-async function createMissingOptions(strapi, attributeDocumentId, existingValues, options = []) {
-  const missing = options.filter((opt) => !existingValues.has(String(opt.value)));
-  let created = 0;
-
-  for (const batch of chunk(missing, OPTION_BATCH_SIZE)) {
-    await Promise.all(
-      batch.map((opt) =>
-        strapi.documents(OPTION_UID).create({
-          data: {
-            value: opt.value,
-            sortOrder: opt.sortOrder,
-            category_attribute: attributeDocumentId,
-          },
-        })
-      )
-    );
-    created += batch.length;
-  }
-
-  return { created, skipped: options.length - missing.length };
-}
-
-async function seedCategoryAttributes(strapi) {
-  console.log("Category attribute seeding started...");
-
-  const attributeDefs = readJson("categoryAttributes.json");
-  const slugToAttrCodes = readJson("categoryAttributeMapping.json");
-  const linkColumns = await getLinkColumns(strapi);
-
-  const attrDefByCode = new Map(attributeDefs.map((attr) => [attr.code, attr]));
-  const attrCodeToSlugs = new Map();
-
-  for (const [slug, codes] of Object.entries(slugToAttrCodes)) {
-    for (const code of codes) {
-      if (!attrCodeToSlugs.has(code)) attrCodeToSlugs.set(code, []);
-      attrCodeToSlugs.get(code).push(slug);
-    }
-  }
-
-  console.log(`Unique attribute codes : ${attrCodeToSlugs.size}`);
-  console.log(
-    `Total category-attr pairs : ${[...attrCodeToSlugs.values()].reduce(
-      (sum, slugs) => sum + slugs.length,
-      0
-    )}`
-  );
-
-  const categories = await findManyDocuments(strapi, CATEGORY_UID, {
-    fields: ["slug"],
+async function seedCategoryAttributes() {
+  const client = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
   });
-  const categoryBySlug = new Map(categories.map((cat) => [cat.slug, cat]));
-  console.log(`Categories loaded       : ${categoryBySlug.size}`);
-
-  const existingAttributes = await findManyDocuments(strapi, ATTRIBUTE_UID, {
-    fields: ["code"],
-    populate: {
-      categories: { fields: ["slug"] },
-      category_attribute_options: { fields: ["value"] },
-    },
-  });
-  const attrByCode = new Map(existingAttributes.map((attr) => [attr.code, attr]));
-  console.log(`Existing attributes     : ${attrByCode.size}`);
-
-  let attrCreated = 0;
-  let attrSkipped = 0;
-  let linksCreated = 0;
-  let optCreated = 0;
-  let optSkipped = 0;
-  let slugsMissing = 0;
-  const errors = [];
-
-  for (const [attrCode, slugs] of attrCodeToSlugs) {
-    try {
-      const attrDef = attrDefByCode.get(attrCode);
-      if (!attrDef) {
-        console.warn(`No definition for code "${attrCode}" - skipping`);
-        continue;
-      }
-
-      const categoryIds = [
-        ...new Set(
-          slugs
-            .map((slug) => {
-              const category = categoryBySlug.get(slug);
-              if (!category) slugsMissing++;
-              return category?.id;
-            })
-            .filter(Boolean)
-        ),
-      ];
-
-      let attr = attrByCode.get(attrCode);
-      if (!attr) {
-        attr = await strapi.documents(ATTRIBUTE_UID).create({
-          data: {
-            name: attrDef.name,
-            code: attrDef.code,
-            type: attrDef.type,
-            displayType: attrDef.displayType,
-            selectionType: attrDef.selectionType,
-            isRequired: attrDef.isRequired,
-            placeholder: attrDef.placeholder ?? null,
-            description: attrDef.description ?? null,
-            selectionLimit: attrDef.selectionLimit ?? null,
-          },
-        });
-        attrByCode.set(attrCode, attr);
-        attrCreated++;
-      } else {
-        attrSkipped++;
-      }
-
-      const linked = await insertCategoryLinks(strapi, linkColumns, attr.id, categoryIds);
-      linksCreated += linked;
-
-      const existingOptionValues = new Set(
-        (attr.category_attribute_options || []).map((opt) => String(opt.value))
-      );
-      const optionStats = await createMissingOptions(
-        strapi,
-        attr.documentId,
-        existingOptionValues,
-        attrDef.options || []
-      );
-      optCreated += optionStats.created;
-      optSkipped += optionStats.skipped;
-
-      console.log(
-        `[${attrCode}] ${attrCreated + attrSkipped}/${attrCodeToSlugs.size} - linked ${linked}, options ${optionStats.created} new`
-      );
-    } catch (error) {
-      console.error(`ERROR on [${attrCode}]: ${error.message}`);
-      errors.push({ attrCode, error: error.message });
-    }
-  }
-
-  console.log("\n========== Seeding Summary ==========");
-  console.log(`Unique attributes total    : ${attrCodeToSlugs.size}`);
-  console.log(`Attributes created         : ${attrCreated}`);
-  console.log(`Attributes already existed : ${attrSkipped}`);
-  console.log(`Category links created     : ${linksCreated}`);
-  console.log(`Options created            : ${optCreated}`);
-  console.log(`Options already existed    : ${optSkipped}`);
-  console.log(`Category slugs missing     : ${slugsMissing}`);
-  console.log(`Errors                     : ${errors.length}`);
-  if (errors.length > 0) {
-    console.log("\nFailed attributes:");
-    errors.forEach(({ attrCode, error }) => console.log(`  [${attrCode}] ${error}`));
-  }
-  console.log("=====================================");
-  console.log("Category attribute seeding completed.");
-}
-
-module.exports = async ({ strapi }) => {
-  await seedCategoryAttributes(strapi);
-};
-
-module.exports.seedCategoryAttributes = seedCategoryAttributes;
-
-async function runFromCli() {
-  const appContext = await compileStrapi();
-  const app = await createStrapi(appContext).load();
 
   try {
-    await seedCategoryAttributes(app);
+    console.log("Connecting to database...");
+    await client.connect();
+    console.log("Connected!");
+
+    console.log("Category attribute seeding started...");
+
+    const attrsFilePath = path.join(process.cwd(), "categoryAttributes.json");
+    const mappingFilePath = path.join(process.cwd(), "categoryAttributeMapping.json");
+
+    if (!fs.existsSync(attrsFilePath))
+      throw new Error(`File not found: ${attrsFilePath}`);
+    if (!fs.existsSync(mappingFilePath))
+      throw new Error(`File not found: ${mappingFilePath}`);
+
+    const attributeDefs = JSON.parse(fs.readFileSync(attrsFilePath, "utf-8"));
+    const slugToAttrCodes = JSON.parse(fs.readFileSync(mappingFilePath, "utf-8"));
+
+    const attrDefByCode = {};
+    for (const attr of attributeDefs) {
+      attrDefByCode[attr.code] = attr;
+    }
+
+    const attrCodeToSlugs = {};
+    for (const [slug, codes] of Object.entries(slugToAttrCodes)) {
+      for (const code of codes) {
+        if (!attrCodeToSlugs[code]) attrCodeToSlugs[code] = [];
+        attrCodeToSlugs[code].push(slug);
+      }
+    }
+
+    const uniqueAttrCodes = Object.keys(attrCodeToSlugs);
+    console.log(`Unique attribute codes : ${uniqueAttrCodes.length}`);
+    console.log(
+      `Total category-attr pairs : ${Object.values(attrCodeToSlugs).reduce(
+        (s, a) => s + a.length,
+        0
+      )}`
+    );
+
+    // Load categories
+    console.log("\nLoading all categories from DB...");
+    const categoryResult = await client.query(
+      `SELECT id, slug FROM categories WHERE published_at IS NOT NULL`
+    );
+    const categoryBySlug = {};
+    categoryResult.rows.forEach((cat) => {
+      categoryBySlug[cat.slug] = cat.id;
+    });
+    console.log(`Total categories loaded: ${categoryResult.rows.length}`);
+
+    // Load existing attributes
+    const attrResult = await client.query(
+      `SELECT id, code FROM category_attributes`
+    );
+    const attrByCode = {};
+    attrResult.rows.forEach((attr) => {
+      attrByCode[attr.code] = attr.id;
+    });
+    console.log(`Total existing attributes: ${attrResult.rows.length}\n`);
+
+    let attrCreated = 0;
+    let attrSkipped = 0;
+    let linksCreated = 0;
+    let optCreated = 0;
+    let optSkipped = 0;
+    let slugsMissing = 0;
+    const errors = [];
+
+    for (const attrCode of uniqueAttrCodes) {
+      try {
+        const attrDef = attrDefByCode[attrCode];
+
+        if (!attrDef) {
+          console.warn(`⚠  No definition for code "${attrCode}" — skipping`);
+          continue;
+        }
+
+        const categoryIds = [];
+        for (const slug of attrCodeToSlugs[attrCode]) {
+          const catId = categoryBySlug[slug];
+          if (!catId) {
+            console.warn(`  ⚠  Slug not in DB: "${slug}"`);
+            slugsMissing++;
+          } else {
+            categoryIds.push(catId);
+          }
+        }
+
+        let attrId = attrByCode[attrCode];
+
+        if (!attrId) {
+          // Create attribute
+          const createResult = await client.query(
+            `INSERT INTO category_attributes 
+             (name, code, type, display_type, selection_type, is_required, placeholder, description, selection_limit, created_at, updated_at) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+             RETURNING id`,
+            [
+              attrDef.name,
+              attrDef.code,
+              attrDef.type,
+              attrDef.displayType || "text",
+              attrDef.selectionType || "single",
+              attrDef.isRequired || false,
+              attrDef.placeholder || null,
+              attrDef.description || null,
+              attrDef.selectionLimit || null,
+            ]
+          );
+          attrId = createResult.rows[0].id;
+          attrByCode[attrCode] = attrId;
+          attrCreated++;
+          console.log(`  ✓  Created [${attrCode}] "${attrDef.name}"`);
+        } else {
+          attrSkipped++;
+          console.log(`  ↩  Exists [${attrCode}]`);
+        }
+
+        // Insert category links
+        if (categoryIds.length > 0) {
+          for (let i = 0; i < categoryIds.length; i += RELATION_BATCH_SIZE) {
+            const batch = categoryIds.slice(i, i + RELATION_BATCH_SIZE);
+            const values = batch
+              .map((catId, idx) => `(${attrId}, ${catId}, ${idx}, 0)`)
+              .join(",");
+
+            try {
+              const insertResult = await client.query(
+                `INSERT INTO category_attributes_categories_lnk 
+                 (category_attribute_id, category_id, category_attribute_ord, category_ord) 
+                 VALUES ${values}
+                 ON CONFLICT (category_attribute_id, category_id) DO NOTHING`
+              );
+              linksCreated += insertResult.rowCount;
+            } catch (err) {
+              console.warn(`  ⚠  Link insert partial error: ${err.message}`);
+            }
+          }
+          console.log(`     └─ Linked to ${categoryIds.length} categories`);
+        }
+
+        // Create options
+        // Strapi v5 stores options in category_attribute_options and the FK
+        // in a separate link table: category_attribute_options_category_attribute_lnk
+        if (attrDef.options?.length > 0) {
+          for (const [idx, opt] of attrDef.options.entries()) {
+            // Check existence via the link table so we don't create duplicates
+            const existCheck = await client.query(
+              `SELECT cao.id
+               FROM category_attribute_options cao
+               JOIN category_attribute_options_category_attribute_lnk lnk
+                 ON lnk.category_attribute_option_id = cao.id
+               WHERE lnk.category_attribute_id = $1 AND cao.value = $2`,
+              [attrId, opt.value]
+            );
+
+            if (existCheck.rows.length === 0) {
+              // 1. Insert the option record
+              const optResult = await client.query(
+                `INSERT INTO category_attribute_options 
+                 (value, sort_order, created_at, updated_at) 
+                 VALUES ($1, $2, NOW(), NOW())
+                 RETURNING id`,
+                [opt.value, opt.sortOrder ?? idx]
+              );
+              const optId = optResult.rows[0].id;
+
+              // 2. Insert the link record
+              await client.query(
+                `INSERT INTO category_attribute_options_category_attribute_lnk 
+                 (category_attribute_option_id, category_attribute_id, category_attribute_option_ord)
+                 VALUES ($1, $2, $3)
+                 ON CONFLICT DO NOTHING`,
+                [optId, attrId, idx]
+              );
+              optCreated++;
+            } else {
+              optSkipped++;
+            }
+          }
+          console.log(`     └─ Options: ${attrDef.options.length}`);
+        }
+      } catch (err) {
+        console.error(`  ✗  ERROR on [${attrCode}]: ${err.message}`);
+        errors.push({ attrCode, error: err.message });
+      }
+    }
+
+    console.log("\n========== Seeding Summary ==========");
+    console.log(`Unique attributes total    : ${uniqueAttrCodes.length}`);
+    console.log(`Attributes created         : ${attrCreated}`);
+    console.log(`Attributes already existed : ${attrSkipped}`);
+    console.log(`Category links created     : ${linksCreated}`);
+    console.log(`Options created            : ${optCreated}`);
+    console.log(`Options already existed    : ${optSkipped}`);
+    console.log(`Category slugs missing     : ${slugsMissing}`);
+    console.log(`Errors                     : ${errors.length}`);
+    if (errors.length > 0) {
+      console.log("\nFailed attributes:");
+      errors.forEach(({ attrCode, error }) =>
+        console.log(`  [${attrCode}] ${error}`)
+      );
+    }
+    console.log("=====================================");
+    console.log("Category attribute seeding completed.");
+  } catch (error) {
+    console.error("Seed command failed:", error);
+    throw error;
   } finally {
-    await app.destroy();
+    await client.end();
   }
 }
 
-if (require.main === module) {
-  runFromCli()
-    .then(() => process.exit(0))
-    .catch((error) => {
-      console.error("Seed command failed:", error);
-      process.exit(1);
-    });
-}
+seedCategoryAttributes()
+  .then(() => {
+    console.log("Seed script finished successfully");
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error("Seed script failed:", error);
+    process.exit(1);
+  });
