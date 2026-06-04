@@ -115,11 +115,6 @@ const getSchemaConfig = async (strapi: any) => {
 
     const columns = new Set(columnRows.map((row: any) => row.column_name));
 
-    const parentColumn = columns.has('category_id')
-      ? 'category_id'
-      : columns.has('categoryId')
-        ? 'categoryId'
-        : null;
     const documentIdColumn = columns.has('document_id')
       ? 'document_id'
       : columns.has('documentId')
@@ -140,19 +135,12 @@ const getSchemaConfig = async (strapi: any) => {
       throw new Error('Categories table columns do not match expected schema.');
     }
 
-    if (parentColumn) {
-      return {
-        mode: 'direct',
-        documentIdColumn,
-        isActiveColumn,
-        sortOrderColumn,
-        parentColumn,
-      };
-    }
-
+    // ALWAYS check for a self-relation link table first.
+    // Strapi v5 stores manyToOne self-relations via a link table even though
+    // a category_id column may also exist on the categories table (it will be null).
     const linkRows = await strapi.db.connection('information_schema.columns')
       .select('table_name', 'column_name')
-      .where('table_name', 'like', 'categories%lnk');
+      .where('table_name', 'like', 'categories_category%lnk');
 
     const byTable = new Map();
     for (const row of linkRows) {
@@ -162,10 +150,14 @@ const getSchemaConfig = async (strapi: any) => {
     }
 
     for (const [tableName, tableColumns] of byTable) {
-      const categoryCols = tableColumns.filter((c: string) => c.toLowerCase().includes('category') && c.endsWith('_id'));
+      const categoryCols = (tableColumns as string[]).filter(
+        (c) => c.toLowerCase().includes('category') && c.endsWith('_id')
+      );
       if (categoryCols.length >= 2) {
-        const invCol = categoryCols.find((c: string) => c.toLowerCase().includes('inv_'));
-        const childColumn = invCol ? categoryCols.find((c: string) => c !== invCol) ?? null : categoryCols[0];
+        const invCol = categoryCols.find((c) => c.toLowerCase().includes('inv_')) ?? null;
+        const childColumn = invCol
+          ? categoryCols.find((c) => c !== invCol) ?? null
+          : categoryCols[0];
         const parentLinkColumn = invCol ?? categoryCols[1];
 
         if (childColumn && parentLinkColumn) {
@@ -180,6 +172,23 @@ const getSchemaConfig = async (strapi: any) => {
           };
         }
       }
+    }
+
+    // Fallback: no link table found, try direct parent column on categories table
+    const parentColumn = columns.has('category_id')
+      ? 'category_id'
+      : columns.has('categoryId')
+        ? 'categoryId'
+        : null;
+
+    if (parentColumn) {
+      return {
+        mode: 'direct',
+        documentIdColumn,
+        isActiveColumn,
+        sortOrderColumn,
+        parentColumn,
+      };
     }
 
     throw new Error('Could not determine self relation link table for categories.');
@@ -412,6 +421,7 @@ export default factories.createCoreController('api::category.category', ({ strap
 
       const parentIds = await getAllParentIds(category.id);
       const allCategoryIds = [category.id, ...parentIds];
+      const attributeCategoryIds = [category.id];
       const rawSchema = await getUploadAttributeSchema(strapi);
       if ((rawSchema as any).disabled) {
         ctx.body = {
@@ -431,7 +441,7 @@ export default factories.createCoreController('api::category.category', ({ strap
         };
         return;
       }
-      const idPlaceholders = allCategoryIds.map(() => '?').join(', ');
+      const idPlaceholders = attributeCategoryIds.map(() => '?').join(', ');
       const caTable = qi(strapi, rawSchema.attributesTable);
       const caAlias = 'ca';
       const lcaAlias = 'lca';
@@ -490,7 +500,7 @@ export default factories.createCoreController('api::category.category', ({ strap
         ${rawSchema.attrPublishedAt ? `AND ${caAlias}.${qi(strapi, rawSchema.attrPublishedAt)} IS NOT NULL` : ''}
         ORDER BY ${caAlias}.${qi(strapi, 'name')} ASC
       `;
-      const result = await strapi.db.connection.raw(rawQuery, allCategoryIds);
+      const result = await strapi.db.connection.raw(rawQuery, attributeCategoryIds);
       const attributeRows = Array.isArray(result?.rows)
         ? result.rows
         : Array.isArray(result?.[0])
@@ -577,7 +587,7 @@ export default factories.createCoreController('api::category.category', ({ strap
       }
 
       const attributesMap = new Map<string, any>();
-      for (const catId of allCategoryIds) {
+      for (const catId of attributeCategoryIds) {
         for (const attr of attributesByCategoryId.get(catId) ?? []) {
           const code = attr.code || `attr_${attr.id}`;
           if (!attributesMap.has(code)) attributesMap.set(code, attr);
