@@ -491,11 +491,11 @@ export interface ApiCategoryAttributeOptionCategoryAttributeOption
       'api::product-attribute-value.product-attribute-value'
     >;
     publishedAt: Schema.Attribute.DateTime;
-    sortOrder: Schema.Attribute.Integer;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    value: Schema.Attribute.String & Schema.Attribute.Required;
+    value: Schema.Attribute.String;
   };
 }
 
@@ -528,21 +528,21 @@ export interface ApiCategoryAttributeCategoryAttribute
       ['text', 'list', 'number', 'boolean']
     > &
       Schema.Attribute.DefaultTo<'text'>;
-    isRequired: Schema.Attribute.Boolean;
+    isRequired: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
       'api::category-attribute.category-attribute'
     > &
       Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
+    name: Schema.Attribute.String;
     placeholder: Schema.Attribute.String;
     product_attribute_values: Schema.Attribute.Relation<
       'oneToMany',
       'api::product-attribute-value.product-attribute-value'
     >;
     publishedAt: Schema.Attribute.DateTime;
-    selectionLimit: Schema.Attribute.Integer;
+    selectionLimit: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<1>;
     selectionType: Schema.Attribute.Enumeration<['single', 'multiple']> &
       Schema.Attribute.DefaultTo<'single'>;
     type: Schema.Attribute.Enumeration<
@@ -583,7 +583,7 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    isActive: Schema.Attribute.Boolean;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -594,12 +594,12 @@ export interface ApiCategoryCategory extends Struct.CollectionTypeSchema {
       'manyToMany',
       'api::material.material'
     >;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
+    name: Schema.Attribute.String;
     products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
     publishedAt: Schema.Attribute.DateTime;
     sizes: Schema.Attribute.Relation<'oneToMany', 'api::size.size'>;
     slug: Schema.Attribute.UID<'name'> & Schema.Attribute.Required;
-    sortOrder: Schema.Attribute.Integer;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

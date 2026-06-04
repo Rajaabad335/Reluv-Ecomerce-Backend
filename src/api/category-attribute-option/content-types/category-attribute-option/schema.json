@@ -12,11 +12,11 @@
   "pluginOptions": {},
   "attributes": {
     "value": {
-      "type": "string",
-      "required": true
+      "type": "string"
     },
     "sortOrder": {
-      "type": "integer"
+      "type": "integer",
+      "default": 0
     },
     "category_attribute": {
       "type": "relation",

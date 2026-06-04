@@ -12,8 +12,7 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string",
-      "required": true
+      "type": "string"
     },
     "slug": {
       "type": "uid",
@@ -21,10 +20,12 @@
       "required": true
     },
     "isActive": {
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     },
     "sortOrder": {
-      "type": "integer"
+      "type": "integer",
+      "default": 0
     },
     "categories": {
       "type": "relation",

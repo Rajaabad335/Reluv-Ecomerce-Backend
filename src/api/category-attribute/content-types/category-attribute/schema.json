@@ -12,20 +12,15 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string",
-      "required": true
+      "type": "string"
     },
     "type": {
       "type": "enumeration",
-      "enum": [
-        "string",
-        "number",
-        "boolean",
-        "enumeration"
-      ]
+      "enum": ["string", "number", "boolean", "enumeration"]
     },
     "isRequired": {
-      "type": "boolean"
+      "type": "boolean",
+      "default": false
     },
     "code": {
       "type": "string"
@@ -39,23 +34,16 @@
     "displayType": {
       "type": "enumeration",
       "default": "text",
-      "enum": [
-        "text",
-        "list",
-        "number",
-        "boolean"
-      ]
+      "enum": ["text", "list", "number", "boolean"]
     },
     "selectionType": {
       "type": "enumeration",
       "default": "single",
-      "enum": [
-        "single",
-        "multiple"
-      ]
+      "enum": ["single", "multiple"]
     },
     "selectionLimit": {
-      "type": "integer"
+      "type": "integer",
+      "default": 1
     },
     "categories": {
       "type": "relation",
