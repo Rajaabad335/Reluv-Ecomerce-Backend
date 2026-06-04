@@ -189,7 +189,10 @@ const getSchemaConfig = async (strapi: any) => {
 };
 
 const getUploadAttributeSchema = async (strapi: any) => {
-  uploadAttributeSchemaPromise = null;
+  if (uploadAttributeSchemaPromise) {
+    return uploadAttributeSchemaPromise;
+  }
+
   uploadAttributeSchemaPromise = (async () => {
     const rows = await strapi.db.connection('information_schema.columns')
       .select('table_name', 'column_name')
@@ -215,16 +218,18 @@ const getUploadAttributeSchema = async (strapi: any) => {
       optionsTable: 'category_attribute_options',
       relationMode: 'direct',
       attrCategoryId: findColumn(attrColumns, ['category_id', 'categoryId']),
-      attrPublishedAt: null,
+      attrPublishedAt: null, // draftAndPublish: false — always null, never filter by it
       attrIsRequired: findColumn(attrColumns, ['is_required', 'isRequired']),
       attrDisplayType: findColumn(attrColumns, ['display_type', 'displayType']),
       attrSelectionType: findColumn(attrColumns, ['selection_type', 'selectionType']),
       attrSelectionLimit: findColumn(attrColumns, ['selection_limit', 'selectionLimit']),
       optionAttributeId: findColumn(optionColumns, ['category_attribute_id', 'categoryAttributeId']),
       optionSortOrder: findColumn(optionColumns, ['sort_order', 'sortOrder']),
-      optionPublishedAt: null
+      optionPublishedAt: null, // draftAndPublish: false — always null, never filter by it
     };
 
+    // Detect options link table (e.g. category_attribute_options_category_attribute_lnk)
+    // Always run this — even if optionAttributeId exists, link mode is more reliable for Strapi v5
     if (!schema.optionAttributeId) {
       let linkRows: any[] = [];
       try {
@@ -261,7 +266,10 @@ const getUploadAttributeSchema = async (strapi: any) => {
       }
     }
 
-    if (!schema.attrCategoryId) {
+    // ALWAYS detect the attr→category link table, regardless of whether attrCategoryId was found.
+    // Strapi v5 many-to-many uses a separate link table. Even if category_id exists as a column
+    // on category_attributes, it won't be populated — the join table is the source of truth.
+    {
       let linkRows: any[] = [];
       try {
         linkRows = await strapi.db.connection('information_schema.columns')
@@ -285,6 +293,7 @@ const getUploadAttributeSchema = async (strapi: any) => {
         const attrCol = cols.find((c) => c.toLowerCase().includes('category_attribute') && isIdCol(c)) ?? null;
         const catCol = cols.find((c) => c.toLowerCase().includes('category') && !c.toLowerCase().includes('attribute') && isIdCol(c)) ?? null;
         if (attrCol && catCol) {
+          // Link table found — always prefer link mode over direct
           schema = {
             ...schema,
             relationMode: 'link',
@@ -298,6 +307,7 @@ const getUploadAttributeSchema = async (strapi: any) => {
       }
     }
 
+    // Sanity check: if link mode was set but incomplete, fall back to direct
     if (schema.relationMode === 'link' && (!schema.attrLinkTable || !schema.attrLinkAttributeId || !schema.attrLinkCategoryId)) {
       schema = {
         ...schema,
@@ -305,6 +315,7 @@ const getUploadAttributeSchema = async (strapi: any) => {
       };
     }
 
+    // Last resort fallback for direct mode
     if (!schema.attrCategoryId && schema.relationMode !== 'link') {
       const guessedCategoryId = findColumn(attrColumns, ['categoryId', 'category_id']);
       schema = {
