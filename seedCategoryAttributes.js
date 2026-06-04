@@ -18,8 +18,14 @@ async function seedCategoryAttributes() {
 
     console.log("Category attribute seeding started...");
 
-    const attrsFilePath = path.join(process.cwd(), "categoryAttributes.json");
-    const mappingFilePath = path.join(process.cwd(), "categoryAttributeMapping.json");
+    const attrsFilePath = path.join(
+      process.cwd(),
+      "categoryAttributesUpdated.json",
+    );
+    const mappingFilePath = path.join(
+      process.cwd(),
+      "categoryAttributeMappingUpdated.json",
+    );
 
     if (!fs.existsSync(attrsFilePath))
       throw new Error(`File not found: ${attrsFilePath}`);
@@ -27,7 +33,9 @@ async function seedCategoryAttributes() {
       throw new Error(`File not found: ${mappingFilePath}`);
 
     const attributeDefs = JSON.parse(fs.readFileSync(attrsFilePath, "utf-8"));
-    const slugToAttrCodes = JSON.parse(fs.readFileSync(mappingFilePath, "utf-8"));
+    const slugToAttrCodes = JSON.parse(
+      fs.readFileSync(mappingFilePath, "utf-8"),
+    );
 
     const attrDefByCode = {};
     for (const attr of attributeDefs) {
@@ -47,14 +55,14 @@ async function seedCategoryAttributes() {
     console.log(
       `Total category-attr pairs : ${Object.values(attrCodeToSlugs).reduce(
         (s, a) => s + a.length,
-        0
-      )}`
+        0,
+      )}`,
     );
 
     // Load categories
     console.log("\nLoading all categories from DB...");
     const categoryResult = await client.query(
-      `SELECT id, slug FROM categories WHERE published_at IS NOT NULL`
+      `SELECT id, slug FROM categories`,
     );
     const categoryBySlug = {};
     categoryResult.rows.forEach((cat) => {
@@ -64,7 +72,7 @@ async function seedCategoryAttributes() {
 
     // Load existing attributes
     const attrResult = await client.query(
-      `SELECT id, code FROM category_attributes`
+      `SELECT id, code FROM category_attributes`,
     );
     const attrByCode = {};
     attrResult.rows.forEach((attr) => {
@@ -119,7 +127,7 @@ async function seedCategoryAttributes() {
               attrDef.placeholder || null,
               attrDef.description || null,
               attrDef.selectionLimit || null,
-            ]
+            ],
           );
           attrId = createResult.rows[0].id;
           attrByCode[attrCode] = attrId;
@@ -143,7 +151,7 @@ async function seedCategoryAttributes() {
                 `INSERT INTO category_attributes_categories_lnk 
                  (category_attribute_id, category_id, category_attribute_ord, category_ord) 
                  VALUES ${values}
-                 ON CONFLICT (category_attribute_id, category_id) DO NOTHING`
+                 ON CONFLICT (category_attribute_id, category_id) DO NOTHING`,
               );
               linksCreated += insertResult.rowCount;
             } catch (err) {
@@ -165,7 +173,7 @@ async function seedCategoryAttributes() {
                JOIN category_attribute_options_category_attribute_lnk lnk
                  ON lnk.category_attribute_option_id = cao.id
                WHERE lnk.category_attribute_id = $1 AND cao.value = $2`,
-              [attrId, opt.value]
+              [attrId, opt.value],
             );
 
             if (existCheck.rows.length === 0) {
@@ -175,7 +183,7 @@ async function seedCategoryAttributes() {
                  (value, sort_order, created_at, updated_at) 
                  VALUES ($1, $2, NOW(), NOW())
                  RETURNING id`,
-                [opt.value, opt.sortOrder ?? idx]
+                [opt.value, opt.sortOrder ?? idx],
               );
               const optId = optResult.rows[0].id;
 
@@ -185,7 +193,7 @@ async function seedCategoryAttributes() {
                  (category_attribute_option_id, category_attribute_id, category_attribute_option_ord)
                  VALUES ($1, $2, $3)
                  ON CONFLICT DO NOTHING`,
-                [optId, attrId, idx]
+                [optId, attrId, idx],
               );
               optCreated++;
             } else {
@@ -212,7 +220,7 @@ async function seedCategoryAttributes() {
     if (errors.length > 0) {
       console.log("\nFailed attributes:");
       errors.forEach(({ attrCode, error }) =>
-        console.log(`  [${attrCode}] ${error}`)
+        console.log(`  [${attrCode}] ${error}`),
       );
     }
     console.log("=====================================");

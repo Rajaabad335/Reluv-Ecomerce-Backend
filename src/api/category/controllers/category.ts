@@ -189,10 +189,7 @@ const getSchemaConfig = async (strapi: any) => {
 };
 
 const getUploadAttributeSchema = async (strapi: any) => {
-  if (uploadAttributeSchemaPromise) {
-    return uploadAttributeSchemaPromise;
-  }
-
+  uploadAttributeSchemaPromise = null;
   uploadAttributeSchemaPromise = (async () => {
     const rows = await strapi.db.connection('information_schema.columns')
       .select('table_name', 'column_name')
@@ -218,14 +215,14 @@ const getUploadAttributeSchema = async (strapi: any) => {
       optionsTable: 'category_attribute_options',
       relationMode: 'direct',
       attrCategoryId: findColumn(attrColumns, ['category_id', 'categoryId']),
-      attrPublishedAt: findColumn(attrColumns, ['published_at', 'publishedAt']),
+      attrPublishedAt: null,
       attrIsRequired: findColumn(attrColumns, ['is_required', 'isRequired']),
       attrDisplayType: findColumn(attrColumns, ['display_type', 'displayType']),
       attrSelectionType: findColumn(attrColumns, ['selection_type', 'selectionType']),
       attrSelectionLimit: findColumn(attrColumns, ['selection_limit', 'selectionLimit']),
       optionAttributeId: findColumn(optionColumns, ['category_attribute_id', 'categoryAttributeId']),
       optionSortOrder: findColumn(optionColumns, ['sort_order', 'sortOrder']),
-      optionPublishedAt: findColumn(optionColumns, ['published_at', 'publishedAt']),
+      optionPublishedAt: null
     };
 
     if (!schema.optionAttributeId) {
@@ -269,7 +266,7 @@ const getUploadAttributeSchema = async (strapi: any) => {
       try {
         linkRows = await strapi.db.connection('information_schema.columns')
           .select('table_name', 'column_name')
-          .where('table_name', 'like', 'category_attributes%lnk');
+          .where('table_name', 'like', 'category_attributes_categories%lnk');
       } catch (error) {
         linkRows = [];
       }
