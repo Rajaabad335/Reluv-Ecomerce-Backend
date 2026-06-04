@@ -21,7 +21,7 @@
         "string",
         "number",
         "boolean",
-        "enum"
+        "enumeration"
       ]
     },
     "isRequired": {

@@ -259,7 +259,12 @@ const getCategorySchema = async (strapi: any) => {
     };
   })();
 
-  return categorySchemaPromise;
+  try {
+    return await categorySchemaPromise;
+  } catch (error) {
+    categorySchemaPromise = null;
+    throw error;
+  }
 };
 
 const getCategoryIdsWithDescendants = async (
@@ -735,7 +740,7 @@ export default factories.createCoreController(
             ...new Set(
               attributeEntries
                 .map(({ code }) => attributeByCode.get(code))
-                .filter((attr) => attr && String(attr.type) === "enum")
+                .filter((attr) => attr && (String(attr.type) === "enum" || String(attr.type) === "enumeration"))
                 .map((attr) => Number(attr.id))
                 .filter((id) => Number.isInteger(id) && id > 0),
             ),
@@ -801,7 +806,7 @@ export default factories.createCoreController(
                 rawValue === true ||
                 rawValue === 1 ||
                 rawValue === "1";
-            } else if (valueType === "enum") {
+            } else if (valueType === "enum" || valueType === "enumeration") {
               const candidates = toLookupValues(rawValue);
               const selectedAttrId = Number(categoryAttribute.id);
               optionId =

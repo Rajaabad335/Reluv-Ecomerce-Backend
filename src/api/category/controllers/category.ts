@@ -185,7 +185,12 @@ const getSchemaConfig = async (strapi: any) => {
     throw new Error('Could not determine self relation link table for categories.');
   })();
 
-  return schemaConfigPromise;
+  try {
+    return await schemaConfigPromise;
+  } catch (error) {
+    schemaConfigPromise = null;
+    throw error;
+  }
 };
 
 const getUploadAttributeSchema = async (strapi: any) => {

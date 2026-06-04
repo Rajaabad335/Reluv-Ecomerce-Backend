@@ -545,7 +545,9 @@ export interface ApiCategoryAttributeCategoryAttribute
     selectionLimit: Schema.Attribute.Integer;
     selectionType: Schema.Attribute.Enumeration<['single', 'multiple']> &
       Schema.Attribute.DefaultTo<'single'>;
-    type: Schema.Attribute.Enumeration<['string', 'number', 'boolean', 'enum']>;
+    type: Schema.Attribute.Enumeration<
+      ['string', 'number', 'boolean', 'enumeration']
+    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
