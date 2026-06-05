@@ -1574,15 +1574,15 @@
         "sortOrder": 2
       },
       {
-        "value": "Very good",
+        "value": "Used - Very good",
         "sortOrder": 3
       },
       {
-        "value": "Good",
+        "value": "Used - Good",
         "sortOrder": 4
       },
       {
-        "value": "Satisfactory",
+        "value": "Used - Satisfactory",
         "sortOrder": 5
       }
     ]
