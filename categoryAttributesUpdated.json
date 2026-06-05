@@ -2,7 +2,7 @@
   {
     "name": "Brand",
     "code": "brand",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1558,7 +1558,7 @@
   {
     "name": "Condition",
     "code": "condition",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1590,7 +1590,7 @@
   {
     "name": "Colour",
     "code": "colour",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "multiple",
     "isRequired": false,
@@ -1742,7 +1742,7 @@
   {
     "name": "Size",
     "code": "size_women",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1794,7 +1794,7 @@
   {
     "name": "Size",
     "code": "size_men",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1842,7 +1842,7 @@
   {
     "name": "Size",
     "code": "size_kids",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1934,7 +1934,7 @@
   {
     "name": "Shoe Size",
     "code": "shoe_size_women",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -1986,7 +1986,7 @@
   {
     "name": "Shoe Size",
     "code": "shoe_size_men",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -2042,7 +2042,7 @@
   {
     "name": "Shoe Size",
     "code": "shoe_size_kids",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": true,
@@ -2146,7 +2146,7 @@
   {
     "name": "Material",
     "code": "material",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "multiple",
     "isRequired": false,
@@ -2282,7 +2282,7 @@
   {
     "name": "Fit",
     "code": "fit",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2326,7 +2326,7 @@
   {
     "name": "Length",
     "code": "length",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2366,7 +2366,7 @@
   {
     "name": "Neckline",
     "code": "neckline",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2414,7 +2414,7 @@
   {
     "name": "Sleeve Length",
     "code": "sleeve_length",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2446,7 +2446,7 @@
   {
     "name": "Pattern",
     "code": "pattern",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2502,7 +2502,7 @@
   {
     "name": "Occasion",
     "code": "occasion",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "multiple",
     "isRequired": false,
@@ -2546,7 +2546,7 @@
   {
     "name": "Heel Height",
     "code": "heel_height",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2578,7 +2578,7 @@
   {
     "name": "Gender",
     "code": "gender_kids",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2602,7 +2602,7 @@
   {
     "name": "Storage",
     "code": "phone_storage",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2646,7 +2646,7 @@
   {
     "name": "Format",
     "code": "book_format",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2674,7 +2674,7 @@
   {
     "name": "Platform",
     "code": "game_platform",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
@@ -2714,7 +2714,7 @@
   {
     "name": "Camera Type",
     "code": "camera_type",
-    "type": "enum",
+    "type": "enumeration",
     "displayType": "list",
     "selectionType": "single",
     "isRequired": false,
