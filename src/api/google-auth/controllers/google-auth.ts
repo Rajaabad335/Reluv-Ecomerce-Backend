@@ -348,4 +348,60 @@ export default {
       return ctx.badRequest(error?.message || "Google login failed.");
     }
   },
+   // ── Unlink Google ─────────────────────────────────────────────
+  async unlink(ctx: any) {
+  try {
+    const authHeader = String(ctx.request.headers?.authorization ?? "");
+    const token = authHeader.startsWith("Bearer ")
+      ? authHeader.slice(7).trim()
+      : null;
+
+    if (!token) return ctx.unauthorized("Authentication token is required.");
+
+    let userId: number;
+    try {
+      const payload = await strapi
+        .plugin("users-permissions")
+        .service("jwt")
+        .verify(token);
+      userId = payload.id;
+    } catch {
+      return ctx.unauthorized("Invalid or expired token.");
+    }
+
+    const { password } = ctx.request.body;
+    if (!password) return ctx.badRequest("Password is required to unlink Google.");
+
+    const user = await strapi.db.query(userUid).findOne({
+      where: { id: userId },
+      select: ["id", "googleLinked", "password"],
+    });
+
+    if (!user) return ctx.notFound("User not found.");
+    if (!user.googleLinked) return ctx.badRequest("Google is not linked to this account.");
+
+    // Verify the provided password matches what was just set
+    const validPassword = await strapi
+      .plugin("users-permissions")
+      .service("user")
+      .validatePassword(password, user.password);
+
+    if (!validPassword) return ctx.badRequest("Password is incorrect.");
+
+    await strapi.db.query(userUid).update({
+      where: { id: userId },
+      data: {
+        googleLinked:  false,
+        googlePicture: null,
+        googleProfile: null,
+        googleAddress: null,
+      },
+    });
+
+    ctx.body = { message: "Google account unlinked successfully." };
+  } catch (error: any) {
+    strapi.log.error("Google unlink failed", error);
+    return ctx.badRequest(error?.message || "Google unlink failed.");
+  }
+},
 };

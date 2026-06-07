@@ -182,6 +182,27 @@
         "th"
       ],
       "default": "en"
+    },
+    "addressLine1": {
+      "type": "string"
+    },
+    "addressLine2": {
+      "type": "string"
+    },
+    "postcode": {
+      "type": "string"
+    },
+    "pickupAddress": {
+      "type": "string"
+    },
+    "shippingSettings": {
+      "type": "json"
+    },
+    "savedCards": {
+      "type": "json"
+    },
+    "savedBanks": {
+      "type": "json"
     }
   }
 }

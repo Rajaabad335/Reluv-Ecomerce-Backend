@@ -8,5 +8,13 @@ export default {
         auth: false,
       },
     },
+     {
+      method: 'POST',
+      path: '/auth/google/unlink',
+      handler: 'google-auth.unlink',
+      config: {
+        auth: false, 
+      },
+    },
   ],
 };

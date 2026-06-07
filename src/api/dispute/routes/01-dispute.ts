@@ -7,6 +7,14 @@ export default {
       config: {
         auth: false,
       }
+    },
+    {
+      method: "POST",
+      path: "/disputes/update-dispute-status",
+      handler: "dispute.UpdateDisputeStatus",
+      config: {
+        auth: false,
+      }
     }
   ],
 };

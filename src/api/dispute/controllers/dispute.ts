@@ -2,70 +2,135 @@
  * dispute controller
  */
 
-import { factories } from '@strapi/strapi';
+import { factories } from "@strapi/strapi";
+import order from "../../order/services/order";
 
-export default factories.createCoreController('api::dispute.dispute', ({ strapi }) => ({
-async fileDispute(ctx) {
+export default factories.createCoreController(
+  "api::dispute.dispute",
+  ({ strapi }) => ({
+    async fileDispute(ctx) {
+      try {
+        const { data } = ctx.request.body;
+        // Check for existing dispute
+        const disputeExisting = await strapi.entityService.findMany(
+          "api::dispute.dispute",
+          {
+            filters: {
+              order: { id: data.order },
+              recievedBy: { id: data.sellerId },
+              raisedBy: { id: data.raisedBy },
+            } as any,
+          },
+        );
+
+        if (disputeExisting.length > 0) {
+          return ctx.badRequest(
+            "Dispute already exists for this order from same buyer",
+          );
+        }
+        // Create the dispute
+        const newDispute = await strapi.entityService.create(
+          "api::dispute.dispute",
+          {
+            data: {
+              order: { id: data.order },
+              recievedBy: { id: data.sellerId },
+              raisedBy: { id: data.raisedBy },
+              reason: data.reason,
+              description: data.details ?? null,
+              status: "OPEN",
+            } as any,
+          },
+        );
+        if (newDispute) {
+          // Fetch order details for notification
+          const orderDetails = await strapi.entityService.findOne(
+            "api::order.order",
+            data.order,
+            { fields: ["id"] }, // adjust field name to match your Order schema
+          );
+          // Notify seller
+          await strapi.entityService.create(
+            "api::notification.notification" as any,
+            {
+              data: {
+                type: "dispute_received",
+                title: "New Dispute Received",
+                body: `You received a dispute of ${newDispute.reason} on order #${orderDetails?.id ?? data.order}.`,
+                read: false,
+                link: `/Orders?tab=Disputes_Recieved`,
+                recipient: data.sellerId,
+              },
+            },
+          );
+        }
+
+        return ctx.created(newDispute);
+      } catch (error) {
+        console.error("Error filing dispute:", error);
+        return ctx.internalServerError(
+          "An error occurred while filing the dispute.",
+        );
+      }
+    },
+    async UpdateDisputeStatus(ctx) {
   try {
-    const { body } = ctx.request;
+    const { data } = ctx.request.body;
 
-    // Validate required fields
-    if (!body.order || !body.raisedBy || !body.reason) {
-      return ctx.badRequest("Missing required fields: order, raisedBy, reason");
-    }
-
-    // Check for existing dispute
-    const disputeExisting = await strapi.entityService.findMany(
+    // Update dispute
+    await strapi.entityService.update(
       "api::dispute.dispute",
+      data.disputeId,
       {
-        filters: { 
-          order:  body.order,
-          recievedBy: { id: body.sellerId },  // ✅ must be object with id
-          raisedBy: { id: body.raisedBy },      // ✅ must be object with id
-        } as any,
+        data: {
+          status: data.status,
+          resolution: data.resolution,
+        },
       }
     );
 
-    if (disputeExisting.length > 0) {
-      return ctx.badRequest(
-        "Dispute already exists for this order from same buyer"
-      );
-    }
+    // Fetch updated dispute with relations
+    const updatedDispute: any = await strapi.entityService.findOne(
+      "api::dispute.dispute",
+      data.disputeId,
+      {
+        populate: {
+          order: true,
+          raisedBy: true,
+          recievedBy: true,
+        },
+      }
+    );
 
-    // Create the dispute
-    const newDispute = await strapi.entityService.create("api::dispute.dispute", {
-      data: {
-        order: body.order,           // ✅ scalar ID works for create
-        recievedBy: body.sellerId,   // ✅ scalar ID works for create
-        raisedBy: body.raisedBy,      // ✅ scalar ID works for create
-        reason: body.reason,         // ✅ required enum field
-        description: body.details ?? null,
-        status: "OPEN",              // ✅ explicit default (matches schema)
-      } as any,
-    });
-    if(newDispute) {
-          // Notify seller
+    // Create notification for dispute raiser
+    if (updatedDispute?.raisedBy?.id) {
       await strapi.entityService.create(
         "api::notification.notification" as any,
         {
           data: {
-            type: "dispute_received",
-            title: "New dispute Received",
-            body: `You received a dispute of ${newDispute?.reason} on "${(body?.order as any)}".`,
+            type: "dispute_raised",
+            title: "Dispute Status Updated",
+            body: `The status of your dispute regarding order #${updatedDispute?.order?.id} has been updated to ${data.status}.`,
             read: false,
-            link: `/Orders?tab=Disputes_Recieved`,
-            recipient: body.sellerId,
+            link: "/Orders?tab=Disputes_Raised",
+            recipient: updatedDispute?.raisedBy?.id,
           },
         }
       );
     }
-    return ctx.created(newDispute);
 
+    return ctx.send({
+      success: true,
+      message: "Dispute status updated successfully.",
+      data: updatedDispute,
+    });
   } catch (error) {
-    console.error("Error filing dispute:", error);
+    console.error("Error updating dispute status:", error);
+
     return ctx.internalServerError(
-      "An error occurred while filing the dispute."
+      "An error occurred while updating the dispute status."
     );
   }
-},
-}));
+}
+  }),
+);
