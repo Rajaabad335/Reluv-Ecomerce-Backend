@@ -1,8 +1,7 @@
 const { Client } = require('pg');
 const { randomBytes } = require('crypto');
 
-const DATABASE_URL = "postgresql://neondb_owner:npg_IDMeHLiW4jY8@ep-autumn-resonance-ahcsobyh-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-
+const DATABASE_URL = process.env.DATABASE_URL
 (async () => {
   const client = new Client({ connectionString: DATABASE_URL });
   await client.connect();
