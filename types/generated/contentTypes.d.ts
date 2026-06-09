@@ -1707,6 +1707,11 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.user'
     > &
       Schema.Attribute.Private;
+    notificationDailyLimit: Schema.Attribute.Enumeration<
+      ['limit_2', 'limit_5', 'unlimited']
+    > &
+      Schema.Attribute.DefaultTo<'unlimited'>;
+    notificationSettings: Schema.Attribute.JSON;
     password: Schema.Attribute.Password &
       Schema.Attribute.Private &
       Schema.Attribute.SetMinMaxLength<{
@@ -1715,6 +1720,7 @@ export interface PluginUsersPermissionsUser
     phoneNumber: Schema.Attribute.String & Schema.Attribute.Unique;
     pickupAddress: Schema.Attribute.String;
     postcode: Schema.Attribute.String;
+    privacySettings: Schema.Attribute.JSON;
     products: Schema.Attribute.Relation<'oneToMany', 'api::product.product'>;
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;

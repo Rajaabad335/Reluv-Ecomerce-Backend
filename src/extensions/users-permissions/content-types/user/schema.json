@@ -112,10 +112,7 @@
     "avatar": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": [
-        "images",
-        "files"
-      ]
+      "allowedTypes": ["images", "files"]
     },
     "city": {
       "type": "string"
@@ -129,11 +126,7 @@
     },
     "gender": {
       "type": "enumeration",
-      "enum": [
-        "Male",
-        "Female",
-        "other"
-      ]
+      "enum": ["Male", "Female", "other"]
     },
     "birthday": {
       "type": "date"
@@ -170,17 +163,11 @@
     "accountType": {
       "type": "enumeration",
       "default": "user",
-      "enum": [
-        "user",
-        "admin"
-      ]
+      "enum": ["user", "admin"]
     },
     "language": {
       "type": "enumeration",
-      "enum": [
-        "en",
-        "th"
-      ],
+      "enum": ["en", "th"],
       "default": "en"
     },
     "addressLine1": {
@@ -202,6 +189,17 @@
       "type": "json"
     },
     "savedBanks": {
+      "type": "json"
+    },
+    "notificationSettings": {
+      "type": "json"
+    },
+    "notificationDailyLimit": {
+      "type": "enumeration",
+      "enum": ["limit_2", "limit_5", "unlimited"],
+      "default": "unlimited"
+    },
+    "privacySettings": {
       "type": "json"
     }
   }
