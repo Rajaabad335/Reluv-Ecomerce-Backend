@@ -1,3 +1,5 @@
+import { buildLocalAuthUpdate } from "../../../lib/authUserHelpers";
+
 const userUid = "plugin::users-permissions.user" as any;
 const roleUid = "plugin::users-permissions.role" as any;
 
@@ -378,7 +380,10 @@ export default {
     });
 
     if (!user) return ctx.notFound("User not found.");
-    if (!user.googleLinked) return ctx.badRequest("Google is not linked to this account.");
+    // if (!user.googleLinked) return ctx.badRequest("Google is not linked to this account.");
+    if (!user.password) {
+      return ctx.badRequest("Set a password before unlinking Google.");
+    }
 
     // Verify the provided password matches what was just set
     const validPassword = await strapi
@@ -390,12 +395,7 @@ export default {
 
     await strapi.db.query(userUid).update({
       where: { id: userId },
-      data: {
-        googleLinked:  false,
-        googlePicture: null,
-        googleProfile: null,
-        googleAddress: null,
-      },
+      data: buildLocalAuthUpdate(),
     });
 
     ctx.body = { message: "Google account unlinked successfully." };

@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+import { repairCategoryAttributeLinks } from '../../../lib/repairCategoryAttributeLinks';
 
 let schemaConfigPromise = null;
 let uploadAttributeSchemaPromise = null;
@@ -904,7 +905,7 @@ export default factories.createCoreController('api::category.category', ({ strap
   async getCatalogTree(ctx: any) {
     try {
       const schema = await getSchemaConfig(strapi);
-
+      repairCategoryAttributeLinks(strapi)
       let categories: any;
 
       if (schema.mode === 'direct') {
