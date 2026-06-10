@@ -1,6 +1,9 @@
 import { Core } from "@strapi/strapi";
 import { sendMail } from "../../../lib/email/sendMail";
-import { buildLocalAuthUpdate } from "../../../lib/authUserHelpers";
+import {
+  buildLocalAuthUpdate,
+  filterToExistingColumns,
+} from "../../../lib/authUserHelpers";
 
 // In-memory store: email -> { otp, expiresAt }
 const resetStore = new Map<string, { otp: string; expiresAt: number }>();
@@ -95,7 +98,14 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     await strapi
       .plugin("users-permissions")
       .service("user")
-      .edit(user.id, buildLocalAuthUpdate(password));
+      .edit(
+        user.id,
+        await filterToExistingColumns(
+          strapi,
+          "plugin::users-permissions.user",
+          buildLocalAuthUpdate(password),
+        ),
+      );
 
     ctx.send({ ok: true });
   },

@@ -1,4 +1,7 @@
-import { buildLocalAuthUpdate } from "../../../lib/authUserHelpers";
+import {
+  buildLocalAuthUpdate,
+  filterToExistingColumns,
+} from "../../../lib/authUserHelpers";
 
 const userUid = "plugin::users-permissions.user" as any;
 const roleUid = "plugin::users-permissions.role" as any;
@@ -298,10 +301,14 @@ export default {
       if (user) {
         user = await strapi.db.query(userUid).update({
           where: { id: user.id },
-          data: {
-            accountType: "user",
-            ...buildGoogleProfileData(profile, user),
-          },
+          data: await filterToExistingColumns(
+            strapi,
+            userUid,
+            {
+              accountType: "user",
+              ...buildGoogleProfileData(profile, user),
+            },
+          ),
           populate: ["role"],
         });
       } else {
@@ -322,17 +329,21 @@ export default {
         }
 
         user = await strapi.db.query(userUid).create({
-          data: {
-            username: await findAvailableUsername(
-              strapi,
-              profile.name || email.split("@")[0],
-            ),
-            email,
-            accountType: "user",
-            provider: "google",
-            role: defaultRole.id,
-            ...buildGoogleProfileData(profile),
-          },
+          data: await filterToExistingColumns(
+            strapi,
+            userUid,
+            {
+              username: await findAvailableUsername(
+                strapi,
+                profile.name || email.split("@")[0],
+              ),
+              email,
+              accountType: "user",
+              provider: "google",
+              role: defaultRole.id,
+              ...buildGoogleProfileData(profile),
+            },
+          ),
           populate: ["role"],
         });
       }
@@ -395,7 +406,11 @@ export default {
 
     await strapi.db.query(userUid).update({
       where: { id: userId },
-      data: buildLocalAuthUpdate(),
+      data: await filterToExistingColumns(
+        strapi,
+        userUid,
+        buildLocalAuthUpdate(),
+      ),
     });
 
     ctx.body = { message: "Google account unlinked successfully." };
