@@ -3,7 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
-import { repairCategoryAttributeLinks } from '../../../lib/repairCategoryAttributeLinks';
+import { repairCategoryAttributeLinks, resolveCategoryAttributeLinkSchema } from '../../../lib/repairCategoryAttributeLinks';
 
 let schemaConfigPromise = null;
 let uploadAttributeSchemaPromise = null;
@@ -17,6 +17,32 @@ const qi = (strapi: any, name: string) => {
 
 const isTruthy = (value) =>
   value === true || value === 1 || value === '1' || value === 't' || value === 'true';
+
+const ensureCategoryAttributeLinks = async (strapi: any) => {
+  try {
+    const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
+    if (!linkSchema) {
+      strapi.log.warn('[Reluv] ⚠  Category-attribute link table schema missing at request time, repairing now.');
+      await repairCategoryAttributeLinks(strapi);
+      return;
+    }
+
+    try {
+      const countRow = await strapi.db.connection(linkSchema.tableName).count('* as count').first();
+      const count = Number(countRow?.count ?? 0);
+      if (count <= 0) {
+        strapi.log.warn('[Reluv] ⚠  Category-attribute link table is empty at request time, repairing now.');
+        await repairCategoryAttributeLinks(strapi);
+      }
+    } catch (error) {
+      strapi.log.warn('[Reluv] ⚠  Could not verify category-attribute link table, repairing now.');
+      await repairCategoryAttributeLinks(strapi);
+    }
+  } catch (error) {
+    strapi.log.error('[Reluv] ✗ Failed to verify category-attribute links at request time:', error);
+    await repairCategoryAttributeLinks(strapi);
+  }
+};
 
 const categorySorter = (a, b) => {
   const aSort = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
@@ -289,7 +315,13 @@ const getUploadAttributeSchema = async (strapi: any) => {
       try {
         linkRows = await strapi.db.connection('information_schema.columns')
           .select('table_name', 'column_name')
-          .where('table_name', 'like', 'category_attributes_categories%lnk');
+          .where((builder: any) =>
+            builder
+              .where('table_name', 'like', 'category_attributes_categories%lnk')
+              .orWhere('table_name', 'like', 'category_attribute_categories%lnk')
+              .orWhere('table_name', 'like', '%category_attributes%category%')
+              .orWhere('table_name', 'like', '%category%attribute%')
+          );
       } catch (error) {
         linkRows = [];
       }
@@ -423,6 +455,7 @@ export default factories.createCoreController('api::category.category', ({ strap
       const parentIds = await getAllParentIds(category.id);
       const allCategoryIds = [category.id, ...parentIds];
       const attributeCategoryIds = [category.id];
+      await ensureCategoryAttributeLinks(strapi);
       const rawSchema = await getUploadAttributeSchema(strapi);
       if ((rawSchema as any).disabled) {
         ctx.body = {

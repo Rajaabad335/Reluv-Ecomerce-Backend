@@ -35,7 +35,13 @@ export async function resolveCategoryAttributeLinkSchema(strapi: any): Promise<{
   try {
     const rows = await strapi.db.connection('information_schema.columns')
       .select('table_name', 'column_name')
-      .where('table_name', 'like', 'category_attributes_categories%lnk');
+      .where((builder: any) =>
+        builder
+          .where('table_name', 'like', 'category_attributes_categories%lnk')
+          .orWhere('table_name', 'like', 'category_attribute_categories%lnk')
+          .orWhere('table_name', 'like', '%category_attributes%category%')
+          .orWhere('table_name', 'like', '%category%attribute%')
+      );
     const detected = detectFromRows(rows);
     if (detected) return detected;
   } catch {
@@ -44,6 +50,9 @@ export async function resolveCategoryAttributeLinkSchema(strapi: any): Promise<{
 
   const candidateTables = [
     { tableName: 'category_attributes_categories_lnk', attrColumn: 'category_attribute_id', categoryColumn: 'category_id' },
+    { tableName: 'category_attribute_categories_lnk', attrColumn: 'category_attribute_id', categoryColumn: 'category_id' },
+    { tableName: 'category_attributes_categories_link', attrColumn: 'category_attribute_id', categoryColumn: 'category_id' },
+    { tableName: 'category_attribute_categories_link', attrColumn: 'category_attribute_id', categoryColumn: 'category_id' },
     { tableName: 'category_attributes_categories_lnk', attrColumn: 'category_attribute_id', categoryColumn: 'categories_id' },
     { tableName: 'category_attributes_categories_lnk', attrColumn: 'categoryAttributeId', categoryColumn: 'categoryId' },
   ];
