@@ -79,6 +79,22 @@ export default {
       strapi.log.error(`[Reluv] ✗ Link repair failed: ${err.message}`);
     }
 
+    // ── 1b. Ensure custom user enum column exists ──────────────────────────
+    try {
+      const userTable = 'up_users';
+      const userColumn = 'notification_daily_limit';
+      const hasColumn = await strapi.db.connection.schema.hasColumn(userTable, userColumn);
+
+      if (!hasColumn) {
+        strapi.log.info(`[Reluv] Adding missing column ${userTable}.${userColumn}`);
+        await strapi.db.connection.schema.alterTable(userTable, (table: any) => {
+          table.string(userColumn).defaultTo('unlimited');
+        });
+      }
+    } catch (err: any) {
+      strapi.log.error(`[Reluv] ✗ Could not auto-create missing user column: ${err.message}`);
+    }
+
     // ── 2. Socket.IO ────────────────────────────────────────────────────────
     const httpServer = strapi?.server?.httpServer;
     if (!httpServer) {
