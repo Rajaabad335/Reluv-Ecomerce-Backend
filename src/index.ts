@@ -170,10 +170,22 @@ export default {
         socket.join(`conversation:${id}`);
       });
 
-      socket.on('message:send', async ({ conversationId, content, clientMessageId }: any) => {
+      socket.on('message:send', async ({ conversationId, content, attachments, clientMessageId }: any) => {
         const id = Number(conversationId);
         const text = String(content ?? '').trim();
-        if (!Number.isInteger(id) || id <= 0 || !text) return;
+        const attachmentIds = Array.isArray(attachments) ? attachments : [];
+        
+        strapi.log.info('[Socket] message:send received:', {
+          conversationId: id,
+          contentLength: text.length,
+          attachments: attachmentIds,
+          clientMessageId,
+          userId,
+        });
+        
+        if (!Number.isInteger(id) || id <= 0) return;
+        if (!text && attachmentIds.length === 0) return;
+        
         const allowed = await isParticipant(id, userId);
         if (!allowed) return;
 
@@ -181,24 +193,27 @@ export default {
           data: {
             conversation: id,
             sender: userId,
-            content: text,
+            content: text || '',
+            attachments: attachmentIds.length > 0 ? attachmentIds : undefined,
           },
-          populate: {
-            sender: {
-              fields: ['id', 'username'],
-              populate: { avatar: { fields: ['url'] } },
-            },
-          },
+          populate: ['sender', 'attachments'],
         });
 
+        strapi.log.info('[Socket] Message created:', {
+          id: created.id,
+          hasAttachments: !!created.attachments,
+          attachmentsCount: created.attachments?.length || 0,
+        });
+
+        const preview = text || (attachmentIds.length > 0 ? `📎 ${attachmentIds.length} file(s)` : 'Message');
         await strapi.entityService.update(conversationUid, id, {
           data: {
             lastMessageAt: new Date().toISOString(),
-            lastMessagePreview: text.slice(0, 120),
+            lastMessagePreview: preview.slice(0, 120),
           },
         });
 
-        io.to(`conversation:${id}`).emit('message:new', {
+        const emitData = {
           conversationId: id,
           clientMessageId: clientMessageId ? String(clientMessageId) : undefined,
           id: created.id,
@@ -211,7 +226,22 @@ export default {
                 avatar: created.sender.avatar ?? null,
               }
             : null,
+          attachments: created.attachments?.map((att: any) => ({
+            id: att.id,
+            url: att.url,
+            name: att.name,
+            ext: att.ext,
+            mime: att.mime,
+            size: att.size,
+          })) ?? [],
+        };
+
+        strapi.log.info('[Socket] Emitting message:new with attachments:', {
+          messageId: emitData.id,
+          attachmentsCount: emitData.attachments.length,
         });
+
+        io.to(`conversation:${id}`).emit('message:new', emitData);
       });
     });
   },

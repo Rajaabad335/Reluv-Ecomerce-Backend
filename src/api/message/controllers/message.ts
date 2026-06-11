@@ -21,6 +21,14 @@ const sanitizeMessage = (message: any) => ({
   sender: message?.sender
     ? { id: message.sender.id, username: message.sender.username, avatar: message.sender.avatar ?? null }
     : null,
+  attachments: message?.attachments?.map((att: any) => ({
+    id: att.id,
+    url: att.url,
+    name: att.name,
+    ext: att.ext,
+    mime: att.mime,
+    size: att.size,
+  })) ?? [],
 });
 
 const assertParticipant = async (strapi: any, conversationId: number, userId: number): Promise<boolean> => {
@@ -51,10 +59,34 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       const messages = await strapi.entityService.findMany(messageUid, {
         filters: { conversation: { id: { $eq: conversationId } } },
-        populate: { sender: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } } },
+        populate: ['sender', 'attachments'],
         sort: { createdAt: 'asc' },
         limit: 2000,
       }) as any[];
+
+      // Mark all unread messages from others as read
+      const unreadMessages = messages.filter(
+        (msg) => msg.sender?.id !== userId && !msg.readAt
+      );
+      
+      if (unreadMessages.length > 0) {
+        await Promise.all(
+          unreadMessages.map((msg) =>
+            strapi.entityService.update(messageUid, msg.id, {
+              data: { readAt: new Date().toISOString() },
+            })
+          )
+        );
+
+        // Emit socket event to update unread count
+        const io = (strapi as any).io as import('socket.io').Server | undefined;
+        if (io) {
+          io.to(`conversation:${conversationId}`).emit('messages:read', {
+            conversationId,
+            readBy: userId,
+          });
+        }
+      }
 
       ctx.body = {
         ok: true,
@@ -72,41 +104,59 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       const conversationId = Number(ctx.request?.body?.conversationId);
       const content = String(ctx.request?.body?.content ?? '').trim();
+      const attachmentIds = ctx.request?.body?.attachments || [];
 
       if (!Number.isInteger(conversationId) || conversationId <= 0) {
         return ctx.badRequest('conversationId is required.');
       }
-      if (!content) return ctx.badRequest('content is required.');
+      if (!content && (!attachmentIds || attachmentIds.length === 0)) {
+        return ctx.badRequest('content or attachments required.');
+      }
 
       const canAccess = await assertParticipant(strapi, conversationId, userId);
       if (!canAccess) return ctx.unauthorized('Not allowed.');
 
+      const messageData: any = {
+        conversation: conversationId,
+        sender: userId,
+        content: content || '',
+      };
+
+      // Use entityService for creation to properly handle media relations
       const created = await strapi.entityService.create(messageUid, {
         data: {
-          conversation: conversationId,
-          sender: userId,
-          content,
+          ...messageData,
+          attachments: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
         },
-        populate: { sender: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } } },
+        populate: ['sender', 'attachments'],
       });
 
+      strapi.log.info('Created message with attachments:', {
+        messageId: created.id,
+        attachmentIds,
+        hasAttachments: !!created.attachments,
+        attachmentsCount: created.attachments?.length || 0,
+      });
+
+      const preview = content || (attachmentIds.length > 0 ? `📎 ${attachmentIds.length} file(s)` : 'Message');
       await strapi.entityService.update(conversationUid, conversationId, {
         data: {
           lastMessageAt: new Date().toISOString(),
-          lastMessagePreview: content.slice(0, 120),
+          lastMessagePreview: preview.slice(0, 120),
         },
       });
 
       const io = (strapi as any).io as import('socket.io').Server | undefined;
       if (io) {
+        const sanitized = sanitizeMessage(created);
+        strapi.log.info('Emitting message:new with attachments:', {
+          messageId: sanitized.id,
+          hasAttachments: sanitized.attachments?.length > 0,
+          attachments: sanitized.attachments,
+        });
         io.to(`conversation:${conversationId}`).emit('message:new', {
           conversationId,
-          id: created.id,
-          content: created.content,
-          createdAt: created.createdAt,
-          sender: created.sender
-            ? { id: created.sender.id, username: created.sender.username, avatar: created.sender.avatar ?? null }
-            : null,
+          ...sanitized,
         });
       }
 
@@ -123,7 +173,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           recipientId,
           type: 'new_message',
           title: 'New message',
-          body: content.slice(0, 80),
+          body: preview.slice(0, 80),
           link: '/Messages',
         });
       }

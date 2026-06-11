@@ -804,7 +804,8 @@ export interface ApiMessageMessage extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
-    content: Schema.Attribute.Text & Schema.Attribute.Required;
+    attachments: Schema.Attribute.Media<'images' | 'files', true>;
+    content: Schema.Attribute.Text;
     conversation: Schema.Attribute.Relation<
       'manyToOne',
       'api::conversation.conversation'

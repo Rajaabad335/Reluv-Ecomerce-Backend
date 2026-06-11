@@ -13,7 +13,7 @@ const getUserIdFromCtx = (ctx: any): number | null => {
   return Number(userId);
 };
 
-const sanitizeConversation = (conversation: any) => ({
+const sanitizeConversation = (conversation: any, unreadCount: number = 0) => ({
   id: conversation?.id,
   product: conversation?.product
     ? {
@@ -32,9 +32,65 @@ const sanitizeConversation = (conversation: any) => ({
   lastMessagePreview: conversation?.lastMessagePreview ?? null,
   lastMessageAt: conversation?.lastMessageAt ?? null,
   updatedAt: conversation?.updatedAt ?? null,
+  unreadCount,
 });
 
 export default factories.createCoreController('api::conversation.conversation', ({ strapi }) => ({
+  async getUnreadCount(ctx: any) {
+    try {
+      const userId = getUserIdFromCtx(ctx);
+      if (!userId) return ctx.unauthorized('Authentication required.');
+
+      const messageUid = 'api::message.message' as any;
+      
+      // Get all conversations for this user
+      const conversations = await strapi.entityService.findMany(conversationUid, {
+        filters: {
+          $or: [{ buyer: { id: { $eq: userId } } }, { seller: { id: { $eq: userId } } }],
+        },
+        populate: {
+          buyer: { fields: ['id'] },
+          seller: { fields: ['id'] },
+        },
+        fields: ['id'],
+        limit: 200,
+      }) as any[];
+
+      // Count unread messages across all conversations
+      let totalUnread = 0;
+      let conversationsWithUnread = 0;
+
+      for (const conv of conversations) {
+        const otherUserId = conv.buyer?.id === userId ? conv.seller?.id : conv.buyer?.id;
+        if (!otherUserId) continue;
+
+        const unreadMessages = await strapi.entityService.findMany(messageUid, {
+          filters: {
+            conversation: { id: { $eq: conv.id } },
+            sender: { id: { $eq: otherUserId } },
+            readAt: { $null: true },
+          },
+          fields: ['id'],
+        }) as any[];
+
+        const unreadCount = unreadMessages.length;
+        if (unreadCount > 0) {
+          totalUnread += unreadCount;
+          conversationsWithUnread++;
+        }
+      }
+
+      ctx.body = {
+        ok: true,
+        totalUnreadMessages: totalUnread,
+        conversationsWithUnread,
+      };
+    } catch (error) {
+      strapi.log.error(error);
+      return ctx.internalServerError('Failed to get unread count.');
+    }
+  },
+
   async listMine(ctx: any) {
     try {
       const userId = getUserIdFromCtx(ctx);
@@ -53,9 +109,28 @@ export default factories.createCoreController('api::conversation.conversation', 
         limit: 200,
       }) as any[];
 
+      const messageUid = 'api::message.message' as any;
+      const conversationsWithUnread = await Promise.all(
+        conversations.map(async (conv) => {
+          const otherUserId = conv.buyer?.id === userId ? conv.seller?.id : conv.buyer?.id;
+          if (!otherUserId) return sanitizeConversation(conv, 0);
+
+          const unreadMessages = await strapi.entityService.findMany(messageUid, {
+            filters: {
+              conversation: { id: { $eq: conv.id } },
+              sender: { id: { $eq: otherUserId } },
+              readAt: { $null: true },
+            },
+            fields: ['id'],
+          }) as any[];
+
+          return sanitizeConversation(conv, unreadMessages.length);
+        })
+      );
+
       ctx.body = {
         ok: true,
-        conversations: conversations.map(sanitizeConversation),
+        conversations: conversationsWithUnread,
       };
     } catch (error) {
       strapi.log.error(error);
@@ -112,7 +187,7 @@ export default factories.createCoreController('api::conversation.conversation', 
       }) as any[];
 
       if (existing?.[0]) {
-        ctx.body = { ok: true, conversation: sanitizeConversation(existing[0]) };
+        ctx.body = { ok: true, conversation: sanitizeConversation(existing[0], 0) };
         return;
       }
 
@@ -131,7 +206,7 @@ export default factories.createCoreController('api::conversation.conversation', 
         },
       });
 
-      ctx.body = { ok: true, conversation: sanitizeConversation(created) };
+      ctx.body = { ok: true, conversation: sanitizeConversation(created, 0) };
     } catch (error) {
       strapi.log.error(error);
       return ctx.internalServerError('Failed to create conversation.');

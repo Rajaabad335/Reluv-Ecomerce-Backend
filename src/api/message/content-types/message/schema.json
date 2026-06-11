@@ -23,11 +23,15 @@
       "target": "plugin::users-permissions.user"
     },
     "content": {
-      "type": "text",
-      "required": true
+      "type": "text"
     },
     "readAt": {
       "type": "datetime"
+    },
+    "attachments": {
+      "type": "media",
+      "multiple": true,
+      "allowedTypes": ["images", "files"]
     }
   }
 }
