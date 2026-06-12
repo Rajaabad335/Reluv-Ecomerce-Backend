@@ -32,6 +32,14 @@
       "type": "media",
       "multiple": true,
       "allowedTypes": ["images", "files"]
+    },
+    "metadata": {
+      "type": "json"
+    },
+    "offer": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::offer.offer"
     }
   }
 }

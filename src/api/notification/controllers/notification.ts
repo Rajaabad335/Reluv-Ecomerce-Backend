@@ -1,9 +1,24 @@
 import { Core } from "@strapi/strapi";
 
+const getUserIdFromCtx = async (strapi: Core.Strapi, ctx: any): Promise<number | null> => {
+  // When auth: false, ctx.state.user may not be populated — decode JWT manually
+  if (ctx.state?.user?.id) return ctx.state.user.id;
+  const authHeader = String(ctx.request.headers?.authorization ?? "");
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+  try {
+    const payload = await strapi.plugin("users-permissions").service("jwt").verify(token);
+    return payload?.id ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   // GET /api/notifications/my  — fetch current user's notifications
   async getMine(ctx: any) {
-    const userId = ctx.state?.user?.id;
+    const userId = await getUserIdFromCtx(strapi, ctx);
     if (!userId) return ctx.unauthorized("Authentication required.");
 
     const notifications = await strapi.entityService.findMany(
@@ -22,7 +37,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
   // PATCH /api/notifications/:id/read
   async markRead(ctx: any) {
-    const userId = ctx.state?.user?.id;
+    const userId = await getUserIdFromCtx(strapi, ctx);
     if (!userId) return ctx.unauthorized("Authentication required.");
 
     const id = Number(ctx.params?.id);
@@ -48,7 +63,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
   // PATCH /api/notifications/read-all
   async markAllRead(ctx: any) {
-    const userId = ctx.state?.user?.id;
+    const userId = await getUserIdFromCtx(strapi, ctx);
     if (!userId) return ctx.unauthorized("Authentication required.");
 
     const notifications = await strapi.entityService.findMany(

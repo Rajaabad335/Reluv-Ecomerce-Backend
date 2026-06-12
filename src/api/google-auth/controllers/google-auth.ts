@@ -340,12 +340,27 @@ export default {
               email,
               accountType: "user",
               provider: "google",
-              role: defaultRole.id,
               ...buildGoogleProfileData(profile),
             },
           ),
           populate: ["role"],
         });
+        await strapi.db.query(userUid).update({
+  where: { id: user.id },
+  data: {
+    role: {
+      disconnect: [],
+      connect: [{ id: defaultRole.id }],
+    },
+  },
+  populate: ["role"],
+});
+
+// Re-fetch with role populated
+user = await strapi.db.query(userUid).findOne({
+  where: { id: user.id },
+  populate: ["role"],
+});
       }
 
       const jwt = strapi

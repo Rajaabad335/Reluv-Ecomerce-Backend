@@ -4,25 +4,19 @@ export default {
       method: 'GET',
       path: '/conversations/unread-count',
       handler: 'conversation.getUnreadCount',
-      config: {
-        auth: {},
-      },
+      config: { auth: false, policies: [], middlewares: [] },
     },
     {
       method: 'GET',
       path: '/conversations/my',
       handler: 'conversation.listMine',
-      config: {
-        auth: {},
-      },
+      config: { auth: false, policies: [], middlewares: [] },
     },
     {
       method: 'POST',
       path: '/conversations/for-product',
       handler: 'conversation.createForProduct',
-      config: {
-        auth: {},
-      },
+      config: { auth: false, policies: [], middlewares: [] },
     },
   ],
 };

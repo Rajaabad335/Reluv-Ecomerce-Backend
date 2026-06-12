@@ -9,7 +9,7 @@ export default factories.createCoreController(
   ({ strapi }) => ({
     // POST /api/offers/make
     async makeOffer(ctx: any) {
-      const { productId, buyerId, sellerId, offerPrice, message } =
+      const { productId, buyerId, sellerId, offerPrice, message, conversationId } =
         ctx.request.body;
 
       if (!productId || !buyerId || !offerPrice) {
@@ -78,6 +78,21 @@ export default factories.createCoreController(
         },
       });
 
+      // Send chat message if conversationId provided
+      if (conversationId) {
+        const messageUid = 'api::message.message' as any;
+        await strapi.entityService.create(messageUid, {
+          data: {
+            conversation: conversationId,
+            sender: buyerId,
+            content: `Made an offer: $${offerPrice}${message ? ` - "${message}"` : ''}`,
+            offer: offer.id,
+            metadata: { type: 'offer', offerId: offer.id, amount: offerPrice, status: 'pending' },
+          },
+          populate: ['sender', 'offer'],
+        });
+      }
+
       // Notify seller
       await strapi.entityService.create(
         "api::notification.notification" as any,
@@ -85,7 +100,7 @@ export default factories.createCoreController(
           data: {
             type: "offer_received",
             title: "New Offer Received",
-            body: `You received an offer of ${offerPrice} on "${(product as any).title}".`,
+            body: `You received an offer of $${offerPrice} on "${(product as any).title}".`,
             read: false,
             link: `/Orders?tab=offers`,
             recipient: sellerId,
@@ -135,7 +150,7 @@ export default factories.createCoreController(
     // PATCH /api/offers/:id/respond
     async respondToOffer(ctx: any) {
       const offerId = Number(ctx.params.id);
-      const { action, sellerId } = ctx.request.body; // action: "accepted" | "declined"
+      const { action, sellerId, conversationId } = ctx.request.body; // action: "accepted" | "declined"
 
       if (!offerId || !action || !sellerId) {
         return ctx.badRequest("offerId, action, and sellerId are required.");
@@ -171,6 +186,25 @@ export default factories.createCoreController(
         }
       );
 
+      // Send chat message if conversationId provided
+      if (conversationId) {
+        const messageUid = 'api::message.message' as any;
+        const responseText = action === 'accepted' 
+          ? `Offer Accepted` 
+          : `Offer Declined`;
+        
+        await strapi.entityService.create(messageUid, {
+          data: {
+            conversation: conversationId,
+            sender: sellerId,
+            content: responseText,
+            offer: offerId,
+            metadata: { type: 'offer_response', offerId, action, status: action },
+          },
+          populate: ['sender', 'offer'],
+        });
+      }
+
       const buyerId = (offer as any).buyer?.id;
       const productTitle = (offer as any).productTitle ?? "the product";
       const offerPrice = (offer as any).offerPrice;
@@ -186,7 +220,7 @@ export default factories.createCoreController(
               action === "accepted" ? "Offer Accepted! 🎉" : "Offer Declined",
             body:
               action === "accepted"
-                ? `Your offer of ${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
+                ? `Your offer of $${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
                 : `Your offer on "${productTitle}" was declined by the seller.`,
             read: false,
             link:

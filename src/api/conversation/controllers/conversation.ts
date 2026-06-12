@@ -7,10 +7,19 @@ import { factories } from '@strapi/strapi';
 const conversationUid = 'api::conversation.conversation' as any;
 const productUid = 'api::product.product' as any;
 
-const getUserIdFromCtx = (ctx: any): number | null => {
+const getUserIdFromCtx = async (strapi: any, ctx: any): Promise<number | null> => {
   const userId = ctx?.state?.user?.id;
-  if (!Number.isInteger(userId) || userId <= 0) return null;
-  return Number(userId);
+  if (Number.isInteger(userId) && userId > 0) return Number(userId);
+  const authHeader = String(ctx.request.headers?.authorization ?? "");
+  if (!authHeader.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7).trim();
+  if (!token) return null;
+  try {
+    const payload = await strapi.plugin("users-permissions").service("jwt").verify(token);
+    return payload?.id ? Number(payload.id) : null;
+  } catch {
+    return null;
+  }
 };
 
 const sanitizeConversation = (conversation: any, unreadCount: number = 0) => ({
@@ -38,7 +47,7 @@ const sanitizeConversation = (conversation: any, unreadCount: number = 0) => ({
 export default factories.createCoreController('api::conversation.conversation', ({ strapi }) => ({
   async getUnreadCount(ctx: any) {
     try {
-      const userId = getUserIdFromCtx(ctx);
+      const userId = await getUserIdFromCtx(strapi, ctx);
       if (!userId) return ctx.unauthorized('Authentication required.');
 
       const messageUid = 'api::message.message' as any;
@@ -93,7 +102,7 @@ export default factories.createCoreController('api::conversation.conversation', 
 
   async listMine(ctx: any) {
     try {
-      const userId = getUserIdFromCtx(ctx);
+      const userId = await getUserIdFromCtx(strapi, ctx);
       if (!userId) return ctx.unauthorized('Authentication required.');
 
       const conversations = await strapi.entityService.findMany(conversationUid, {
@@ -140,7 +149,7 @@ export default factories.createCoreController('api::conversation.conversation', 
 
   async createForProduct(ctx: any) {
     try {
-      const userId = getUserIdFromCtx(ctx);
+      const userId = await getUserIdFromCtx(strapi, ctx);
       if (!userId) return ctx.unauthorized('Authentication required.');
 
       const productId = Number(ctx.request?.body?.productId);

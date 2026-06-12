@@ -29,6 +29,13 @@ const sanitizeMessage = (message: any) => ({
     mime: att.mime,
     size: att.size,
   })) ?? [],
+  metadata: message?.metadata || undefined,
+  offer: message?.offer ? {
+    id: message.offer.id,
+    offerPrice: message.offer.offerPrice,
+    originalPrice: message.offer.originalPrice,
+    status: message.offer.status,
+  } : undefined,
 });
 
 const assertParticipant = async (strapi: any, conversationId: number, userId: number): Promise<boolean> => {
@@ -59,7 +66,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       const messages = await strapi.entityService.findMany(messageUid, {
         filters: { conversation: { id: { $eq: conversationId } } },
-        populate: ['sender', 'attachments'],
+        populate: ['sender', 'attachments', 'offer'],
         sort: { createdAt: 'asc' },
         limit: 2000,
       }) as any[];
@@ -122,13 +129,19 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
         content: content || '',
       };
 
+      // Handle offer linking from metadata
+      if (ctx.request?.body?.metadata?.offerId) {
+        messageData.offer = ctx.request.body.metadata.offerId;
+      }
+
       // Use entityService for creation to properly handle media relations
       const created = await strapi.entityService.create(messageUid, {
         data: {
           ...messageData,
           attachments: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
+          metadata: ctx.request?.body?.metadata || undefined,
         },
-        populate: ['sender', 'attachments'],
+        populate: ['sender', 'attachments', 'offer'],
       });
 
       strapi.log.info('Created message with attachments:', {

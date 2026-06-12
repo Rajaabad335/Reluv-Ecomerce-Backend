@@ -39,7 +39,26 @@ export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   async bootstrap({ strapi }: { strapi: any }) {
-
+strapi.server.router.get('/api/debug-auth', async (ctx: any) => {
+  const authHeader = ctx.request.headers.authorization;
+  const token = authHeader?.replace('Bearer ', '');
+  
+  try {
+    const payload = await strapi
+      .plugin('users-permissions')
+      .service('jwt')
+      .verify(token);
+    
+    const user = await strapi.db.query('plugin::users-permissions.user').findOne({
+      where: { id: payload.id },
+      populate: ['role']
+    });
+    
+    ctx.body = { payload, user };
+  } catch(e: any) {
+    ctx.body = { error: e.message };
+  }
+});
     // ── 1. Category-attribute link auto-repair ──────────────────────────────
     //
     // Render free tier spins down the server after ~15 min of inactivity.
@@ -51,6 +70,13 @@ export default {
     // This guard runs on every boot and silently re-links anything missing —
     // it is idempotent (never duplicates, never disconnects existing links).
     try {
+const testToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiaWF0IjoxNzgxMjQwMjU2LCJleHAiOjE3ODM4MzIyNTZ9.VvKfukjohSpbg7YcavdsMg8AafOkiXSg6-rDwBtKPTo";
+  try {
+    const payload = strapi.plugin("users-permissions").service("jwt").verify(testToken);
+    strapi.log.info("✅ JWT verify SUCCESS: " + JSON.stringify(payload));
+  } catch(e) {
+    strapi.log.error("❌ JWT verify FAILED: " + e.message);
+  }
       const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
       if (!linkSchema) {
         strapi.log.warn('[Reluv] ⚠  Could not determine category-attribute link table schema. Running repair directly.');
@@ -170,7 +196,7 @@ export default {
         socket.join(`conversation:${id}`);
       });
 
-      socket.on('message:send', async ({ conversationId, content, attachments, clientMessageId }: any) => {
+      socket.on('message:send', async ({ conversationId, content, attachments, metadata, clientMessageId }: any) => {
         const id = Number(conversationId);
         const text = String(content ?? '').trim();
         const attachmentIds = Array.isArray(attachments) ? attachments : [];
@@ -179,6 +205,7 @@ export default {
           conversationId: id,
           contentLength: text.length,
           attachments: attachmentIds,
+          hasMetadata: !!metadata,
           clientMessageId,
           userId,
         });
@@ -189,14 +216,22 @@ export default {
         const allowed = await isParticipant(id, userId);
         if (!allowed) return;
 
+        const messageData: any = {
+          conversation: id,
+          sender: userId,
+          content: text || '',
+          attachments: attachmentIds.length > 0 ? attachmentIds : undefined,
+          metadata: metadata || undefined,
+        };
+
+        // Link offer if provided in metadata
+        if (metadata?.offerId) {
+          messageData.offer = metadata.offerId;
+        }
+
         const created = await strapi.entityService.create(messageUid, {
-          data: {
-            conversation: id,
-            sender: userId,
-            content: text || '',
-            attachments: attachmentIds.length > 0 ? attachmentIds : undefined,
-          },
-          populate: ['sender', 'attachments'],
+          data: messageData,
+          populate: ['sender', 'attachments', 'offer'],
         });
 
         strapi.log.info('[Socket] Message created:', {
@@ -234,9 +269,16 @@ export default {
             mime: att.mime,
             size: att.size,
           })) ?? [],
+          metadata: created.metadata || undefined,
+          offer: created.offer ? {
+            id: created.offer.id,
+            offerPrice: created.offer.offerPrice,
+            originalPrice: created.offer.originalPrice,
+            status: created.offer.status,
+          } : undefined,
         };
 
-        strapi.log.info('[Socket] Emitting message:new with attachments:', {
+        strapi.log.info('[Socket] Emitting message:new with data:', {
           messageId: emitData.id,
           attachmentsCount: emitData.attachments.length,
         });
@@ -245,4 +287,5 @@ export default {
       });
     });
   },
+  
 };
