@@ -117,6 +117,10 @@
       "relation": "manyToOne",
       "target": "api::material.material",
       "inversedBy": "products"
+    },
+    "hide": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

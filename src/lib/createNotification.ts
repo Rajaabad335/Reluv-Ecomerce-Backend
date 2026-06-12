@@ -5,7 +5,9 @@ type NotificationType =
   | "new_message"
   | "new_follower"
   | "order_update"
-  | "review";
+  | "review"
+  | "add_fav_list";
+  
 
 interface CreateNotificationParams {
   strapi: any;

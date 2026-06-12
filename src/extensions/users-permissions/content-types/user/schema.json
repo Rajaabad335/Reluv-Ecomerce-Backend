@@ -152,7 +152,13 @@
     "googleProfile": {
       "type": "json"
     },
-    "fullName": {
+    "firstName": {
+      "type": "string"
+    },
+    "lastName": {
+      "type": "string"
+    },
+    "nickname": {
       "type": "string"
     },
     "phoneNumber": {

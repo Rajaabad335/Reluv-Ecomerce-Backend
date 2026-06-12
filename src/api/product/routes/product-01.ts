@@ -80,5 +80,13 @@ export default {
       handler: "product.deleteMyProduct",
       // config: { auth: { scope: ["delete"] } },
     },
+     {
+      method: 'PUT',
+      path: '/products/:id/favorites',
+      handler: 'product.updateFavorites',
+      config: {
+        auth: false, 
+      },
+    },
   ],
 };

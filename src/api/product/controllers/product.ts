@@ -4,6 +4,7 @@
 
 import { factories } from "@strapi/strapi";
 import { createNotification } from "../../../lib/createNotification";
+import product from "../routes/product";
 
 type ConditionValue =
   | "new_with_tags"
@@ -449,12 +450,6 @@ export default factories.createCoreController(
           dynamicValuesByLowerKey.get("shoe_size_women") ??
           dynamicValuesByLowerKey.get("shoe_size_men") ??
           dynamicValuesByLowerKey.get("shoe_size_kids") ??
-
-
-
-
-          
-          
           body.size ??
           body.sizeId;
         const rawColorValue =
@@ -740,7 +735,12 @@ export default factories.createCoreController(
             ...new Set(
               attributeEntries
                 .map(({ code }) => attributeByCode.get(code))
-                .filter((attr) => attr && (String(attr.type) === "enum" || String(attr.type) === "enumeration"))
+                .filter(
+                  (attr) =>
+                    attr &&
+                    (String(attr.type) === "enum" ||
+                      String(attr.type) === "enumeration"),
+                )
                 .map((attr) => Number(attr.id))
                 .filter((id) => Number.isInteger(id) && id > 0),
             ),
@@ -1091,310 +1091,369 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to fetch product details.");
       }
     },
-async filterProducts(ctx: any) {
-  const startTime = Date.now();
+    async filterProducts(ctx: any) {
+      const startTime = Date.now();
 
-  try {
-    const query = ctx.query || {};
+      try {
+        const query = ctx.query || {};
 
-    // ── Pagination ──────────────────────────────────────────────────────────
-    const pageSize = Math.min(100, parsePositiveInt(query.pageSize ?? query.limit, 20));
-    const offset = Math.max(
-      0,
-      Number(query.offset || (Number(query.page || 1) - 1) * pageSize || 0),
-    );
+        // ── Pagination ──────────────────────────────────────────────────────────
+        const pageSize = Math.min(
+          100,
+          parsePositiveInt(query.pageSize ?? query.limit, 20),
+        );
+        const offset = Math.max(
+          0,
+          Number(query.offset || (Number(query.page || 1) - 1) * pageSize || 0),
+        );
 
-    // ── Raw inputs ───────────────────────────────────────────────────────────
-    const categoryInput  = String(query.item || query.subCategory || query.category || "").trim();
-    const brandInput     = String(query.brand     || "").trim();
-    const sizeInput      = String(query.size      || "").trim();
-    const conditionInput = String(query.condition || "").trim();
-    const colourInput    = String(query.colour || query.color || "").trim();
-    const materialInput  = String(query.material  || "").trim();
-    const minPrice       = parseNumberOrNull(query.minPrice);
-    const maxPrice       = parseNumberOrNull(query.maxPrice);
-    const sortBy         = normalizeSort(query.sortBy || query.sort);
-
-    // ── Base filter ──────────────────────────────────────────────────────────
-    const filters: any = { productStatus: { $eq: "active" } };
-    const andFilters: any[] = [];
-
-    // ── Category (with cached tree lookup) ───────────────────────────────────
-    if (categoryInput) {
-      // getCategoryIdsWithDescendants should be memoized/cached externally
-      const categoryIds = await getCategoryIdsWithDescendants(strapi, categoryInput);
-
-      if (categoryIds.length > 0) {
-        andFilters.push({ category: { id: { $in: categoryIds } } });
-      } else {
-        andFilters.push({
-          category: {
-            $or: [
-              { slug: { $eqi: categoryInput } },
-              { name: { $eqi: categoryInput } },
-              { name: { $containsi: categoryInput } },
-            ],
-          },
-        });
-      }
-    }
-
-    // ── Brand ────────────────────────────────────────────────────────────────
-    if (brandInput) {
-      andFilters.push({
-        $or: [
-          { brand: { name: { $eqi: brandInput } } },
-          {
-            product_attribute_values: {
-              $and: [
-                { category_attribute: { code: { $in: ["brand", "brands"] } } },
-                {
-                  $or: [
-                    { valueText: { $eqi: brandInput } },
-                    { category_attribute_option: { value: { $eqi: brandInput } } },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
-      });
-    }
-
-    // ── Size ─────────────────────────────────────────────────────────────────
-    if (sizeInput) {
-      andFilters.push({
-        $or: [
-          { size: { name: { $eqi: sizeInput } } },
-          {
-            product_attribute_values: {
-              $and: [
-                {$or:[{ category_attribute: { code: { $in: ["size", "sizes"] } } },
-              {category_attribute: { name: { $eqi: "Size" } }}]},
-                {
-                  $or: [
-                    { valueText: { $eqi: sizeInput } },
-                    { category_attribute_option: { value: { $eqi: sizeInput } } },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
-      });
-    }
-
-    // ── Condition ────────────────────────────────────────────────────────────
-    if (conditionInput) {
-      const normalizedCondition = normalizeCondition(conditionInput);
-      andFilters.push({
-        $or: [
-          normalizedCondition
-            ? { condition: { $eq: normalizedCondition } }
-            : { condition: { $eqi: conditionInput } },
-          { product_condition: { name: { $eqi: conditionInput } } },
-          {
-            product_attribute_values: {
-              $and: [
-                {
-                  category_attribute: {
-                    code: { $in: ["condition", "conditions", "product_condition"] },
-                  },
-                },
-                {
-                  $or: [
-                    { valueText: { $eqi: conditionInput } },
-                    { category_attribute_option: { value: { $eqi: conditionInput } } },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
-      });
-    }
-
-    // ── Price range ───────────────────────────────────────────────────────────
-    if (minPrice != null || maxPrice != null) {
-      const priceRange: any = {};
-      if (minPrice != null) priceRange.$gte = minPrice;
-      if (maxPrice != null) priceRange.$lte = maxPrice;
-      andFilters.push({ price: priceRange });
-    }
-
-    // ── Colour ───────────────────────────────────────────────────────────────
-    if (colourInput) {
-      andFilters.push({
-        $or: [
-          { color: { name: { $eqi: colourInput } } },
-          {
-            product_attribute_values: {
-              $and: [
-                { category_attribute: { code: { $in: ["colour", "color"] } } },
-                {
-                  $or: [
-                    { valueText: { $eqi: colourInput } },
-                    { category_attribute_option: { value: { $eqi: colourInput } } },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
-      });
-    }
-
-    // ── Material ─────────────────────────────────────────────────────────────
-    if (materialInput) {
-      andFilters.push({
-        $or: [
-          {
-            product_attribute_values: {
-              $and: [
-                { category_attribute: { code: { $eqi: "material" } } },
-                {
-                  $or: [
-                    { valueText: { $eqi: materialInput } },
-                    { category_attribute_option: { value: { $eqi: materialInput } } },
-                  ],
-                },
-              ],
-            },
-          },
-        ],
-      });
-    }
-
-    if (andFilters.length > 0) {
-      filters.$and = andFilters;
-    }
-
-    // ── Sort ─────────────────────────────────────────────────────────────────
-    const sort =
-      sortBy === "price_asc"  ? { price: "asc" as const }  :
-      sortBy === "price_desc" ? { price: "desc" as const } :
-                                { createdAt: "desc" as const };
-
-    // ── DB Query ─────────────────────────────────────────────────────────────
-    // We intentionally do NOT deep-populate product_attribute_values here
-    // for filtering — filtering happens above via Strapi filter syntax.
-    // We only populate what we need to map the response.
-    const [products, total] = await Promise.all([
-      strapi.entityService.findMany("api::product.product", {
-        filters,
-        fields: ["id", "title", "price", "condition", "createdAt", "likeCount"],
-        populate: {
-          category:          { fields: ["name", "slug"] },
-          brand:             { fields: ["name", "slug"] },
-          size:              { fields: ["name"] },
-          color:             { fields: ["name", "slug"] },
-          product_condition: { fields: ["name", "slug"] },
-          images:            { fields: ["id", "url"] },
-          // Minimal PAV population — only what mapping needs
-          product_attribute_values: {
-            fields: ["valueText", "valueNumber", "valueBoolean"],
-            populate: {
-              category_attribute:        { fields: ["code", "name"] },
-              category_attribute_option: { fields: ["value"] },
-            },
-          },
-        },
-        sort,
-        start:  offset,
-        limit:  pageSize + 1, // +1 to detect hasMore
-      }) as Promise<any[]>,
-
-      // Run count in parallel for proper pagination metadata
-      strapi.entityService.count("api::product.product", { filters }),
-    ]);
-
-    const hasMore   = products.length > pageSize;
-    const pageSlice = hasMore ? products.slice(0, pageSize) : products;
-
-    // ── Map response ─────────────────────────────────────────────────────────
-    const mapped = pageSlice.map((product: any) => {
-      // Build a code → value map from attribute values (first-write wins)
-      const byCode = new Map<string, string>();
-      const pavs: any[] = Array.isArray(product.product_attribute_values)
-        ? product.product_attribute_values
-        : [];
-
-      for (const pav of pavs) {
-        const rawCode = pav?.category_attribute?.code || pav?.category_attribute?.name;
-        const code    = normalizeCode(rawCode);
-        if (!code) continue;
-
-        const value = String(
-          pav?.category_attribute_option?.value ??
-          pav?.valueText ??
-          pav?.valueNumber ??
-          pav?.valueBoolean ??
-          "",
+        // ── Raw inputs ───────────────────────────────────────────────────────────
+        const categoryInput = String(
+          query.item || query.subCategory || query.category || "",
         ).trim();
+        const brandInput = String(query.brand || "").trim();
+        const sizeInput = String(query.size || "").trim();
+        const conditionInput = String(query.condition || "").trim();
+        const colourInput = String(query.colour || query.color || "").trim();
+        const materialInput = String(query.material || "").trim();
+        const minPrice = parseNumberOrNull(query.minPrice);
+        const maxPrice = parseNumberOrNull(query.maxPrice);
+        const sortBy = normalizeSort(query.sortBy || query.sort);
 
-        if (value && !byCode.has(code)) byCode.set(code, value);
+        // ── Base filter ──────────────────────────────────────────────────────────
+        const filters: any = { productStatus: { $eq: "active" } };
+        const andFilters: any[] = [];
+
+        // ── Category (with cached tree lookup) ───────────────────────────────────
+        if (categoryInput) {
+          // getCategoryIdsWithDescendants should be memoized/cached externally
+          const categoryIds = await getCategoryIdsWithDescendants(
+            strapi,
+            categoryInput,
+          );
+
+          if (categoryIds.length > 0) {
+            andFilters.push({ category: { id: { $in: categoryIds } } });
+          } else {
+            andFilters.push({
+              category: {
+                $or: [
+                  { slug: { $eqi: categoryInput } },
+                  { name: { $eqi: categoryInput } },
+                  { name: { $containsi: categoryInput } },
+                ],
+              },
+            });
+          }
+        }
+
+        // ── Brand ────────────────────────────────────────────────────────────────
+        if (brandInput) {
+          andFilters.push({
+            $or: [
+              { brand: { name: { $eqi: brandInput } } },
+              {
+                product_attribute_values: {
+                  $and: [
+                    {
+                      category_attribute: {
+                        code: { $in: ["brand", "brands"] },
+                      },
+                    },
+                    {
+                      $or: [
+                        { valueText: { $eqi: brandInput } },
+                        {
+                          category_attribute_option: {
+                            value: { $eqi: brandInput },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        }
+
+        // ── Size ─────────────────────────────────────────────────────────────────
+        if (sizeInput) {
+          andFilters.push({
+            $or: [
+              { size: { name: { $eqi: sizeInput } } },
+              {
+                product_attribute_values: {
+                  $and: [
+                    {
+                      $or: [
+                        {
+                          category_attribute: {
+                            code: { $in: ["size", "sizes"] },
+                          },
+                        },
+                        { category_attribute: { name: { $eqi: "Size" } } },
+                      ],
+                    },
+                    {
+                      $or: [
+                        { valueText: { $eqi: sizeInput } },
+                        {
+                          category_attribute_option: {
+                            value: { $eqi: sizeInput },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        }
+
+        // ── Condition ────────────────────────────────────────────────────────────
+        if (conditionInput) {
+          const normalizedCondition = normalizeCondition(conditionInput);
+          andFilters.push({
+            $or: [
+              normalizedCondition
+                ? { condition: { $eq: normalizedCondition } }
+                : { condition: { $eqi: conditionInput } },
+              { product_condition: { name: { $eqi: conditionInput } } },
+              {
+                product_attribute_values: {
+                  $and: [
+                    {
+                      category_attribute: {
+                        code: {
+                          $in: ["condition", "conditions", "product_condition"],
+                        },
+                      },
+                    },
+                    {
+                      $or: [
+                        { valueText: { $eqi: conditionInput } },
+                        {
+                          category_attribute_option: {
+                            value: { $eqi: conditionInput },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        }
+
+        // ── Price range ───────────────────────────────────────────────────────────
+        if (minPrice != null || maxPrice != null) {
+          const priceRange: any = {};
+          if (minPrice != null) priceRange.$gte = minPrice;
+          if (maxPrice != null) priceRange.$lte = maxPrice;
+          andFilters.push({ price: priceRange });
+        }
+
+        // ── Colour ───────────────────────────────────────────────────────────────
+        if (colourInput) {
+          andFilters.push({
+            $or: [
+              { color: { name: { $eqi: colourInput } } },
+              {
+                product_attribute_values: {
+                  $and: [
+                    {
+                      category_attribute: {
+                        code: { $in: ["colour", "color"] },
+                      },
+                    },
+                    {
+                      $or: [
+                        { valueText: { $eqi: colourInput } },
+                        {
+                          category_attribute_option: {
+                            value: { $eqi: colourInput },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        }
+
+        // ── Material ─────────────────────────────────────────────────────────────
+        if (materialInput) {
+          andFilters.push({
+            $or: [
+              {
+                product_attribute_values: {
+                  $and: [
+                    { category_attribute: { code: { $eqi: "material" } } },
+                    {
+                      $or: [
+                        { valueText: { $eqi: materialInput } },
+                        {
+                          category_attribute_option: {
+                            value: { $eqi: materialInput },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            ],
+          });
+        }
+
+        if (andFilters.length > 0) {
+          filters.$and = andFilters;
+        }
+
+        // ── Sort ─────────────────────────────────────────────────────────────────
+        const sort =
+          sortBy === "price_asc"
+            ? { price: "asc" as const }
+            : sortBy === "price_desc"
+              ? { price: "desc" as const }
+              : { createdAt: "desc" as const };
+
+        // ── DB Query ─────────────────────────────────────────────────────────────
+        // We intentionally do NOT deep-populate product_attribute_values here
+        // for filtering — filtering happens above via Strapi filter syntax.
+        // We only populate what we need to map the response.
+        const [products, total] = await Promise.all([
+          strapi.entityService.findMany("api::product.product", {
+            filters,
+            fields: [
+              "id",
+              "title",
+              "price",
+              "condition",
+              "createdAt",
+              "likeCount",
+            ],
+            populate: {
+              category: { fields: ["name", "slug"] },
+              brand: { fields: ["name", "slug"] },
+              size: { fields: ["name"] },
+              color: { fields: ["name", "slug"] },
+              product_condition: { fields: ["name", "slug"] },
+              images: { fields: ["id", "url"] },
+              // Minimal PAV population — only what mapping needs
+              product_attribute_values: {
+                fields: ["valueText", "valueNumber", "valueBoolean"],
+                populate: {
+                  category_attribute: { fields: ["code", "name"] },
+                  category_attribute_option: { fields: ["value"] },
+                },
+              },
+            },
+            sort,
+            start: offset,
+            limit: pageSize + 1, // +1 to detect hasMore
+          }) as Promise<any[]>,
+
+          // Run count in parallel for proper pagination metadata
+          strapi.entityService.count("api::product.product", { filters }),
+        ]);
+
+        const hasMore = products.length > pageSize;
+        const pageSlice = hasMore ? products.slice(0, pageSize) : products;
+
+        // ── Map response ─────────────────────────────────────────────────────────
+        const mapped = pageSlice.map((product: any) => {
+          // Build a code → value map from attribute values (first-write wins)
+          const byCode = new Map<string, string>();
+          const pavs: any[] = Array.isArray(product.product_attribute_values)
+            ? product.product_attribute_values
+            : [];
+
+          for (const pav of pavs) {
+            const rawCode =
+              pav?.category_attribute?.code || pav?.category_attribute?.name;
+            const code = normalizeCode(rawCode);
+            if (!code) continue;
+
+            const value = String(
+              pav?.category_attribute_option?.value ??
+                pav?.valueText ??
+                pav?.valueNumber ??
+                pav?.valueBoolean ??
+                "",
+            ).trim();
+
+            if (value && !byCode.has(code)) byCode.set(code, value);
+          }
+
+          // Helper: try multiple attribute codes, fall back to direct relation field
+          const fromAttr = (...codes: string[]) =>
+            codes.reduce<string | null>(
+              (acc, c) => acc ?? byCode.get(c) ?? null,
+              null,
+            );
+
+          return {
+            id: product.id,
+            documentId: product.documentId,
+            title: product.title,
+            price: product.price,
+            likeCount: Number(product.likeCount ?? 0) || 0,
+            createdAt: product.createdAt,
+
+            condition:
+              fromAttr("condition", "conditions", "product_condition") ??
+              product?.product_condition?.name ??
+              product?.condition ??
+              null,
+
+            category: product?.category?.name ?? null,
+            subCategory: null,
+            item: null,
+
+            brand: fromAttr("brand", "brands") ?? product?.brand?.name ?? null,
+
+            size: fromAttr("size", "sizes") ?? product?.size?.name ?? null,
+
+            color: fromAttr("colour", "color") ?? product?.color?.name ?? null,
+
+            material: fromAttr("material") ?? null,
+
+            images: Array.isArray(product.images)
+              ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
+              : [],
+          };
+        });
+
+        strapi.log.debug(
+          `filterProducts: ${Date.now() - startTime}ms | offset=${offset} size=${pageSize} total=${total}`,
+        );
+
+        ctx.body = {
+          ok: true,
+          products: mapped,
+          pagination: {
+            offset,
+            pageSize,
+            total, // ← now included for frontend pagination
+            hasMore,
+            page: Math.floor(offset / pageSize) + 1,
+            totalPages: Math.ceil(total / pageSize),
+          },
+        };
+      } catch (error) {
+        strapi.log.error(
+          `filterProducts error after ${Date.now() - startTime}ms:`,
+          error,
+        );
+        return ctx.internalServerError("Failed to fetch filtered products.");
       }
-
-      // Helper: try multiple attribute codes, fall back to direct relation field
-      const fromAttr = (...codes: string[]) =>
-        codes.reduce<string | null>((acc, c) => acc ?? byCode.get(c) ?? null, null);
-
-      return {
-        id:         product.id,
-        documentId: product.documentId,
-        title:      product.title,
-        price:      product.price,
-        likeCount:  Number(product.likeCount ?? 0) || 0,
-        createdAt:  product.createdAt,
-
-        condition: fromAttr("condition", "conditions", "product_condition")
-                   ?? product?.product_condition?.name
-                   ?? product?.condition
-                   ?? null,
-
-        category:    product?.category?.name    ?? null,
-        subCategory: null,
-        item:        null,
-
-        brand: fromAttr("brand", "brands")
-               ?? product?.brand?.name
-               ?? null,
-
-        size: fromAttr("size", "sizes")
-              ?? product?.size?.name
-              ?? null,
-
-        color: fromAttr("colour", "color")
-               ?? product?.color?.name
-               ?? null,
-
-        material: fromAttr("material") ?? null,
-
-        images: Array.isArray(product.images)
-          ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
-          : [],
-      };
-    });
-
-    strapi.log.debug(`filterProducts: ${Date.now() - startTime}ms | offset=${offset} size=${pageSize} total=${total}`);
-
-    ctx.body = {
-      ok:       true,
-      products: mapped,
-      pagination: {
-        offset,
-        pageSize,
-        total,           // ← now included for frontend pagination
-        hasMore,
-        page:      Math.floor(offset / pageSize) + 1,
-        totalPages: Math.ceil(total / pageSize),
-      },
-    };
-  } catch (error) {
-    strapi.log.error(`filterProducts error after ${Date.now() - startTime}ms:`, error);
-    return ctx.internalServerError("Failed to fetch filtered products.");
-  }
-},
+    },
     async searchProducts(ctx: any) {
       try {
         const query = ctx.query || {};
@@ -1614,7 +1673,10 @@ async filterProducts(ctx: any) {
           "api::product.product",
           {
             filters: {
-              users_permissions_user: { id: { $eq: userId } , holidayMode: { $ne: true }},
+              users_permissions_user: {
+                id: { $eq: userId },
+                holidayMode: { $ne: true },
+              },
             },
             fields: [
               "id",
@@ -1807,17 +1869,26 @@ async filterProducts(ctx: any) {
 
         const getOptionValues = (...codes: string[]) =>
           uniqueSorted(
-            codes.flatMap((code) => attributeOptionValuesByCode.get(code) ?? []),
+            codes.flatMap(
+              (code) => attributeOptionValuesByCode.get(code) ?? [],
+            ),
           );
 
         const brands = getOptionValues("brand", "brands");
-        const sizes = getOptionValues("size", "sizes", "size_men" ,"size_women" , "size_kids","shoe_size_women", "shoe_size_men", "shoe_size_kids");
+        const sizes = getOptionValues(
+          "size",
+          "sizes",
+          "size_men",
+          "size_women",
+          "size_kids",
+          "shoe_size_women",
+          "shoe_size_men",
+          "shoe_size_kids",
+        );
         const conditions = uniqueSorted(
-          getOptionValues(
-            "condition",
-            "conditions",
-            "product_condition",
-          ).map((value) => conditionToLabel(value)),
+          getOptionValues("condition", "conditions", "product_condition").map(
+            (value) => conditionToLabel(value),
+          ),
         );
         const normalizedColors = getOptionValues("colour", "color", "colors");
         const normalizedMaterials = getOptionValues("material", "materials");
@@ -2015,6 +2086,128 @@ async filterProducts(ctx: any) {
       } catch (error) {
         strapi.log.error(error);
         return ctx.internalServerError("Failed to delete product.");
+      }
+    },
+    async updateFavorites(ctx) {
+      const { id } = ctx.params;
+      const { fav_products, productId } = ctx.request.body;
+
+      // 1. Basic Payload Validation
+      if (!productId) {
+        return ctx.badRequest("Missing productId in request body");
+      }
+
+      if (
+        !fav_products ||
+        (!fav_products.connect && !fav_products.disconnect)
+      ) {
+        return ctx.badRequest("Invalid fav_products format");
+      }
+
+      try {
+        // 2. Fetch the product and its owner's notification preferences
+        const product = (await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+          {
+            populate: {
+              // title: true,
+              users_permissions_user: {
+                fields: ["id", "notificationSettings"],
+              },
+            },
+          },
+        )) as any;
+
+        if (!product) {
+          return ctx.notFound("Target product not found");
+        }
+
+        const prodOwner = product?.users_permissions_user?.id;
+        const prodTitle = product?.title;
+        // const isCreateNotification =
+        //   product?.users_permissions_user?.notificationSettings?.favourited;
+
+        // 3. Fetch current user with populated favorites
+        const user = (await strapi.entityService.findOne(
+          "plugin::users-permissions.user",
+          Number(id),
+          {
+            populate: { fav_products: true },
+          },
+        )) as any;
+
+        if (!user) {
+          return ctx.notFound("User not found");
+        }
+
+        // 4. Build new relation IDs
+        const currentFavs: number[] =
+          user.fav_products?.map((p: any) => p.id) || [];
+        let newFavIds: number[] = [...currentFavs];
+        let isProdAdded = false;
+
+        if (fav_products.connect) {
+          isProdAdded = true;
+          const connectIds = Array.isArray(fav_products.connect)
+            ? fav_products.connect
+            : [fav_products.connect];
+          newFavIds = [...new Set([...newFavIds, ...connectIds])];
+        }
+
+        if (fav_products.disconnect) {
+          const disconnectIds = Array.isArray(fav_products.disconnect)
+            ? fav_products.disconnect
+            : [fav_products.disconnect];
+          newFavIds = newFavIds.filter(
+            (favId) => !disconnectIds.includes(favId),
+          );
+        }
+
+        // 5. Update user relation
+        const updatedUser = await strapi.entityService.update(
+          "plugin::users-permissions.user",
+          Number(id),
+          {
+            data: {
+              fav_products: newFavIds as any,
+            } as any,
+            populate: { fav_products: true },
+          },
+        );
+
+        // 6. Handle Notifications Safely
+        // Only send notification if a product was added, the owner has enabled notifications,
+        // AND the person liking it isn't the owner themselves.
+        if (
+          isProdAdded &&
+          // isCreateNotification &&
+          prodOwner &&
+          Number(prodOwner) !== Number(id)
+        ) {
+          try {
+            await createNotification({
+              strapi,
+              recipientId: prodOwner,
+              type: "add_fav_list",
+              title: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
+              body: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
+              link: `/products/${product?.id}`,
+            });
+          } catch (notifError) {
+            // Log notification failure but don't break the user's favorite saving experience
+            strapi.log.error(
+              "Failed to send favorite notification:",
+              notifError,
+            );
+          }
+        }
+
+        // Return the response object via Strapi context
+        return (ctx.body = updatedUser);
+      } catch (error) {
+        strapi.log.error("Error updating user favorites:", error);
+        return ctx.internalServerError("Failed to update user favorites");
       }
     },
   }),
