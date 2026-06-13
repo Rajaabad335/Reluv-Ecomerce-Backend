@@ -89,7 +89,12 @@ export default factories.createCoreController(
             offer: offer.id,
             metadata: { type: 'offer', offerId: offer.id, amount: offerPrice, status: 'pending' },
           },
-          populate: ['sender', 'offer'],
+          populate: {
+            sender: true,
+            offer: {
+              populate: ['buyer', 'seller']
+            }
+          },
         });
       }
 
@@ -201,7 +206,12 @@ export default factories.createCoreController(
             offer: offerId,
             metadata: { type: 'offer_response', offerId, action, status: action },
           },
-          populate: ['sender', 'offer'],
+          populate: {
+            sender: true,
+            offer: {
+              populate: ['buyer', 'seller']
+            }
+          },
         });
       }
 

@@ -36,6 +36,14 @@ const sanitizeMessage = (message: any) => ({
     offerPrice: message.offer.offerPrice,
     originalPrice: message.offer.originalPrice,
     status: message.offer.status,
+    buyer: message.offer.buyer ? {
+      id: message.offer.buyer.id,
+      username: message.offer.buyer.username
+    } : null,
+    seller: message.offer.seller ? {
+      id: message.offer.seller.id,
+      username: message.offer.seller.username
+    } : null,
   } : undefined,
 });
 
@@ -80,7 +88,13 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       const messages = await strapi.entityService.findMany(messageUid, {
         filters: { conversation: { id: { $eq: conversationId } } },
-        populate: ['sender', 'attachments', 'offer'],
+        populate: {
+          sender: true,
+          attachments: true,
+          offer: {
+            populate: ['buyer', 'seller']
+          }
+        },
         sort: { createdAt: 'asc' },
         limit: 2000,
       }) as any[];
@@ -170,7 +184,13 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           attachments: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
           metadata: ctx.request?.body?.metadata || undefined,
         },
-        populate: ['sender', 'attachments', 'offer'],
+        populate: {
+          sender: true,
+          attachments: true,
+          offer: {
+            populate: ['buyer', 'seller']
+          }
+        },
       });
 
       strapi.log.info('Created message with attachments:', {
