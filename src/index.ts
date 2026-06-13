@@ -159,6 +159,90 @@ export default {
         socket.join(`conversation:${id}`);
       });
 
+      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, clientOfferId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            request: {
+              body: { productId, buyerId, sellerId, offerPrice, message, conversationId },
+            },
+            badRequest: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, message: msg });
+              throw new Error(msg);
+            },
+            notFound: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, message: msg });
+              throw new Error(msg);
+            },
+            created: (data: any) => data,
+          };
+
+          const result = await offerController.makeOffer(mockCtx);
+          const offer = result?.data;
+
+          if (conversationId && offer?.id) {
+            const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
+            if (conversation) {
+              io.to(`conversation:${conversationId}`).emit('offer:created', {
+                clientOfferId,
+                offer,
+                conversationId,
+              });
+            }
+          }
+
+          socket.emit('offer:created', { clientOfferId, offer });
+        } catch (error: any) {
+          socket.emit('offer:error', {
+            clientOfferId,
+            message: error.message || 'Failed to create offer',
+          });
+        }
+      });
+
+      socket.on('offer:respond', async ({ offerId, action, sellerId, conversationId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            params: { id: offerId },
+            request: {
+              body: { action, sellerId, conversationId },
+            },
+            badRequest: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            notFound: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            forbidden: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            send: (data: any) => data,
+          };
+
+          const result = await offerController.respondToOffer(mockCtx);
+          const offer = result?.data;
+
+          if (conversationId) {
+            io.to(`conversation:${conversationId}`).emit('offer:responded', {
+              offerId,
+              offer,
+              conversationId,
+            });
+          }
+
+          socket.emit('offer:responded', { offerId, offer });
+        } catch (error: any) {
+          socket.emit('offer:error', {
+            offerId,
+            message: error.message || 'Failed to respond to offer',
+          });
+        }
+      });
+
       socket.on('message:send', async ({ conversationId, content, attachments, metadata, clientMessageId }: any) => {
         const id = Number(conversationId);
         const text = String(content ?? '').trim();
