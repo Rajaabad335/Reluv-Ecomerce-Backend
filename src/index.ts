@@ -39,44 +39,7 @@ export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   async bootstrap({ strapi }: { strapi: any }) {
-strapi.server.router.get('/api/debug-auth', async (ctx: any) => {
-  const authHeader = ctx.request.headers.authorization;
-  const token = authHeader?.replace('Bearer ', '');
-  
-  try {
-    const payload = await strapi
-      .plugin('users-permissions')
-      .service('jwt')
-      .verify(token);
-    
-    const user = await strapi.db.query('plugin::users-permissions.user').findOne({
-      where: { id: payload.id },
-      populate: ['role']
-    });
-    
-    ctx.body = { payload, user };
-  } catch(e: any) {
-    ctx.body = { error: e.message };
-  }
-});
-    // ── 1. Category-attribute link auto-repair ──────────────────────────────
-    //
-    // Render free tier spins down the server after ~15 min of inactivity.
-    // On cold start, Strapi's migration runner can wipe the many-to-many
-    // link table (category_attributes_categories_lnk). Additionally, saving
-    // a category-attribute record in the Admin UI does a full relation replace,
-    // wiping any categories not checked in the form.
-    //
-    // This guard runs on every boot and silently re-links anything missing —
-    // it is idempotent (never duplicates, never disconnects existing links).
     try {
-const testToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6NSwiaWF0IjoxNzgxMjQwMjU2LCJleHAiOjE3ODM4MzIyNTZ9.VvKfukjohSpbg7YcavdsMg8AafOkiXSg6-rDwBtKPTo";
-  try {
-    const payload = strapi.plugin("users-permissions").service("jwt").verify(testToken);
-    strapi.log.info("✅ JWT verify SUCCESS: " + JSON.stringify(payload));
-  } catch(e) {
-    strapi.log.error("❌ JWT verify FAILED: " + e.message);
-  }
       const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
       if (!linkSchema) {
         strapi.log.warn('[Reluv] ⚠  Could not determine category-attribute link table schema. Running repair directly.');
