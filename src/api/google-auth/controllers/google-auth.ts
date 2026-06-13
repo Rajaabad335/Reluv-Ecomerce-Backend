@@ -301,14 +301,10 @@ export default {
       if (user) {
         user = await strapi.db.query(userUid).update({
           where: { id: user.id },
-          data: await filterToExistingColumns(
-            strapi,
-            userUid,
-            {
-              accountType: "user",
-              ...buildGoogleProfileData(profile, user),
-            },
-          ),
+          data: await filterToExistingColumns(strapi, userUid, {
+            accountType: "user",
+            ...buildGoogleProfileData(profile, user),
+          }),
           populate: ["role"],
         });
       } else {
@@ -329,39 +325,35 @@ export default {
         }
 
         user = await strapi.db.query(userUid).create({
-          data: await filterToExistingColumns(
-            strapi,
-            userUid,
-            {
-              username: await findAvailableUsername(
-                strapi,
-                profile.name || email.split("@")[0],
-              ),
-              email,
-              accountType: "user",
-              provider: "google",
-              role: { connect: [{ id: defaultRole.id }] },
-              ...buildGoogleProfileData(profile),
-            },
-          ),
+          data: await filterToExistingColumns(strapi, userUid, {
+            username: await findAvailableUsername(
+              strapi,
+              profile.name || email.split("@")[0],
+            ),
+            email,
+            accountType: "user",
+            provider: "google",
+            role: { connect: [{ id: defaultRole.id }] },
+            ...buildGoogleProfileData(profile),
+          }),
           populate: ["role"],
         });
         await strapi.db.query(userUid).update({
-  where: { id: user.id },
-  data: {
-    role: {
-      disconnect: [],
-      connect: [{ id: defaultRole.id }],
-    },
-  },
-  populate: ["role"],
-});
+          where: { id: user.id },
+          data: {
+            role: {
+              disconnect: [],
+              connect: [{ id: defaultRole.id }],
+            },
+          },
+          populate: ["role"],
+        });
 
-// Re-fetch with role populated
-user = await strapi.db.query(userUid).findOne({
-  where: { id: user.id },
-  populate: ["role"],
-});
+        // Re-fetch with role populated
+        user = await strapi.db.query(userUid).findOne({
+          where: { id: user.id },
+          populate: ["role"],
+        });
       }
 
       const jwt = strapi
@@ -377,62 +369,63 @@ user = await strapi.db.query(userUid).findOne({
       return ctx.badRequest(error?.message || "Google login failed.");
     }
   },
-   // ── Unlink Google ─────────────────────────────────────────────
+  // ── Unlink Google ─────────────────────────────────────────────
   async unlink(ctx: any) {
-  try {
-    const authHeader = String(ctx.request.headers?.authorization ?? "");
-    const token = authHeader.startsWith("Bearer ")
-      ? authHeader.slice(7).trim()
-      : null;
-
-    if (!token) return ctx.unauthorized("Authentication token is required.");
-
-    let userId: number;
     try {
-      const payload = await strapi
+      const authHeader = String(ctx.request.headers?.authorization ?? "");
+      const token = authHeader.startsWith("Bearer ")
+        ? authHeader.slice(7).trim()
+        : null;
+
+      if (!token) return ctx.unauthorized("Authentication token is required.");
+
+      let userId: number;
+      try {
+        const payload = await strapi
+          .plugin("users-permissions")
+          .service("jwt")
+          .verify(token);
+        userId = payload.id;
+      } catch {
+        return ctx.unauthorized("Invalid or expired token.");
+      }
+
+      const { password } = ctx.request.body;
+      if (!password)
+        return ctx.badRequest("Password is required to unlink Google.");
+
+      const user = await strapi.db.query(userUid).findOne({
+        where: { id: userId },
+        select: ["id", "googleLinked", "password"],
+      });
+
+      if (!user) return ctx.notFound("User not found.");
+      // if (!user.googleLinked) return ctx.badRequest("Google is not linked to this account.");
+      if (!user.password) {
+        return ctx.badRequest("Set a password before unlinking Google.");
+      }
+
+      // Verify the provided password matches what was just set
+      const validPassword = await strapi
         .plugin("users-permissions")
-        .service("jwt")
-        .verify(token);
-      userId = payload.id;
-    } catch {
-      return ctx.unauthorized("Invalid or expired token.");
+        .service("user")
+        .validatePassword(password, user.password);
+
+      if (!validPassword) return ctx.badRequest("Password is incorrect.");
+
+      await strapi.db.query(userUid).update({
+        where: { id: userId },
+        data: await filterToExistingColumns(
+          strapi,
+          userUid,
+          buildLocalAuthUpdate(),
+        ),
+      });
+
+      ctx.body = { message: "Google account unlinked successfully." };
+    } catch (error: any) {
+      strapi.log.error("Google unlink failed", error);
+      return ctx.badRequest(error?.message || "Google unlink failed.");
     }
-
-    const { password } = ctx.request.body;
-    if (!password) return ctx.badRequest("Password is required to unlink Google.");
-
-    const user = await strapi.db.query(userUid).findOne({
-      where: { id: userId },
-      select: ["id", "googleLinked", "password"],
-    });
-
-    if (!user) return ctx.notFound("User not found.");
-    // if (!user.googleLinked) return ctx.badRequest("Google is not linked to this account.");
-    if (!user.password) {
-      return ctx.badRequest("Set a password before unlinking Google.");
-    }
-
-    // Verify the provided password matches what was just set
-    const validPassword = await strapi
-      .plugin("users-permissions")
-      .service("user")
-      .validatePassword(password, user.password);
-
-    if (!validPassword) return ctx.badRequest("Password is incorrect.");
-
-    await strapi.db.query(userUid).update({
-      where: { id: userId },
-      data: await filterToExistingColumns(
-        strapi,
-        userUid,
-        buildLocalAuthUpdate(),
-      ),
-    });
-
-    ctx.body = { message: "Google account unlinked successfully." };
-  } catch (error: any) {
-    strapi.log.error("Google unlink failed", error);
-    return ctx.badRequest(error?.message || "Google unlink failed.");
-  }
-},
+  },
 };

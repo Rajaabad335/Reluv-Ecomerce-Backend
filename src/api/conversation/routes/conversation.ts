@@ -18,5 +18,14 @@ export default {
       handler: 'conversation.createForProduct',
       config: { auth: false, policies: [], middlewares: [] },
     },
+    {
+      method: "DELETE",
+      path: "/conversations/:id/delete",
+      handler: "conversation.deleteConversation",
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

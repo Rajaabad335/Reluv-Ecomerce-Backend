@@ -7,6 +7,7 @@ import { createNotification } from '../../../lib/createNotification';
 
 const conversationUid = 'api::conversation.conversation' as any;
 const messageUid = 'api::message.message' as any;
+const blockUid = 'api::block.block' as any;
 
 const getUserIdFromCtx = (ctx: any): number | null => {
   const userId = ctx?.state?.user?.id;
@@ -50,7 +51,20 @@ const assertParticipant = async (strapi: any, conversationId: number, userId: nu
   return Boolean(rows?.[0]);
 };
 
+const canUsersMessage = async (strapi: any, senderId: number, receiverId: number): Promise<boolean> => {
+  const block = await strapi.db.query(blockUid).findOne({
+    where: {
+      $or: [
+        { blocker: { id: senderId }, blocked: { id: receiverId } },
+        { blocker: { id: receiverId }, blocked: { id: senderId } },
+      ],
+    },
+  });
+  return !block;
+};
+
 export default factories.createCoreController(messageUid, ({ strapi }) => ({
+
   async listByConversation(ctx: any) {
     try {
       const userId = getUserIdFromCtx(ctx);
@@ -75,7 +89,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const unreadMessages = messages.filter(
         (msg) => msg.sender?.id !== userId && !msg.readAt
       );
-      
+
       if (unreadMessages.length > 0) {
         await Promise.all(
           unreadMessages.map((msg) =>
@@ -85,7 +99,6 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           )
         );
 
-        // Emit socket event to update unread count
         const io = (strapi as any).io as import('socket.io').Server | undefined;
         if (io) {
           io.to(`conversation:${conversationId}`).emit('messages:read', {
@@ -104,6 +117,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       return ctx.internalServerError('Failed to load messages.');
     }
   },
+
   async sendMessage(ctx: any) {
     try {
       const userId = getUserIdFromCtx(ctx);
@@ -123,18 +137,33 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const canAccess = await assertParticipant(strapi, conversationId, userId);
       if (!canAccess) return ctx.unauthorized('Not allowed.');
 
+      // Get conversation to find the receiver
+      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
+        populate: { buyer: { fields: ['id'] }, seller: { fields: ['id'] } },
+      }) as any;
+
+      const receiverId = conversation?.buyer?.id === userId
+        ? conversation?.seller?.id
+        : conversation?.buyer?.id;
+
+      // Block check — prevent sending if either party has blocked the other
+      if (receiverId) {
+        const allowed = await canUsersMessage(strapi, userId, receiverId);
+        if (!allowed) {
+          return ctx.forbidden('You cannot send messages to this user.');
+        }
+      }
+
       const messageData: any = {
         conversation: conversationId,
         sender: userId,
         content: content || '',
       };
 
-      // Handle offer linking from metadata
       if (ctx.request?.body?.metadata?.offerId) {
         messageData.offer = ctx.request.body.metadata.offerId;
       }
 
-      // Use entityService for creation to properly handle media relations
       const created = await strapi.entityService.create(messageUid, {
         data: {
           ...messageData,
@@ -173,17 +202,11 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
         });
       }
 
-      // Notify the other participant
-      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
-        populate: { buyer: { fields: ['id'] }, seller: { fields: ['id'] } },
-      }) as any;
-      const recipientId = conversation?.buyer?.id === userId
-        ? conversation?.seller?.id
-        : conversation?.buyer?.id;
-      if (recipientId) {
+      // Notify the receiver
+      if (receiverId) {
         createNotification({
           strapi,
-          recipientId,
+          recipientId: receiverId,
           type: 'new_message',
           title: 'New message',
           body: preview.slice(0, 80),
@@ -200,4 +223,5 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       return ctx.internalServerError('Failed to send message.');
     }
   },
+
 }));

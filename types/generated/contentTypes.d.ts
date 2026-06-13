@@ -430,6 +430,38 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiBlockBlock extends Struct.CollectionTypeSchema {
+  collectionName: 'blocks';
+  info: {
+    displayName: 'Block';
+    pluralName: 'blocks';
+    singularName: 'block';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    blocked: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    blocker: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'api::block.block'> &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
   collectionName: 'brands';
   info: {
@@ -1741,6 +1773,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::block.block': ApiBlockBlock;
       'api::brand.brand': ApiBrandBrand;
       'api::category-attribute-option.category-attribute-option': ApiCategoryAttributeOptionCategoryAttributeOption;
       'api::category-attribute.category-attribute': ApiCategoryAttributeCategoryAttribute;
