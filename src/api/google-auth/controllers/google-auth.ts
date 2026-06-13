@@ -340,6 +340,7 @@ export default {
               email,
               accountType: "user",
               provider: "google",
+              role: { connect: [{ id: defaultRole.id }] },
               ...buildGoogleProfileData(profile),
             },
           ),
