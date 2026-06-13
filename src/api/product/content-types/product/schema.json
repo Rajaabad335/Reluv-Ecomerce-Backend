@@ -45,7 +45,8 @@
         "reserved",
         "sold",
         "hidden"
-      ]
+      ],
+      "default": "active"
     },
     "price": {
       "type": "decimal",

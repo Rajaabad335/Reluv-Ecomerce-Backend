@@ -1106,7 +1106,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     productStatus: Schema.Attribute.Enumeration<
       ['draft', 'active', 'reserved', 'sold', 'hidden']
     > &
-      Schema.Attribute.Required;
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'active'>;
     publishedAt: Schema.Attribute.DateTime;
     size: Schema.Attribute.Relation<'manyToOne', 'api::size.size'>;
     title: Schema.Attribute.String & Schema.Attribute.Required;

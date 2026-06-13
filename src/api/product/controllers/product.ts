@@ -1121,7 +1121,16 @@ export default factories.createCoreController(
         const sortBy = normalizeSort(query.sortBy || query.sort);
 
         // ── Base filter ──────────────────────────────────────────────────────────
-        const filters: any = { productStatus: { $eq: "active" } };
+        const filters: any = {
+          productStatus: { $eq: "active" },
+          users_permissions_user: {
+            id: { $ne: null },
+            $or: [
+                { holidayMode: { $eq: false } },
+                { holidayMode: { $eq: null } },
+              ],
+          },
+        };
         const andFilters: any[] = [];
 
         // ── Category (with cached tree lookup) ───────────────────────────────────
@@ -1760,7 +1769,7 @@ export default factories.createCoreController(
       try {
         const query = ctx.query || {};
         const categoryInput = String(
-          query.category || query.subCategory || query.item || "",
+          query.item || query.subCategory || query.category || "",
         ).trim();
         let categoryIdsForOptions: number[] = [];
         let categoryAttributeFilters: any = {};
@@ -1773,11 +1782,11 @@ export default factories.createCoreController(
           if (categoryIds.length > 0) {
             categoryIdsForOptions = categoryIds;
             categoryAttributeFilters = {
-              category: { id: { $in: categoryIdsForOptions } },
+              categories: { id: { $in: categoryIdsForOptions } },
             };
           } else {
             categoryAttributeFilters = {
-              category: {
+              categories: {
                 $or: [
                   { slug: { $eqi: categoryInput } },
                   { name: { $eqi: categoryInput } },

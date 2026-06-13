@@ -1,5 +1,7 @@
 import { Server } from 'socket.io';
 import { repairCategoryAttributeLinks, resolveCategoryAttributeLinkSchema } from './lib/repairCategoryAttributeLinks';
+import { autoSyncColumns } from "./database/migrations/auto-sync-columns";
+
 
 // ─── Seed data (inlined to avoid file I/O on Render) ────────────────────────
 
@@ -40,6 +42,7 @@ export default {
 
   async bootstrap({ strapi }: { strapi: any }) {
     try {
+      // await autoSyncColumns({ strapi });
       const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
       if (!linkSchema) {
         strapi.log.warn('[Reluv] ⚠  Could not determine category-attribute link table schema. Running repair directly.');
