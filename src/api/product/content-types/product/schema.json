@@ -119,7 +119,7 @@
       "target": "api::material.material",
       "inversedBy": "products"
     },
-    "hide": {
+    "isHidden": {
       "type": "boolean",
       "default": false
     }

@@ -894,6 +894,555 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to create product.");
       }
     },
+      async UpdateProduct(ctx: any) {
+      try {
+        const body = ctx.request.body || {};
+        const ProductId = body.productId
+        const title = String(body.title || "").trim();
+        const description = String(body.description || "").trim();
+        const priceNumber = Number(body.price);
+        const categoryId = Number(body.categoryId);
+        const rawDynamicValues = (() => {
+          if (body.dynamicValues && typeof body.dynamicValues === "object")
+            return body.dynamicValues;
+          if (typeof body.dynamicValues === "string") {
+            try {
+              const parsed = JSON.parse(body.dynamicValues);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          return {};
+        })();
+        const rawAttributeValues = (() => {
+          if (body.attributeValues && typeof body.attributeValues === "object")
+            return body.attributeValues;
+          if (typeof body.attributeValues === "string") {
+            try {
+              const parsed = JSON.parse(body.attributeValues);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          if (body.attributes && typeof body.attributes === "object")
+            return body.attributes;
+          if (typeof body.attributes === "string") {
+            try {
+              const parsed = JSON.parse(body.attributes);
+              if (parsed && typeof parsed === "object") return parsed;
+            } catch (_) {}
+          }
+          return null;
+        })();
+        const imageIds = (() => {
+          const rawImageIds = body.imageIds;
+          if (Array.isArray(rawImageIds)) {
+            return [
+              ...new Set(
+                rawImageIds
+                  .map((v: any) => Number(v))
+                  .filter((v: any) => Number.isInteger(v) && v > 0),
+              ),
+            ];
+          }
+          if (typeof rawImageIds === "string") {
+            try {
+              const parsed = JSON.parse(rawImageIds);
+              if (Array.isArray(parsed)) {
+                return [
+                  ...new Set(
+                    parsed
+                      .map((v: any) => Number(v))
+                      .filter((v: any) => Number.isInteger(v) && v > 0),
+                  ),
+                ];
+              }
+            } catch (_) {}
+          }
+          return [] as number[];
+        })();
+        const dynamicEntries = [
+          ...extractDynamicEntries(rawDynamicValues),
+          ...extractDynamicEntries(rawAttributeValues),
+        ];
+        const dynamicValuesByLowerKey = new Map<string, any>(
+          dynamicEntries.map(({ code, rawValue }) => [code, rawValue]),
+        );
+
+        if (!title) return ctx.badRequest("title is required.");
+        if (!description) return ctx.badRequest("description is required.");
+        if (!Number.isFinite(priceNumber) || priceNumber <= 0)
+          return ctx.badRequest("price must be > 0.");
+        if (!Number.isInteger(categoryId) || categoryId <= 0)
+          return ctx.badRequest("categoryId is required.");
+
+        const conditionRawValue =
+          dynamicValuesByLowerKey.get("condition") ?? body.condition;
+        const condition = normalizeCondition(conditionRawValue);
+        if (!condition) {
+          return ctx.badRequest(
+            "condition is required and must match product enum values.",
+          );
+        }
+
+        const rawBrandValue =
+          dynamicValuesByLowerKey.get("brand") ??
+          dynamicValuesByLowerKey.get("brand_id") ??
+          dynamicValuesByLowerKey.get("brandid") ??
+          body.brand ??
+          body.brandId;
+        const rawSizeValue =
+          dynamicValuesByLowerKey.get("size") ??
+          dynamicValuesByLowerKey.get("size_id") ??
+          dynamicValuesByLowerKey.get("sizeid") ??
+          dynamicValuesByLowerKey.get("size_men") ??
+          dynamicValuesByLowerKey.get("size_women") ??
+          dynamicValuesByLowerKey.get("size_kids") ??
+          dynamicValuesByLowerKey.get("shoe_size_women") ??
+          dynamicValuesByLowerKey.get("shoe_size_men") ??
+          dynamicValuesByLowerKey.get("shoe_size_kids") ??
+          body.size ??
+          body.sizeId;
+        const rawColorValue =
+          dynamicValuesByLowerKey.get("color") ??
+          dynamicValuesByLowerKey.get("colour") ??
+          body.color ??
+          body.colour;
+
+        const categoryPromise = strapi.entityService.findMany(
+          "api::category.category",
+          {
+            filters: { id: { $eq: categoryId } },
+            fields: ["id"],
+            limit: 1,
+          },
+        );
+
+        let brandId: number | null = null;
+        const brandPromise = (async () => {
+          const lookupValues = toLookupValues(rawBrandValue);
+          if (lookupValues.length === 0) return null;
+          const idCandidate = lookupValues
+            .map((item) => Number(item))
+            .find((item) => Number.isInteger(item) && item > 0) as
+            | number
+            | undefined;
+          const textValues = lookupValues
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+          const brandFilters = idCandidate
+            ? { id: { $eq: idCandidate } }
+            : {
+                $or: [
+                  {
+                    slug: { $in: textValues.map((item) => item.toLowerCase()) },
+                  },
+                  ...textValues.map((item) => ({ name: { $eqi: item } })),
+                ],
+              };
+
+          const brandRows = await strapi.entityService.findMany(
+            "api::brand.brand",
+            {
+              filters: brandFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return brandRows?.[0]?.id ? Number(brandRows[0].id) : null;
+        })();
+
+        let sizeId: number | null = null;
+        const sizePromise = (async () => {
+          const lookupValues = toLookupValues(rawSizeValue);
+          if (lookupValues.length === 0) return null;
+          const idCandidate = lookupValues
+            .map((item) => Number(item))
+            .find((item) => Number.isInteger(item) && item > 0) as
+            | number
+            | undefined;
+          const textValues = lookupValues
+            .map((item) => item.trim())
+            .filter((item) => item.length > 0);
+          const sizeFilters = idCandidate
+            ? { id: { $eq: idCandidate } }
+            : {
+                $or: [
+                  {
+                    slug: { $in: textValues.map((item) => item.toLowerCase()) },
+                  },
+                  ...textValues.map((item) => ({ name: { $eqi: item } })),
+                ],
+              };
+          const sizeRows = await strapi.entityService.findMany(
+            "api::size.size",
+            {
+              filters: sizeFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return sizeRows?.[0]?.id ? Number(sizeRows[0].id) : null;
+        })();
+
+        let colorId: number | null = null;
+        const colorPromise = (async () => {
+          if (rawColorValue == null || String(rawColorValue).trim() === "")
+            return null;
+          const asColorId = Number(rawColorValue);
+          const rawColorText = String(rawColorValue).trim();
+          const colorFilters =
+            Number.isInteger(asColorId) && asColorId > 0
+              ? { id: { $eq: asColorId } }
+              : {
+                  $or: [
+                    { slug: { $eq: rawColorText.toLowerCase() } },
+                    { name: { $eqi: rawColorText } },
+                  ],
+                };
+          const colorRows = await strapi.entityService.findMany(
+            "api::color.color",
+            {
+              filters: colorFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return colorRows?.[0]?.id ? Number(colorRows[0].id) : null;
+        })();
+
+        let conditionId: number | null = null;
+        const conditionPromise = (async () => {
+          const rawConditionText = String(conditionRawValue ?? "").trim();
+          if (!rawConditionText) return null;
+
+          const asConditionId = Number(rawConditionText);
+          const normalizedCondition = normalizeCondition(rawConditionText);
+          const normalizedConditionSlug = normalizedCondition
+            ? conditionToLabel(normalizedCondition)
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "_")
+                .replace(/^_+|_+$/g, "")
+            : null;
+
+          const conditionFilters =
+            Number.isInteger(asConditionId) && asConditionId > 0
+              ? { id: { $eq: asConditionId } }
+              : {
+                  $or: [
+                    { slug: { $eq: rawConditionText.toLowerCase() } },
+                    { name: { $eqi: rawConditionText } },
+                    ...(normalizedConditionSlug
+                      ? [
+                          { slug: { $eq: normalizedConditionSlug } },
+                          {
+                            name: {
+                              $eqi: conditionToLabel(normalizedCondition),
+                            },
+                          },
+                        ]
+                      : []),
+                  ],
+                };
+
+          const conditionRows = await strapi.entityService.findMany(
+            "api::condition.condition",
+            {
+              filters: conditionFilters,
+              fields: ["id"],
+              limit: 1,
+            },
+          );
+          return conditionRows?.[0]?.id ? Number(conditionRows[0].id) : null;
+        })();
+
+        const [
+          categoryRows,
+          resolvedBrandId,
+          resolvedSizeId,
+          resolvedColorId,
+          resolvedConditionId,
+        ] = await Promise.all([
+          categoryPromise,
+          brandPromise,
+          sizePromise,
+          colorPromise,
+          conditionPromise,
+        ]);
+
+        if (!categoryRows?.[0]) return ctx.badRequest("Invalid categoryId.");
+        brandId = resolvedBrandId;
+        sizeId = resolvedSizeId;
+        colorId = resolvedColorId;
+        conditionId = resolvedConditionId;
+
+        const createdProduct = await strapi.db
+          .query("api::product.product")
+          .create({
+            data: {
+              title,
+              description: toBlocks(description),
+              condition,
+              productStatus: "active",
+              price: String(priceNumber),
+              category: categoryId,
+              users_permissions_user: body?.userId ? Number(body.userId) : null,
+              ...(brandId ? { brand: brandId } : {}),
+              ...(sizeId ? { size: sizeId } : {}),
+              ...(colorId ? { color: colorId } : {}),
+              ...(conditionId ? { product_condition: conditionId } : {}),
+            },
+          });
+
+        if (imageIds.length > 0) {
+          await strapi.db.query("api::product.product").update({
+            where: { id: createdProduct.id },
+            data: { images: imageIds,
+              productStatus: "active",
+             },
+          });
+        }
+
+        const attributeEntries = dynamicEntries
+          .filter(
+            ({ code }) =>
+              ![].includes(
+                String(code ?? "")
+                  .trim()
+                  .toLowerCase(),
+              ),
+          )
+          .map(({ code, rawValue }) => ({
+            code: normalizeCode(code),
+            rawValue,
+          }))
+          .filter(
+            ({ code, rawValue }) =>
+              Boolean(code) && toLookupValues(rawValue).length > 0,
+          );
+
+        if (attributeEntries.length > 0) {
+          const uniqueCodes = [
+            ...new Set(attributeEntries.map((entry) => entry.code)),
+          ];
+          const categoryScopedAttributes = await strapi.entityService.findMany(
+            "api::category-attribute.category-attribute",
+            {
+              filters: {
+                categories: { id: { $eq: categoryId } },
+              },
+              fields: ["id", "code", "name", "type"],
+              limit: 1000,
+            },
+          );
+
+          const attributeByCode = new Map<string, any>();
+          for (const attr of categoryScopedAttributes as any[]) {
+            const key = normalizeCode(attr.code || attr.name);
+            if (!key) continue;
+            if (!attributeByCode.has(key)) attributeByCode.set(key, attr);
+          }
+
+          const missingCodes = uniqueCodes.filter(
+            (code) => !attributeByCode.has(code),
+          );
+          if (missingCodes.length > 0) {
+            const fallbackAttributes = await strapi.entityService.findMany(
+              "api::category-attribute.category-attribute",
+              {
+                filters: { code: { $in: missingCodes } },
+                fields: ["id", "code", "name", "type"],
+                limit: 1000,
+              },
+            );
+
+            for (const attr of fallbackAttributes as any[]) {
+              const key = normalizeCode(attr.code || attr.name);
+              if (!key) continue;
+              if (!attributeByCode.has(key)) attributeByCode.set(key, attr);
+            }
+          }
+
+          const stillMissingCodes = uniqueCodes.filter(
+            (code) => !attributeByCode.has(code),
+          );
+          if (stillMissingCodes.length > 0) {
+            const broadFallbackAttributes = await strapi.entityService.findMany(
+              "api::category-attribute.category-attribute",
+              {
+                fields: ["id", "code", "name", "type"],
+                limit: 5000,
+              },
+            );
+            for (const attr of broadFallbackAttributes as any[]) {
+              const keyFromCode = normalizeCode(attr.code);
+              const keyFromName = normalizeCode(attr.name);
+              if (keyFromCode && !attributeByCode.has(keyFromCode))
+                attributeByCode.set(keyFromCode, attr);
+              if (keyFromName && !attributeByCode.has(keyFromName))
+                attributeByCode.set(keyFromName, attr);
+            }
+          }
+
+          const enumAttributeIds = [
+            ...new Set(
+              attributeEntries
+                .map(({ code }) => attributeByCode.get(code))
+                .filter(
+                  (attr) =>
+                    attr &&
+                    (String(attr.type) === "enum" ||
+                      String(attr.type) === "enumeration"),
+                )
+                .map((attr) => Number(attr.id))
+                .filter((id) => Number.isInteger(id) && id > 0),
+            ),
+          ];
+
+          const optionIdByAttrAndValue = new Map<string, number>();
+          const optionIdByAttrAndId = new Map<string, number>();
+          if (enumAttributeIds.length > 0) {
+            const enumOptions = await strapi.entityService.findMany(
+              "api::category-attribute-option.category-attribute-option",
+              {
+                filters: {
+                  category_attribute: { id: { $in: enumAttributeIds } },
+                },
+                fields: ["id", "value"],
+                populate: {
+                  category_attribute: {
+                    fields: ["id"],
+                  },
+                },
+                limit: 5000,
+              },
+            );
+
+            for (const option of enumOptions as any[]) {
+              const attrId = Number(option?.category_attribute?.id);
+              const value = String(option?.value ?? "")
+                .trim()
+                .toLowerCase();
+              const optionId = Number(option?.id);
+              if (
+                !Number.isInteger(attrId) ||
+                !value ||
+                !Number.isInteger(optionId)
+              )
+                continue;
+              optionIdByAttrAndValue.set(`${attrId}::${value}`, optionId);
+              optionIdByAttrAndId.set(`${attrId}::${optionId}`, optionId);
+            }
+          }
+
+          const pavCreatePromises = [];
+          let createdPavCount = 0;
+          for (const { code, rawValue } of attributeEntries) {
+            const categoryAttribute = attributeByCode.get(code);
+            if (!categoryAttribute) continue;
+
+            const valueType = String(categoryAttribute.type || "string");
+            let valueText: string | null = null;
+            let valueNumber: string | null = null;
+            let valueBoolean: boolean | null = null;
+            let optionId: number | null = null;
+
+            if (valueType === "number") {
+              const asNumber = Number(getFirstScalarText(rawValue));
+              if (!Number.isFinite(asNumber)) continue;
+              valueNumber = String(asNumber);
+            } else if (valueType === "boolean") {
+              const booleanText = getFirstScalarText(rawValue).toLowerCase();
+              valueBoolean =
+                booleanText === "true" ||
+                booleanText === "yes" ||
+                rawValue === true ||
+                rawValue === 1 ||
+                rawValue === "1";
+            } else if (valueType === "enum" || valueType === "enumeration") {
+              const candidates = toLookupValues(rawValue);
+              const selectedAttrId = Number(categoryAttribute.id);
+              optionId =
+                candidates
+                  .map((candidate) => candidate.trim())
+                  .map(
+                    (candidate) =>
+                      optionIdByAttrAndValue.get(
+                        `${selectedAttrId}::${candidate.toLowerCase()}`,
+                      ) ??
+                      optionIdByAttrAndId.get(
+                        `${selectedAttrId}::${Number(candidate)}`,
+                      ) ??
+                      null,
+                  )
+                  .find(
+                    (candidate) => Number.isInteger(candidate) && candidate > 0,
+                  ) ?? null;
+              valueText = candidates[0] ? String(candidates[0]).trim() : null;
+            } else {
+              valueText = getFirstScalarText(rawValue);
+            }
+
+            if (
+              valueText == null &&
+              valueNumber == null &&
+              valueBoolean == null &&
+              !optionId
+            ) {
+              continue;
+            }
+
+            pavCreatePromises.push(
+              createPublishedPav(strapi, {
+                product: createdProduct.id,
+                category_attribute: categoryAttribute.id,
+                ...(valueText != null ? { valueText } : {}),
+                ...(valueNumber != null ? { valueNumber } : {}),
+                ...(valueBoolean != null ? { valueBoolean } : {}),
+                ...(optionId ? { category_attribute_option: optionId } : {}),
+              }).then((result: any) => {
+                if (result) createdPavCount += 1;
+                return result;
+              }),
+            );
+          }
+
+          if (pavCreatePromises.length > 0) {
+            await Promise.all(pavCreatePromises);
+          }
+
+          strapi.log.info(
+            `[createSellNow] product=${createdProduct.id} pav_created=${createdPavCount} entries=${attributeEntries.length}`,
+          );
+        }
+
+        ctx.body = {
+          ok: true,
+          product: {
+            id: createdProduct.id,
+            title: createdProduct.title,
+          },
+        };
+
+        // Fire-and-forget product_created notification
+        const sellerId = body?.userId ? Number(body.userId) : null;
+        //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(sellerId)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newItems;
+        if (sellerId 
+          // && isCreateNotification
+        ) {
+          createNotification({
+            strapi,
+            recipientId: sellerId,
+            type: "product_created",
+            title: "Product listed successfully!",
+            body: `"${title}" is now live on Reluv.`,
+            link: `/products/${createdProduct.id}`,
+          });
+        }
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to create product.");
+      }
+    },
     async getProducts(ctx: any) {
       try {
         const query = ctx.query || {};

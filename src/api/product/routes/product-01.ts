@@ -8,6 +8,14 @@ export default {
         auth: false,
       },
     },
+     {
+      method: "POST",
+      path: "/products/update-product",
+      handler: "product.UpdateProduct",
+      config: {
+        auth: false,
+      },
+    },
     {
       method: "GET",
       path: "/products/getProducts",
