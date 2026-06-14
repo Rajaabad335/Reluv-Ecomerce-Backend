@@ -646,7 +646,9 @@ export default factories.createCoreController(
         if (imageIds.length > 0) {
           await strapi.db.query("api::product.product").update({
             where: { id: createdProduct.id },
-            data: { images: imageIds },
+            data: { images: imageIds,
+              productStatus: "active",
+             },
           });
         }
 
@@ -895,6 +897,7 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
+              productStatus: { $eq: "active" },
               users_permissions_user: {
                 $and: [
                   { id: { $ne: null } },
@@ -1125,10 +1128,7 @@ export default factories.createCoreController(
           productStatus: { $eq: "active" },
           users_permissions_user: {
             id: { $ne: null },
-            $or: [
-                { holidayMode: { $eq: false } },
-                { holidayMode: { $eq: null } },
-              ],
+            holidayMode: { $eq: false }
           },
         };
         const andFilters: any[] = [];
@@ -1491,7 +1491,7 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
-              // productStatus: { $eq: "active" },
+              productStatus: { $eq: "active" },
               users_permissions_user: { holidayMode: { $ne: true } },
               $or: [
                 { title: { $containsi: searchTerm } },
@@ -1682,6 +1682,7 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
+              productStatus: { $eq: "active" },
               users_permissions_user: {
                 id: { $eq: userId },
                 holidayMode: { $ne: true },

@@ -39,14 +39,14 @@
     "productStatus": {
       "type": "enumeration",
       "required": true,
+      "default": "active",
       "enum": [
         "draft",
         "active",
         "reserved",
         "sold",
         "hidden"
-      ],
-      "default": "active"
+      ]
     },
     "price": {
       "type": "decimal",
