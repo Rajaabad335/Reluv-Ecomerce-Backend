@@ -875,7 +875,11 @@ export default factories.createCoreController(
 
         // Fire-and-forget product_created notification
         const sellerId = body?.userId ? Number(body.userId) : null;
-        if (sellerId) {
+        //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(sellerId)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newItems;
+        if (sellerId 
+          // && isCreateNotification
+        ) {
           createNotification({
             strapi,
             recipientId: sellerId,
@@ -2135,8 +2139,9 @@ export default factories.createCoreController(
 
         const prodOwner = product?.users_permissions_user?.id;
         const prodTitle = product?.title;
-        // const isCreateNotification =
-        //   product?.users_permissions_user?.notificationSettings?.favourited;
+        // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.favourited;
+        //   console.log("isCreateNotification",isCreateNotification)
 
         // 3. Fetch current user with populated favorites
         const user = (await strapi.entityService.findOne(
@@ -2185,10 +2190,6 @@ export default factories.createCoreController(
             populate: { fav_products: true },
           },
         );
-
-        // 6. Handle Notifications Safely
-        // Only send notification if a product was added, the owner has enabled notifications,
-        // AND the person liking it isn't the owner themselves.
         if (
           isProdAdded &&
           // isCreateNotification &&
@@ -2196,13 +2197,19 @@ export default factories.createCoreController(
           Number(prodOwner) !== Number(id)
         ) {
           try {
+            const conversation =
+              await strapi.config.index.createOrGetConversation(
+                 Number(prodOwner),
+                 Number(id),
+                Number(product?.id),
+              );
             await createNotification({
               strapi,
               recipientId: prodOwner,
               type: "add_fav_list",
               title: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
               body: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
-              link: `/products/${product?.id}`,
+              link: `/Messages?conversationId=${conversation?.id}`,
             });
           } catch (notifError) {
             // Log notification failure but don't break the user's favorite saving experience

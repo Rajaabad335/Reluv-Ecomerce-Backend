@@ -3,6 +3,7 @@
  */
 
 import { factories } from "@strapi/strapi";
+import { createNotification } from "../../../lib/createNotification";
 
 export default factories.createCoreController(
   "api::order.order",
@@ -26,7 +27,7 @@ export default factories.createCoreController(
                 },
               ],
             },
-            limit: 1, 
+            limit: 1,
           },
         );
 
@@ -55,8 +56,28 @@ export default factories.createCoreController(
             paymentStatus: "paid",
           },
         });
-
-        console.log("Order created successfully:", newOrder); // Debugging line
+        //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(body.buyerId)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newOrder;
+        if (newOrder 
+          // && isCreateNotification
+        ) {
+          try {
+            await createNotification({
+              strapi,
+              recipientId: body.sellerId,
+              type: "order",
+              title: "New Order Received",
+              body: `You received an order from ${body.username} on ${body.productTitle}.`,
+              link: `/Orders`,
+            });
+          } catch (notifError) {
+            // Log notification failure but don't break the user's favorite saving experience
+            strapi.log.error(
+              "Failed to send favorite notification:",
+              notifError,
+            );
+          }
+        }
         return ctx.created(newOrder);
       } catch (error) {
         console.error("Error placing order:", error); // Debugging line

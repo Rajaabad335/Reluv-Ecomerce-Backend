@@ -223,7 +223,11 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       }
 
       // Notify the receiver
-      if (receiverId) {
+      //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(receiverId)
+      //   const isCreateNotification =   userNotificationSetting?.notificationSettings?.messages;
+      if (receiverId 
+        // && isCreateNotification
+      ) {
         createNotification({
           strapi,
           recipientId: receiverId,

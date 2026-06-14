@@ -50,6 +50,8 @@ export default factories.createCoreController(
             { fields: ["id"] }, // adjust field name to match your Order schema
           );
           // Notify seller
+            // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.favourited;
           await strapi.entityService.create(
             "api::notification.notification" as any,
             {
@@ -101,8 +103,10 @@ export default factories.createCoreController(
         },
       }
     );
-
+     
     // Create notification for dispute raiser
+      // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.order;
     if (updatedDispute?.raisedBy?.id) {
       await strapi.entityService.create(
         "api::notification.notification" as any,

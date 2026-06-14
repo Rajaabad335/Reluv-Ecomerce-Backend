@@ -6,7 +6,8 @@ type NotificationType =
   | "new_follower"
   | "order_update"
   | "review"
-  | "add_fav_list";
+  | "add_fav_list"
+  | "order"
   
 
 interface CreateNotificationParams {

@@ -211,19 +211,33 @@
       "type": "json"
     },
     "notificationSettings": {
-      "type": "json"
-    },
-    "notificationDailyLimit": {
-      "type": "enumeration",
-      "enum": [
-        "limit_2",
-        "limit_5",
-        "unlimited"
-      ],
-      "default": "unlimited"
+      "type": "json",
+      "default": {
+      "updates": true,
+      "messages": true,
+      "feedback": true,
+      "reduced": true,
+      "favourited": true,
+      "newItems": true,
+      "email": true,
+      "Order": true
+    }
     },
     "privacySettings": {
       "type": "json"
+    },
+    "referralCode": {
+      "type": "string",
+      "unique": true
+    },
+    "referredBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "referralRewardEarned": {
+      "type": "decimal",
+      "default": 0
     }
   }
 }

@@ -97,8 +97,10 @@ export default factories.createCoreController(
           },
         });
       }
-
+      
       // Notify seller
+        // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.;
       await strapi.entityService.create(
         "api::notification.notification" as any,
         {
@@ -221,6 +223,8 @@ export default factories.createCoreController(
       const productId = (offer as any).product?.id;
 
       // Notify buyer
+        // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
+        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.favourited;
       await strapi.entityService.create(
         "api::notification.notification" as any,
         {
