@@ -7,18 +7,18 @@ import { createNotification } from "../../../lib/createNotification";
 import product from "../routes/product";
 
 type ConditionValue =
-  | "new_with_tags"
-  | "new_without_tags"
-  | "very_good"
-  | "good"
-  | "satisfactory";
+  | "new with tags"
+  | "new without tags"
+  | "Used - very_good"
+  | "Used - good"
+  | "Used - satisfactory";
 
 const CONDITION_VALUES = new Set([
-  "new_with_tags",
-  "new_without_tags",
-  "very_good",
-  "good",
-  "satisfactory",
+  "new with tags",
+  "new without tags",
+  "Used - very_good",
+  "Used - good",
+  "Used - satisfactory",
 ]);
 
 const normalizeCondition = (value: any): ConditionValue | null => {
@@ -93,12 +93,23 @@ const normalizeSort = (value: any): "newest" | "price_asc" | "price_desc" => {
   return "newest";
 };
 
-const normalizeCode = (value: any): string =>
-  String(value ?? "")
+const normalizeCode = (value: any): string => {
+  const code = String(value ?? "")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+
+  // Any code that starts with "brand_" or equals "brands" → "brand"
+  if (code === "brand" || code === "brands" || code.startsWith("brand_"))
+    return "brand";
+
+  // Any code that contains "size" → "size"
+  if (code === "size" || code === "sizes" || code.includes("size"))
+    return "size";
+
+  return code;
+};
 
 const toLookupValues = (value: any): string[] => {
   if (value == null) return [];
@@ -427,7 +438,7 @@ export default factories.createCoreController(
 
         const conditionRawValue =
           dynamicValuesByLowerKey.get("condition") ?? body.condition;
-        const condition = normalizeCondition(conditionRawValue);
+        const condition = conditionRawValue;
         if (!condition) {
           return ctx.badRequest(
             "condition is required and must match product enum values.",
@@ -646,9 +657,7 @@ export default factories.createCoreController(
         if (imageIds.length > 0) {
           await strapi.db.query("api::product.product").update({
             where: { id: createdProduct.id },
-            data: { images: imageIds,
-              productStatus: "active",
-             },
+            data: { images: imageIds, productStatus: "active" },
           });
         }
 
@@ -877,7 +886,8 @@ export default factories.createCoreController(
         const sellerId = body?.userId ? Number(body.userId) : null;
         //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(sellerId)
         // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newItems;
-        if (sellerId 
+        if (
+          sellerId
           // && isCreateNotification
         ) {
           createNotification({
@@ -894,10 +904,10 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to create product.");
       }
     },
-      async UpdateProduct(ctx: any) {
+    async UpdateProduct(ctx: any) {
       try {
         const body = ctx.request.body || {};
-        const ProductId = body.productId
+        const ProductId = body.productId;
         const title = String(body.title || "").trim();
         const description = String(body.description || "").trim();
         const priceNumber = Number(body.price);
@@ -1195,9 +1205,7 @@ export default factories.createCoreController(
         if (imageIds.length > 0) {
           await strapi.db.query("api::product.product").update({
             where: { id: createdProduct.id },
-            data: { images: imageIds,
-              productStatus: "active",
-             },
+            data: { images: imageIds, productStatus: "active" },
           });
         }
 
@@ -1426,7 +1434,8 @@ export default factories.createCoreController(
         const sellerId = body?.userId ? Number(body.userId) : null;
         //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(sellerId)
         // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newItems;
-        if (sellerId 
+        if (
+          sellerId
           // && isCreateNotification
         ) {
           createNotification({
@@ -1627,17 +1636,36 @@ export default factories.createCoreController(
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
             attributes: Array.isArray(product?.product_attribute_values)
-              ? product.product_attribute_values.map((pav: any) => ({
-                  id: pav?.id,
-                  code: pav?.category_attribute?.code ?? null,
-                  name: pav?.category_attribute?.name ?? null,
-                  value:
-                    pav?.category_attribute_option?.value ??
-                    pav?.valueText ??
-                    pav?.valueNumber ??
-                    pav?.valueBoolean ??
-                    null,
-                }))
+              ? product.product_attribute_values.map((pav: any) => {
+                  const rawName = pav?.category_attribute?.name ?? null;
+                  const rawCode = pav?.category_attribute?.code ?? null;
+
+                  const isBrand = rawName?.toLowerCase().includes("brand");
+                  const isSize = rawName?.toLowerCase().includes("size");
+
+                  const normalizedName = isBrand
+                    ? "brand"
+                    : isSize
+                      ? "size"
+                      : rawName;
+                  const normalizedCode = isBrand
+                    ? "brand"
+                    : isSize
+                      ? "size"
+                      : rawCode;
+
+                  return {
+                    id: pav?.id,
+                    code: normalizedCode,
+                    name: normalizedName,
+                    value:
+                      pav?.category_attribute_option?.value ??
+                      pav?.valueText ??
+                      pav?.valueNumber ??
+                      pav?.valueBoolean ??
+                      null,
+                  };
+                })
               : [],
             user: product?.users_permissions_user,
           },
@@ -1681,7 +1709,7 @@ export default factories.createCoreController(
           productStatus: { $eq: "active" },
           users_permissions_user: {
             id: { $ne: null },
-            holidayMode: { $eq: false }
+            holidayMode: { $eq: false },
           },
         };
         const andFilters: any[] = [];
@@ -1719,7 +1747,10 @@ export default factories.createCoreController(
                   $and: [
                     {
                       category_attribute: {
-                        code: { $in: ["brand", "brands"] },
+                        $or: [
+                          { code: { $eqi: "brand" } },
+                          { code: { $startsWith: "brand_" } },
+                        ],
                       },
                     },
                     {
@@ -1748,14 +1779,12 @@ export default factories.createCoreController(
                 product_attribute_values: {
                   $and: [
                     {
-                      $or: [
-                        {
-                          category_attribute: {
-                            code: { $in: ["size", "sizes"] },
-                          },
-                        },
-                        { category_attribute: { name: { $eqi: "Size" } } },
-                      ],
+                      category_attribute: {
+                        $or: [
+                          { code: { $eqi: "size" } },
+                          { code: { $containsi: "size" } },
+                        ],
+                      },
                     },
                     {
                       $or: [
@@ -2748,8 +2777,8 @@ export default factories.createCoreController(
           try {
             const conversation =
               await strapi.config.index.createOrGetConversation(
-                 Number(prodOwner),
-                 Number(id),
+                Number(prodOwner),
+                Number(id),
                 Number(product?.id),
               );
             await createNotification({

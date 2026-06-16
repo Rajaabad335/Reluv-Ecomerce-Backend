@@ -900,6 +900,7 @@ export interface ApiNotificationNotification
         'welcome',
         'login',
         'product_created',
+        'order',
         'new_message',
         'new_follower',
         'order_update',
@@ -1084,8 +1085,8 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     description: Schema.Attribute.Blocks & Schema.Attribute.Required;
-    hide: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     images: Schema.Attribute.Media<'images', true>;
+    isHidden: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     likeCount: Schema.Attribute.Integer;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1710,11 +1711,17 @@ export interface PluginUsersPermissionsUser
     > &
       Schema.Attribute.Private;
     nickname: Schema.Attribute.String;
-    notificationDailyLimit: Schema.Attribute.Enumeration<
-      ['limit_2', 'limit_5', 'unlimited']
-    > &
-      Schema.Attribute.DefaultTo<'unlimited'>;
-    notificationSettings: Schema.Attribute.JSON;
+    notificationSettings: Schema.Attribute.JSON &
+      Schema.Attribute.DefaultTo<{
+        email: true;
+        favourited: true;
+        feedback: true;
+        messages: true;
+        newItems: true;
+        Order: true;
+        reduced: true;
+        updates: true;
+      }>;
     password: Schema.Attribute.Password &
       Schema.Attribute.Private &
       Schema.Attribute.SetMinMaxLength<{
@@ -1738,6 +1745,13 @@ export interface PluginUsersPermissionsUser
     received_reviews: Schema.Attribute.Relation<
       'oneToMany',
       'api::review.review'
+    >;
+    referralCode: Schema.Attribute.String & Schema.Attribute.Unique;
+    referralRewardEarned: Schema.Attribute.Decimal &
+      Schema.Attribute.DefaultTo<0>;
+    referredBy: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
     >;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
     role: Schema.Attribute.Relation<

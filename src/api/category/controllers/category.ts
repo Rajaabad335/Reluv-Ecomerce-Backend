@@ -104,7 +104,7 @@ const mapAttributeToUploadShape = (attribute, categorySlug) => {
     rawType: attribute.type,
     rawOptions: options,
     configuration: {
-      title: attribute.isRequired ? attribute.name : `${attribute.name} (recommended)`,
+      title: attribute.isRequired ? attribute.name : `${attribute.name} *`,
       description: attribute.description || null,
       placeholder,
       field_placeholder: placeholder,
