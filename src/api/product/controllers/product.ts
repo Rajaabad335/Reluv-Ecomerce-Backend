@@ -28,7 +28,6 @@ const normalizeCondition = (value: any): ConditionValue | null => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-
   if (CONDITION_VALUES.has(normalized)) return normalized as ConditionValue;
   if (normalized === "new") return "new_without_tags" as ConditionValue;
   return null;
@@ -1455,23 +1454,33 @@ export default factories.createCoreController(
     async getProducts(ctx: any) {
       try {
         const query = ctx.query || {};
+        const currentUserId = query?.userId ? Number(query.userId) : null;
+
+        const hiddenFilter = currentUserId
+          ? [
+              {
+                $and: [
+                  { isHidden: { $eq: true } },
+                  { users_permissions_user: { id: { $eq: currentUserId } } },
+                ],
+              },
+            ]
+          : [];
+
+        const filters = {
+          productStatus: { $eq: "active" },
+          $or: [{ isHidden: { $ne: true } }, ...hiddenFilter],
+          users_permissions_user: {
+            $or: [
+              { holidayMode: { $eq: false } },
+              { holidayMode: { $null: true } },
+            ],
+          },
+        } as any; // Strapi filters aren't perfectly typed
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
-            filters: {
-              productStatus: { $eq: "active" },
-              users_permissions_user: {
-                $and: [
-                  { id: { $ne: null } },
-                  {
-                    $or: [
-                      { holidayMode: { $eq: false } },
-                      { holidayMode: { $eq: null } },
-                    ],
-                  },
-                ],
-              },
-            },
+            filters: filters,
 
             fields: [
               "id",
@@ -1585,6 +1594,7 @@ export default factories.createCoreController(
             fields: [
               "id",
               "title",
+              "isHidden",
               "price",
               "condition",
               "likeCount",
@@ -1622,7 +1632,9 @@ export default factories.createCoreController(
           ok: true,
           product: {
             id: product.id,
+            documentId: product.documentId,
             title: product.title,
+            isHidden: product.isHidden,
             description: blocksToText(product.description),
             price: product.price,
             // condition: product?.product_condition?.name ?? product?.condition,
@@ -1677,7 +1689,8 @@ export default factories.createCoreController(
     },
     async filterProducts(ctx: any) {
       const startTime = Date.now();
-
+      const user = ctx.state.user;
+      const currentUserId = user.id;
       try {
         const query = ctx.query || {};
 
@@ -1707,6 +1720,16 @@ export default factories.createCoreController(
         // ── Base filter ──────────────────────────────────────────────────────────
         const filters: any = {
           productStatus: { $eq: "active" },
+          $or: [
+            { isHidden: { $eq: false } }, // Show if not hidden
+            { isHidden: { $eq: null } }, // Show if hidden is null/unset
+            {
+              $and: [
+                { isHidden: { $eq: true } },
+                { users_permissions_user: { id: { $eq: currentUserId } } }, // Show if hidden BUT owned by current user
+              ],
+            },
+          ],
           users_permissions_user: {
             id: { $ne: null },
             holidayMode: { $eq: false },
@@ -2068,20 +2091,48 @@ export default factories.createCoreController(
           };
           return;
         }
-
+        const user = ctx.state.user;
+        const currentUserId = user.id;
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
             filters: {
-              productStatus: { $eq: "active" },
-              users_permissions_user: { holidayMode: { $ne: true } },
-              $or: [
-                { title: { $containsi: searchTerm } },
-                { brand: { name: { $containsi: searchTerm } } },
-                { category: { name: { $containsi: searchTerm } } },
-                { size: { name: { $containsi: searchTerm } } },
-                { color: { name: { $containsi: searchTerm } } },
-                { product_condition: { name: { $containsi: searchTerm } } },
+              $and: [
+                // 1. Basic status check
+                { productStatus: { $eq: "active" } },
+
+                // 2. Holiday mode check
+                { users_permissions_user: { holidayMode: { $ne: true } } },
+
+                // 3. Visibility logic (Hidden vs Owner check)
+                {
+                  $or: [
+                    { isHidden: { $eq: false } },
+                    { isHidden: { $eq: null } },
+                    {
+                      $and: [
+                        { isHidden: { $eq: true } },
+                        {
+                          users_permissions_user: {
+                            id: { $eq: currentUserId },
+                          },
+                        },
+                      ],
+                    },
+                  ],
+                },
+
+                // 4. Search filter logic
+                {
+                  $or: [
+                    { title: { $containsi: searchTerm } },
+                    { brand: { name: { $containsi: searchTerm } } },
+                    { category: { name: { $containsi: searchTerm } } },
+                    { size: { name: { $containsi: searchTerm } } },
+                    { color: { name: { $containsi: searchTerm } } },
+                    { product_condition: { name: { $containsi: searchTerm } } },
+                  ],
+                },
               ],
             },
             fields: [
@@ -2803,6 +2854,70 @@ export default factories.createCoreController(
       } catch (error) {
         strapi.log.error("Error updating user favorites:", error);
         return ctx.internalServerError("Failed to update user favorites");
+      }
+    },
+    async deleteProduct(ctx) {
+      // 1. Parse the ID from the frontend request body
+      const { id } = ctx.request.body;
+
+      if (!id) {
+        return ctx.badRequest("Product ID is required.");
+      }
+
+      try {
+        // 2. Execute the Strapi DB query using the passed ID
+        const entry = await strapi.db.query("api::product.product").delete({
+          where: { id: id },
+        });
+
+        // 3. Handle case where ID didn't match any existing records
+        if (!entry) {
+          return ctx.notFound("Product not found.");
+        }
+
+        // 4. Return success response
+        return ctx.send({
+          message: "Product deleted successfully",
+          data: entry,
+        });
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError(
+          "An error occurred while deleting the product.",
+        );
+      }
+    },
+    async toggleHide(ctx) {
+      // 1. Extract the ID and data from the frontend request
+      const { id, data } = ctx.request.body;
+
+      if (!id) {
+        return ctx.badRequest("Product ID is required.");
+      }
+
+      try {
+        // 2. Execute the Strapi DB update query
+        // (Make sure 'api::product.product' matches your actual schema UID)
+        const entry = await strapi.db.query("api::product.product").update({
+          where: { id: id },
+          data: {
+            // Destructure or explicitly map fields to prevent unintended field injection
+            isHidden: data?.isHidden,
+          },
+        });
+
+        // 3. Handle case where the product wasn't found
+        if (!entry) {
+          return ctx.notFound("Product not found.");
+        }
+
+        // 4. Return the updated entry
+        return ctx.send({ message: "Product visibility updated", data: entry });
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError(
+          "An error occurred while updating visibility.",
+        );
       }
     },
   }),

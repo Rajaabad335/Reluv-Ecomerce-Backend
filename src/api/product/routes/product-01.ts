@@ -96,5 +96,21 @@ export default {
         auth: false, 
       },
     },
+     {
+      method: 'POST',
+      path: '/products/delete',
+      handler: 'product.deleteProduct',
+      config: {
+        auth: false, 
+      },
+    },
+     {
+      method: 'PUT',
+      path: '/products/hide-unhide',
+      handler: 'product.toggleHide',
+      config: {
+        auth: false, 
+      },
+    },
   ],
 };
