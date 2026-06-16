@@ -1454,7 +1454,7 @@ export default factories.createCoreController(
     async getProducts(ctx: any) {
       try {
         const query = ctx.query || {};
-        const currentUserId = query?.userId ? Number(query.userId) : null;
+        const currentUserId =  null;
 
         const hiddenFilter = currentUserId
           ? [
@@ -1469,7 +1469,8 @@ export default factories.createCoreController(
 
         const filters = {
           productStatus: { $eq: "active" },
-          $or: [{ isHidden: { $ne: true } }, ...hiddenFilter],
+          // $or: [{ isHidden: { $ne: true } }, ...hiddenFilter],
+          isHidden: { $ne: true },
           users_permissions_user: {
             $or: [
               { holidayMode: { $eq: false } },
@@ -1489,6 +1490,7 @@ export default factories.createCoreController(
               "price",
               "condition",
               "createdAt",
+              "isHidden"
             ] as any[],
 
             populate: {
@@ -1690,7 +1692,7 @@ export default factories.createCoreController(
     async filterProducts(ctx: any) {
       const startTime = Date.now();
       const user = ctx.state.user;
-      const currentUserId = user.id;
+      const currentUserId = user?.id;
       try {
         const query = ctx.query || {};
 
@@ -1723,12 +1725,12 @@ export default factories.createCoreController(
           $or: [
             { isHidden: { $eq: false } }, // Show if not hidden
             { isHidden: { $eq: null } }, // Show if hidden is null/unset
-            {
-              $and: [
-                { isHidden: { $eq: true } },
-                { users_permissions_user: { id: { $eq: currentUserId } } }, // Show if hidden BUT owned by current user
-              ],
-            },
+            // {
+            //   $and: [
+            //     { isHidden: { $eq: true } },
+            //     { users_permissions_user: { id: { $eq: currentUserId } } }, // Show if hidden BUT owned by current user
+            //   ],
+            // },
           ],
           users_permissions_user: {
             id: { $ne: null },
@@ -2109,16 +2111,16 @@ export default factories.createCoreController(
                   $or: [
                     { isHidden: { $eq: false } },
                     { isHidden: { $eq: null } },
-                    {
-                      $and: [
-                        { isHidden: { $eq: true } },
-                        {
-                          users_permissions_user: {
-                            id: { $eq: currentUserId },
-                          },
-                        },
-                      ],
-                    },
+                    // {
+                    //   $and: [
+                    //     { isHidden: { $eq: true } },
+                    //     {
+                    //       users_permissions_user: {
+                    //         id: { $eq: currentUserId },
+                    //       },
+                    //     },
+                    //   ],
+                    // },
                   ],
                 },
 
