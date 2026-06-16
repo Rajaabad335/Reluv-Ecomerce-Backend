@@ -986,7 +986,7 @@ export default factories.createCoreController(
 
         const conditionRawValue =
           dynamicValuesByLowerKey.get("condition") ?? body.condition;
-        const condition = normalizeCondition(conditionRawValue);
+        const condition = conditionRawValue;
         if (!condition) {
           return ctx.badRequest(
             "condition is required and must match product enum values.",
