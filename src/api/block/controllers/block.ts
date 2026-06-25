@@ -28,6 +28,19 @@ module.exports = createCoreController("api::block.block", ({ strapi }) => ({
     });
 
     if (existing) {
+      const io = strapi.io;
+      if (io) {
+        io.to(`user:${userId}`).emit("block:changed", {
+          blockerId: Number(userId),
+          blockedId: Number(targetId),
+          blocked: true,
+        });
+        io.to(`user:${targetId}`).emit("block:changed", {
+          blockerId: Number(userId),
+          blockedId: Number(targetId),
+          blocked: true,
+        });
+      }
       return ctx.send({ message: "User is already blocked.", alreadyBlocked: true });
     }
 
@@ -37,6 +50,17 @@ module.exports = createCoreController("api::block.block", ({ strapi }) => ({
         blocked: Number(targetId),
       },
     });
+
+    const io = strapi.io;
+    if (io) {
+      const payload = {
+        blockerId: Number(userId),
+        blockedId: Number(targetId),
+        blocked: true,
+      };
+      io.to(`user:${userId}`).emit("block:changed", payload);
+      io.to(`user:${targetId}`).emit("block:changed", payload);
+    }
 
     return ctx.send({ message: "User blocked successfully.", blocked: true });
   },
@@ -56,12 +80,33 @@ module.exports = createCoreController("api::block.block", ({ strapi }) => ({
     });
 
     if (!existing) {
+      const io = strapi.io;
+      if (io) {
+        const payload = {
+          blockerId: Number(userId),
+          blockedId: Number(targetId),
+          blocked: false,
+        };
+        io.to(`user:${userId}`).emit("block:changed", payload);
+        io.to(`user:${targetId}`).emit("block:changed", payload);
+      }
       return ctx.send({ message: "User is not blocked.", alreadyUnblocked: true });
     }
 
     await strapi.db.query("api::block.block").delete({
       where: { id: existing.id },
     });
+
+    const io = strapi.io;
+    if (io) {
+      const payload = {
+        blockerId: Number(userId),
+        blockedId: Number(targetId),
+        blocked: false,
+      };
+      io.to(`user:${userId}`).emit("block:changed", payload);
+      io.to(`user:${targetId}`).emit("block:changed", payload);
+    }
 
     return ctx.send({ message: "User unblocked successfully.", blocked: false });
   },

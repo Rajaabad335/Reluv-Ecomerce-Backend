@@ -117,6 +117,7 @@ export default {
 
     const conversationUid = 'api::conversation.conversation' as any;
     const messageUid = 'api::message.message' as any;
+    const blockUid = 'api::block.block' as any;
 
     const isParticipant = async (conversationId: number, userId: number): Promise<boolean> => {
       const rows = await strapi.entityService.findMany(conversationUid, {
@@ -153,6 +154,8 @@ export default {
         socket.disconnect(true);
         return;
       }
+
+      socket.join(`user:${userId}`);
 
       socket.on('conversation:join', async ({ conversationId }: any) => {
         const id = Number(conversationId);
@@ -265,6 +268,35 @@ export default {
         
         const allowed = await isParticipant(id, userId);
         if (!allowed) return;
+
+        const conversation = await strapi.entityService.findOne(conversationUid, id, {
+          populate: {
+            buyer: { fields: ['id'] },
+            seller: { fields: ['id'] },
+          },
+        }) as any;
+        const receiverId = conversation?.buyer?.id === userId
+          ? Number(conversation?.seller?.id)
+          : Number(conversation?.buyer?.id);
+
+        if (!Number.isInteger(receiverId) || receiverId <= 0) return;
+
+        const block = await strapi.db.query(blockUid).findOne({
+          where: {
+            $or: [
+              { blocker: { id: userId }, blocked: { id: receiverId } },
+              { blocker: { id: receiverId }, blocked: { id: userId } },
+            ],
+          },
+        });
+        if (block) {
+          socket.emit('message:error', {
+            conversationId: id,
+            clientMessageId,
+            message: 'You cannot send messages to this user.',
+          });
+          return;
+        }
 
         const messageData: any = {
           conversation: id,
