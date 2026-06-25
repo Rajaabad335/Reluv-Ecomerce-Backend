@@ -720,6 +720,7 @@ export interface ApiConversationConversation
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    buyerDeletedAt: Schema.Attribute.DateTime;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -738,6 +739,7 @@ export interface ApiConversationConversation
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    sellerDeletedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

@@ -86,8 +86,21 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const canAccess = await assertParticipant(strapi, conversationId, userId);
       if (!canAccess) return ctx.unauthorized('Not allowed.');
 
+      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
+        populate: {
+          buyer: { fields: ['id'] },
+          seller: { fields: ['id'] },
+        },
+      }) as any;
+      const deletedAt = conversation?.buyer?.id === userId
+        ? conversation?.buyerDeletedAt
+        : conversation?.sellerDeletedAt;
+
       const messages = await strapi.entityService.findMany(messageUid, {
-        filters: { conversation: { id: { $eq: conversationId } } },
+        filters: {
+          conversation: { id: { $eq: conversationId } },
+          ...(deletedAt ? { createdAt: { $gt: deletedAt } } : {}),
+        },
         populate: {
           sender: true,
           attachments: true,

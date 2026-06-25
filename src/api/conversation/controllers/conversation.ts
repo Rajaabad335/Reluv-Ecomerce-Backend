@@ -7,6 +7,58 @@ import { factories } from "@strapi/strapi";
 const conversationUid = "api::conversation.conversation" as any;
 const productUid = "api::product.product" as any;
 
+const getDeletedAtForUser = (
+  conversation: any,
+  userId: number,
+): string | null => {
+  if (conversation?.buyer?.id === userId) {
+    return conversation?.buyerDeletedAt ?? null;
+  }
+  if (conversation?.seller?.id === userId) {
+    return conversation?.sellerDeletedAt ?? null;
+  }
+  return null;
+};
+
+const isConversationVisibleToUser = (
+  conversation: any,
+  userId: number,
+): boolean => {
+  const deletedAt = getDeletedAtForUser(conversation, userId);
+  if (!deletedAt) return true;
+  if (!conversation?.lastMessageAt) return false;
+  return new Date(conversation.lastMessageAt).getTime() >
+    new Date(deletedAt).getTime();
+};
+
+const permanentlyDeleteConversation = async (
+  strapi: any,
+  conversationId: number,
+) => {
+  const messages = await strapi.db.query("api::message.message").findMany({
+    where: { conversation: { id: conversationId } },
+    populate: ["attachments"],
+  });
+
+  for (const message of messages) {
+    for (const file of message.attachments ?? []) {
+      try {
+        await strapi.plugins.upload.services.upload.remove({ id: file.id });
+      } catch (err: any) {
+        strapi.log.warn(`Failed to delete file ${file.id}:`, err.message);
+      }
+    }
+  }
+
+  await strapi.db.query("api::message.message").deleteMany({
+    where: { conversation: { id: conversationId } },
+  });
+
+  await strapi.db.query("api::conversation.conversation").delete({
+    where: { id: conversationId },
+  });
+};
+
 const getUserIdFromCtx = async (
   strapi: any,
   ctx: any,
@@ -84,7 +136,12 @@ export default factories.createCoreController(
               buyer: { fields: ["id"] },
               seller: { fields: ["id"] },
             },
-            fields: ["id"],
+            fields: [
+              "id",
+              "lastMessageAt",
+              "buyerDeletedAt",
+              "sellerDeletedAt",
+            ],
             limit: 200,
           },
         )) as any[];
@@ -92,9 +149,12 @@ export default factories.createCoreController(
         let unreadConversationCount = 0;
 
         for (const conv of conversations) {
+          if (!isConversationVisibleToUser(conv, userId)) continue;
+
           const otherUserId =
             conv.buyer?.id === userId ? conv.seller?.id : conv.buyer?.id;
           if (!otherUserId) continue;
+          const deletedAt = getDeletedAtForUser(conv, userId);
 
           const unreadMessages = (await strapi.entityService.findMany(
             messageUid,
@@ -103,6 +163,9 @@ export default factories.createCoreController(
                 conversation: { id: { $eq: conv.id } },
                 sender: { id: { $eq: otherUserId } },
                 readAt: { $null: true },
+                ...(deletedAt
+                  ? { createdAt: { $gt: deletedAt } }
+                  : {}),
               },
               fields: ["id"],
               limit: 1, // ← we only need to know if ANY exist
@@ -159,10 +222,13 @@ export default factories.createCoreController(
 
         const messageUid = "api::message.message" as any;
         const conversationsWithUnread = await Promise.all(
-          conversations.map(async (conv) => {
+          conversations
+          .filter((conv) => isConversationVisibleToUser(conv, userId))
+          .map(async (conv) => {
             const otherUserId =
               conv.buyer?.id === userId ? conv.seller?.id : conv.buyer?.id;
             if (!otherUserId) return sanitizeConversation(conv, false);
+            const deletedAt = getDeletedAtForUser(conv, userId);
 
             const unreadMessages = (await strapi.entityService.findMany(
               messageUid,
@@ -171,6 +237,9 @@ export default factories.createCoreController(
                   conversation: { id: { $eq: conv.id } },
                   sender: { id: { $eq: otherUserId } },
                   readAt: { $null: true },
+                  ...(deletedAt
+                    ? { createdAt: { $gt: deletedAt } }
+                    : {}),
                 },
                 fields: ["id"],
                 limit: 1,
@@ -294,17 +363,19 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to create conversation.");
       }
     },
-    async deleteConversation(ctx) {
-      const { id } = ctx.params;
-      const userId = ctx.state.user?.id;
+    async deleteConversation(ctx: any) {
+      const conversationId = Number(ctx.params?.id);
+      const userId = Number(ctx.state.user?.id);
 
       if (!userId) return ctx.unauthorized("You must be logged in.");
+      if (!Number.isInteger(conversationId) || conversationId <= 0) {
+        return ctx.badRequest("A valid conversation id is required.");
+      }
 
-      // 1. Verify conversation exists and user is a participant
       const conversation = await strapi.db
         .query("api::conversation.conversation")
         .findOne({
-          where: { id },
+          where: { id: conversationId },
           populate: ["buyer", "seller"],
         });
 
@@ -317,38 +388,28 @@ export default factories.createCoreController(
         return ctx.forbidden("You are not part of this conversation.");
       }
 
-      // 2. Get all messages with attachments
-      const messages = await strapi.db.query("api::message.message").findMany({
-        where: { conversation: { id } },
-        populate: ["attachments"],
-      });
+      const deletionField = isBuyer ? "buyerDeletedAt" : "sellerDeletedAt";
+      const otherDeletionField = isBuyer
+        ? "sellerDeletedAt"
+        : "buyerDeletedAt";
 
-      // 3. Delete all attachment files from storage
-      for (const message of messages) {
-        if (message.attachments?.length > 0) {
-          for (const file of message.attachments) {
-            try {
-              await strapi.plugins.upload.services.upload.remove({
-                id: file.id,
-              });
-            } catch (err) {
-              strapi.log.warn(`Failed to delete file ${file.id}:`, err.message);
-            }
-          }
-        }
+      if (conversation[otherDeletionField]) {
+        await permanentlyDeleteConversation(strapi, conversationId);
+        return ctx.send({
+          message: "Conversation permanently deleted.",
+          permanentlyDeleted: true,
+        });
       }
 
-      // 4. Delete all messages
-      await strapi.db.query("api::message.message").deleteMany({
-        where: { conversation: { id } },
+      await strapi.db.query("api::conversation.conversation").update({
+        where: { id: conversationId },
+        data: { [deletionField]: new Date().toISOString() },
       });
 
-      // 5. Delete the conversation
-      await strapi.db.query("api::conversation.conversation").delete({
-        where: { id },
+      return ctx.send({
+        message: "Conversation deleted for you.",
+        permanentlyDeleted: false,
       });
-
-      return ctx.send({ message: "Conversation deleted successfully." });
     },
   }),
 );

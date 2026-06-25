@@ -33,6 +33,12 @@
     "lastMessageAt": {
       "type": "datetime"
     },
+    "buyerDeletedAt": {
+      "type": "datetime"
+    },
+    "sellerDeletedAt": {
+      "type": "datetime"
+    },
     "messages": {
       "type": "relation",
       "relation": "oneToMany",
