@@ -189,13 +189,22 @@
       ],
       "default": "en"
     },
+    "provinceCode":{
+      "type": "string"
+    },
+     "districtCode":{
+      "type": "string"
+    },
+     "subdistrictCode":{
+      "type": "string"
+    },
+     "postalCode":{
+      "type": "string"
+    },
     "addressLine1": {
       "type": "string"
     },
     "addressLine2": {
-      "type": "string"
-    },
-    "postcode": {
       "type": "string"
     },
     "pickupAddress": {
