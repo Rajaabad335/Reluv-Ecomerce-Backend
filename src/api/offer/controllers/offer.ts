@@ -268,14 +268,32 @@ export default factories.createCoreController(
       const offer = await strapi.entityService.findOne(
         "api::offer.offer" as any,
         offerId,
-        { populate: ["buyer", "product"] }
+        { populate: ["buyer", "seller", "product"] }
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
-      if ((offer as any).buyer?.id !== buyerId)
-        return ctx.forbidden("Not your offer.");
       if ((offer as any).status !== "accepted")
         return ctx.badRequest("Offer is not in accepted state.");
+
+      const order = await strapi.entityService.findOne(
+        "api::order.order" as any,
+        Number(orderId),
+        { populate: ["buyer", "product"] }
+      );
+      if (!order) return ctx.notFound("Order not found.");
+      if (Number((order as any).buyer?.id) !== Number(buyerId))
+        return ctx.forbidden("This order does not belong to you.");
+      if (
+        Number((order as any).product?.id) !== Number((offer as any).product?.id)
+      ) {
+        return ctx.badRequest("The order product does not match this offer.");
+      }
+
+      const isOfferParticipant =
+        Number((offer as any).buyer?.id) === Number(buyerId) ||
+        Number((offer as any).seller?.id) === Number(buyerId);
+      if (!isOfferParticipant)
+        return ctx.forbidden("You are not part of this offer.");
 
       // Check if offer has expired
       const expiresAt = (offer as any).expiresAt;

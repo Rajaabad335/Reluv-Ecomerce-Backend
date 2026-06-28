@@ -1748,6 +1748,43 @@ async UpdateProduct(ctx: any) {
           return ctx.notFound("Product not found.");
         }
 
+        const attributes = Array.isArray(product?.product_attribute_values)
+          ? product.product_attribute_values.map((pav: any) => ({
+              id: pav?.id,
+              code: pav?.category_attribute?.code ?? null,
+              name: pav?.category_attribute?.name ?? null,
+              value:
+                pav?.category_attribute_option?.value ??
+                pav?.valueText ??
+                pav?.valueNumber ??
+                pav?.valueBoolean ??
+                null,
+            }))
+          : [];
+
+        const normalizeAttributeCode = (value: unknown) =>
+          String(value ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+
+        const attributeValue = (...families: string[]) => {
+          const normalizedFamilies = families.map(normalizeAttributeCode);
+          const match = attributes.find((attribute: any) => {
+            const code = normalizeAttributeCode(
+              attribute?.code ?? attribute?.name,
+            );
+            return normalizedFamilies.some(
+              (family) =>
+                code === family ||
+                code.startsWith(`${family}_`) ||
+                code.endsWith(`_${family}`),
+            );
+          });
+          return match?.value ?? null;
+        };
+
         ctx.body = {
           ok: true,
           product: {
@@ -1757,51 +1794,31 @@ async UpdateProduct(ctx: any) {
             isHidden: product.isHidden,
             description: blocksToText(product.description),
             price: product.price,
-            // condition: product?.product_condition?.name ?? product?.condition,
+            condition:
+              product?.product_condition?.name ??
+              attributeValue("condition") ??
+              product?.condition ??
+              null,
             likeCount: Number(product.likeCount ?? 0) || 0,
             createdAt: product.createdAt,
             category: product?.category?.name ?? null,
             categoryId: product?.category?.id ?? null,
-            // brand: product?.brand?.name ?? null,
-            // size: product?.size?.name ?? null,
-            // color: product?.color?.name ?? null,
+            brand:
+              product?.brand?.name ??
+              attributeValue("brand", "brand_name") ??
+              null,
+            size:
+              product?.size?.name ??
+              attributeValue("size", "shoe_size", "clothing_size") ??
+              null,
+            color:
+              product?.color?.name ??
+              attributeValue("colour", "color") ??
+              null,
             images: Array.isArray(product?.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
-            attributes: Array.isArray(product?.product_attribute_values)
-              ? product.product_attribute_values.map((pav: any) => {
-                  const rawName = pav?.category_attribute?.name ?? null;
-                  const rawCode = pav?.category_attribute?.code ?? null;
-
-                  const isBrand = rawName?.toLowerCase().includes("brand");
-                  const isSize = rawName?.toLowerCase().includes("size");
-
-                  const normalizedName = isBrand
-                    ? "brand"
-                    : isSize
-                      ? "size"
-                      : rawName;
-                  const normalizedCode = isBrand
-                    ? "brand"
-                    : isSize
-                      ? "size"
-                      : rawCode;
-
-                  return {
-                    id: pav?.id,
-                    // code: normalizedCode,
-                    // name: normalizedName,
-                                     code: pav?.category_attribute?.code ?? null,
-                  name: pav?.category_attribute?.name ?? null,
-                    value:
-                      pav?.category_attribute_option?.value ??
-                      pav?.valueText ??
-                      pav?.valueNumber ??
-                      pav?.valueBoolean ??
-                      null,
-                  };
-                })
-              : [],
+            attributes,
             user: product?.users_permissions_user,
           },
         };
@@ -2214,8 +2231,6 @@ async UpdateProduct(ctx: any) {
           };
           return;
         }
-        const user = ctx.state.user;
-        const currentUserId = user.id;
         const products = (await strapi.entityService.findMany(
           "api::product.product",
           {
@@ -2439,10 +2454,27 @@ async UpdateProduct(ctx: any) {
           {
             filters: {
               productStatus: { $eq: "active" },
-              users_permissions_user: {
-                id: { $eq: userId },
-                holidayMode: { $ne: true },
-              },
+              $and: [
+                {
+                  users_permissions_user: {
+                    id: { $eq: userId },
+                  },
+                },
+                {
+                  $or: [
+                    {
+                      users_permissions_user: {
+                        holidayMode: { $eq: false },
+                      },
+                    },
+                    {
+                      users_permissions_user: {
+                        holidayMode: { $null: true },
+                      },
+                    },
+                  ],
+                },
+              ],
             },
             fields: [
               "id",
