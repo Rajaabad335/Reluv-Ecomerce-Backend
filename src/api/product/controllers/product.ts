@@ -2215,7 +2215,6 @@ export default factories.createCoreController(
     async searchProducts(ctx: any) {
       try {
         const query = ctx.query || {};
-        console.log(query)
         const searchTerm = String(
           query.q || query.query || query.item || "",
         ).trim();
@@ -2236,27 +2235,73 @@ export default factories.createCoreController(
           };
           return;
         }
-        const products = (await strapi.entityService.findMany(
-          "api::product.product",
-          {
-            filters: {
+        const brandAttributeMatches = (await strapi.db
+          .query("api::product-attribute-value.product-attribute-value")
+          .findMany({
+            where: {
+              $and: [
+                { category_attribute: { code: { $containsi: "brand" } } },
+                {
+                  $or: [
+                    { valueText: { $containsi: searchTerm } },
+                    {
+                      category_attribute_option: {
+                        value: { $containsi: searchTerm },
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            populate: {
+              product: { select: ["id"] },
+              category_attribute: { select: ["code"] },
+            },
+            limit: 200,
+          })) as any[];
+        const dynamicBrandProductIds = Array.from(
+          new Set(
+            brandAttributeMatches
+              .filter((pav: any) => {
+                const code = normalizeCode(pav?.category_attribute?.code);
+                return code === "brand" || code.startsWith("brand_");
+              })
+              .map((pav: any) => Number(pav?.product?.id))
+              .filter((id: number) => Number.isInteger(id) && id > 0),
+          ),
+        );
+        const searchFilters: any[] = [
+          { title: { $containsi: searchTerm } },
+          { brand: { name: { $containsi: searchTerm } } },
+          { category: { name: { $containsi: searchTerm } } },
+          { size: { name: { $containsi: searchTerm } } },
+          { color: { name: { $containsi: searchTerm } } },
+          { product_condition: { name: { $containsi: searchTerm } } },
+        ];
+        if (dynamicBrandProductIds.length > 0) {
+          searchFilters.push({ id: { $in: dynamicBrandProductIds } });
+        }
+        const products = (await strapi.db
+          .query("api::product.product")
+          .findMany({
+            where: {
               $and: [
                 { productStatus: { $eq: "active" } },
                 { users_permissions_user: { holidayMode: { $ne: true } } },
                 {
                   $or: [
-                    { title: { $containsi: searchTerm } },
-                    { brand: { name: { $containsi: searchTerm } } },
-                    { category: { name: { $containsi: searchTerm } } },
-                    { size: { name: { $containsi: searchTerm } } },
-                    { color: { name: { $containsi: searchTerm } } },
-                    { product_condition: { name: { $containsi: searchTerm } } },
+                    { isHidden: { $eq: false } },
+                    { isHidden: { $null: true } },
                   ],
+                },
+                {
+                  $or: searchFilters,
                 },
               ],
             },
-            fields: [
+            select: [
               "id",
+              "documentId",
               "isHidden",
               "title",
               "price",
@@ -2265,25 +2310,24 @@ export default factories.createCoreController(
               "likeCount",
             ],
             populate: {
-              category: { fields: ["name", "slug"] },
-              brand: { fields: ["name", "slug"] },
-              size: { fields: ["name"] },
-              color: { fields: ["name", "slug"] },
-              product_condition: { fields: ["name", "slug"] },
-              images: { fields: ["id", "url"] },
+              category: { select: ["name", "slug"] },
+              brand: { select: ["name", "slug"] },
+              size: { select: ["name"] },
+              color: { select: ["name", "slug"] },
+              product_condition: { select: ["name", "slug"] },
+              images: { select: ["id", "url"] },
               product_attribute_values: {
-                fields: ["valueText", "valueNumber", "valueBoolean"],
+                select: ["valueText", "valueNumber", "valueBoolean"],
                 populate: {
-                  category_attribute: { fields: ["code"] },
-                  category_attribute_option: { fields: ["value"] },
+                  category_attribute: { select: ["code"] },
+                  category_attribute_option: { select: ["value"] },
                 },
               },
             },
-            sort: { createdAt: "desc" as const },
-            start: 0,
+            orderBy: { createdAt: "desc" as const },
+            offset: 0,
             limit: pageSize + 1,
-          },
-        )) as any[];
+          })) as any[];
 
         const hasMore = products.length > pageSize;
         const pageSlice = hasMore ? products.slice(0, pageSize) : products;
@@ -2318,7 +2362,14 @@ export default factories.createCoreController(
               category: product?.category?.name ?? null,
               subCategory: null,
               item: product?.title ?? null,
-              brand: product?.brand?.name ?? null,
+              brand:
+                product?.brand?.name ??
+                dynamicByCode.get("brand") ??
+                dynamicByCode.get("brand_name") ??
+                Array.from(dynamicByCode.entries()).find(([code]) =>
+                  code.startsWith("brand_"),
+                )?.[1] ??
+                null,
               size: product?.size?.name ?? null,
               color:
                 product?.color?.name ??
