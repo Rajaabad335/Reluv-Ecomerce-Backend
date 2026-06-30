@@ -8,7 +8,7 @@ export default {
         auth: false,
       },
     },
-     {
+    {
       method: "POST",
       path: "/products/update-product",
       handler: "product.UpdateProduct",
@@ -49,7 +49,7 @@ export default {
       },
     },
     {
-       method: "GET",
+      method: "GET",
       path: "/products/searchMembers",
       handler: "product.searchMembers",
       config: {
@@ -88,29 +88,35 @@ export default {
       handler: "product.deleteMyProduct",
       // config: { auth: { scope: ["delete"] } },
     },
-     {
-      method: 'PUT',
-      path: '/products/:id/favorites',
-      handler: 'product.updateFavorites',
+    {
+      method: "PUT",
+      path: "/products/:id/favorites",
+      handler: "product.updateFavorites",
       config: {
-        auth: false, 
+        auth: false,
       },
     },
-     {
-      method: 'POST',
-      path: '/products/delete',
-      handler: 'product.deleteProduct',
+    {
+      method: "POST",
+      path: "/products/delete",
+      handler: "product.deleteProduct",
       config: {
-        auth: false, 
+        auth: false,
       },
     },
-     {
-      method: 'PUT',
-      path: '/products/hide-unhide',
-      handler: 'product.toggleHide',
+    {
+      method: "PUT",
+      path: "/products/hide-unhide",
+      handler: "product.toggleHide",
       config: {
-        auth: false, 
+        auth: false,
       },
+    },
+    {
+      method: "GET",
+      path: "/products/notifications-data",
+      handler: "product.getNotifications",
+      config: { auth: false},
     },
   ],
 };

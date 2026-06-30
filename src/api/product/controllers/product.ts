@@ -2754,128 +2754,170 @@ export default factories.createCoreController(
         );
       }
     },
-    async getDashboardData(ctx: any) {
-      try {
-        // ── 1. Users & Sellers ──────────────────────────────────────────
-        const allUsers = await strapi.entityService.findMany(
-          "plugin::users-permissions.user",
-          {
-            populate: { products: true },
-          },
-        );
+   async getDashboardData(ctx: any) {
+  try {
+    // ── 1. Users & Sellers ──────────────────────────────────────────
+    const allUsers = await strapi.entityService.findMany(
+      "plugin::users-permissions.user",
+      { populate: { products: true } }
+    );
 
-        const totalUsers = allUsers.length;
-        const totalSellers = allUsers.filter(
-          (user: any) => user?.products?.length > 0,
-        ).length;
+    const totalUsers = allUsers.length;
+    const totalSellers = allUsers.filter(
+      (user: any) => user?.products?.length > 0
+    ).length;
 
-        // ── 2. Orders ───────────────────────────────────────────────────
-        const allOrders = await strapi.entityService.findMany(
-          "api::order.order",
-          {
-            populate: {
-              buyer: true, // relation → users-permissions.user
-              seller: true, // relation → users-permissions.user
-              product: true, // relation → api::product.product
-            },
-            sort: { createdAt: "desc" },
-          },
-        );
-
-        let totalRevenue = 0;
-        let pendingPayout = 0;
-        let activeDisputes = 0;
-
-        allOrders.forEach((order: any) => {
-          totalRevenue += order.totalAmount ?? 0;
-          if (order.paymentStatus === "pending")
-            pendingPayout += order.totalAmount ?? 0;
-          if (order.disputeStatus === "active") activeDisputes += 1;
-        });
-
-        // ── 3. Pending Payouts ──────────────────────────────────────────
-        const pendingPayoutOrders = await strapi.entityService.findMany(
-          "api::order.order",
-          {
-            filters: { paymentStatus: { $eq: "pending" } },
-            populate: { seller: true },
-            sort: { createdAt: "desc" },
-            limit: 5,
-          },
-        );
-
-        // Group pending payouts by seller
-        const payoutMap = new Map<string, { name: string; amount: number }>();
-        pendingPayoutOrders.forEach((order: any) => {
-          const sellerName: string =
-            order?.seller?.username ?? order?.seller?.email ?? "Unknown Seller";
-          const existing = payoutMap.get(sellerName);
-          if (existing) {
-            existing.amount += order.totalAmount ?? 0;
-          } else {
-            payoutMap.set(sellerName, {
-              name: sellerName,
-              amount: order.totalAmount ?? 0,
-            });
-          }
-        });
-
-        const payouts = Array.from(payoutMap.values()).map((p) => ({
-          name: p.name,
-          amount: `€${p.amount.toLocaleString()}`,
-        }));
-
-        // ── 4. Shape recent orders for the table ────────────────────────
-        const recentOrders = allOrders.slice(0, 10).map((order: any) => ({
-          id: `${order.id}`,
-          buyer: order?.buyer?.username ?? order?.buyer?.email ?? "Unknown",
-          amount: `€${(order.totalAmount ?? 0).toLocaleString()}`,
-          status: order.paymentStatus ?? "Unknown",
-        }));
-
-        // ── 5. Stats cards ──────────────────────────────────────────────
-        const stats = [
-          {
-            label: "Total Users",
-            value: totalUsers.toLocaleString(),
-            color: "text-[#007782]",
-          },
-          {
-            label: "Total Sellers",
-            value: totalSellers.toLocaleString(),
-            color: "text-[#1156be]",
-          },
-          {
-            label: "Total Orders",
-            value: allOrders.length.toLocaleString(),
-            color: "text-slate-800",
-          },
-          {
-            label: "Pending Payouts",
-            value: `€${pendingPayout.toLocaleString()}`,
-            color: "text-green-600",
-          },
-          {
-            label: "Active Disputes",
-            value: activeDisputes.toLocaleString(),
-            color: "text-slate-800",
-          },
-          {
-            label: "Revenue",
-            value: `€${totalRevenue.toLocaleString()}`,
-            color: "text-[#007782]",
-          },
-        ];
-
-        ctx.body = {
-          ok: true,
-          data: { stats, orders: recentOrders, payouts },
-        };
-      } catch (error) {
-        strapi.log.error(error);
-        return ctx.internalServerError("Failed to load dashboard data.");
+    // ── 2. Orders ───────────────────────────────────────────────────
+    const allOrders = await strapi.entityService.findMany(
+      "api::order.order",
+      {
+        populate: { buyer: true, seller: true, product: true },
+        sort: { createdAt: "desc" },
       }
-    },
+    );
+
+    let totalRevenue = 0;
+    let pendingPayout = 0;
+
+    allOrders.forEach((order: any) => {
+      totalRevenue += order.totalAmount ?? 0;
+      if (order.paymentStatus === "pending")
+        pendingPayout += order.totalAmount ?? 0;
+    });
+
+    // ── 3. Active Disputes ──────────────────────────────────────────
+    const activeDisputeRecords = await strapi.entityService.findMany(
+      "api::dispute.dispute",
+      {
+        filters: { status: { $in: ["OPEN", "UNDER_REVIEW"] } },
+        populate: { order: true, raisedBy: true, recievedBy: true },
+        sort: { createdAt: "desc" },
+      }
+    );
+
+    const activeDisputes = activeDisputeRecords.length;
+
+    // ── 4. Pending Payouts (grouped by seller, top 5) ───────────────
+    const pendingPayoutOrders = await strapi.entityService.findMany(
+      "api::order.order",
+      {
+        filters: { paymentStatus: { $eq: "pending" } },
+        populate: { seller: true },
+        sort: { createdAt: "desc" },
+      }
+    );
+
+    const payoutMap = new Map<string, { name: string; amount: number; orderCount: number }>();
+    pendingPayoutOrders.forEach((order: any) => {
+      const sellerName: string =
+        order?.seller?.name ??
+        order?.seller?.username ??
+        order?.seller?.email ??
+        "Unknown Seller";
+      const existing = payoutMap.get(sellerName);
+      if (existing) {
+        existing.amount += order.totalAmount ?? 0;
+        existing.orderCount += 1;
+      } else {
+        payoutMap.set(sellerName, {
+          name: sellerName,
+          amount: order.totalAmount ?? 0,
+          orderCount: 1,
+        });
+      }
+    });
+
+    const payouts = Array.from(payoutMap.values())
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 5)
+      .map((p) => ({
+        name: p.name,
+        amount: `€${p.amount.toLocaleString()}`,
+        orderCount: p.orderCount,
+      }));
+
+    // ── 5. Reported Items (active disputes detail for the card) ─────
+    const reportedItems = activeDisputeRecords.slice(0, 5).map((d: any) => ({
+      id: d.id,
+      reason: d.reason ?? "Unknown",
+      status: d.status ?? "OPEN",
+      raisedBy:
+        d?.raisedBy?.name ??
+        d?.raisedBy?.username ??
+        d?.raisedBy?.email ??
+        "Unknown",
+      orderId: d?.order?.id ?? null,
+    }));
+
+    // ── 6. Recent Orders ────────────────────────────────────────────
+    const recentOrders = allOrders.slice(0, 10).map((order: any) => ({
+      id: `${order.id}`,
+      buyer:
+        order?.buyer?.name ??
+        order?.buyer?.username ??
+        order?.buyer?.email ??
+        "Unknown",
+      amount: `€${(order.totalAmount ?? 0).toLocaleString()}`,
+      status: order.paymentStatus ?? "Unknown",
+    }));
+
+    // ── 7. Stats ────────────────────────────────────────────────────
+    const stats = [
+      { label: "Total Users",     value: totalUsers.toLocaleString(),         color: "text-[#cb6f4d]"  },
+      { label: "Total Sellers",   value: totalSellers.toLocaleString(),       color: "text-[#007782]"  },
+      { label: "Total Orders",    value: allOrders.length.toLocaleString(),   color: "text-[#cb6f4d]"  },
+      { label: "Pending Payouts", value: `${pendingPayout.toLocaleString()}`, color: "text-[#007782]" },
+      { label: "Active Disputes", value: activeDisputes.toLocaleString(),     color: "text-red-500"    },
+      { label: "Revenue",         value: `${totalRevenue.toLocaleString()}`, color: "text-[#007782]"  },
+    ];
+
+    ctx.body = {
+      ok: true,
+      data: { stats, orders: recentOrders, payouts, reportedItems },
+    };
+  } catch (error) {
+    strapi.log.error(error);
+    return ctx.internalServerError("Failed to load dashboard data.");
+  }
+},
+
+// ── Separate notifications endpoint ────────────────────────────────────────
+async getNotifications(ctx: any) {
+  try {
+    const rawNotifications = await strapi.entityService.findMany(
+      "api::notification.notification",
+      {
+        populate: { recipient: true },
+        sort: { createdAt: "desc" },
+        limit: 30,
+      }
+    );
+
+    const notifications = rawNotifications.map((n: any) => {
+      const recipientName =
+        n?.recipient?.name ??
+        n?.recipient?.username ??
+        n?.recipient?.email ??
+        "Someone";
+
+      return {
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        description: strapi.config.index.buildNotificationDescription(n.type, recipientName, n.body),
+        read: n.read,
+        link: n.link ?? null,
+        recipient: recipientName,
+        createdAt: n.createdAt,
+      };
+    });
+
+    ctx.body = { ok: true, data: { notifications } };
+  } catch (error) {
+    strapi.log.error(error);
+    return ctx.internalServerError("Failed to load notifications.");
+  }
+},
     async getAllUsers(ctx: any) {
       try {
         const query = ctx.query || {};

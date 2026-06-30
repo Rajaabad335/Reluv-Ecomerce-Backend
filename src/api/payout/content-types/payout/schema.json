@@ -1,0 +1,92 @@
+{
+  "kind": "collectionType",
+  "collectionName": "payouts",
+  "info": {
+    "singularName": "payout",
+    "pluralName": "payouts",
+    "displayName": "payout"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "seller": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "order": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::order.order"
+    },
+    "grossAmount": {
+      "type": "decimal",
+      "required": true,
+      "min": 0,
+      "default": 0
+    },
+    "commissionRate": {
+      "type": "decimal",
+      "required": true,
+      "min": 0,
+      "max": 100,
+      "default": 10
+    },
+    "commissionAmount": {
+      "type": "decimal",
+      "required": true,
+      "min": 0,
+      "default": 0
+    },
+    "netAmount": {
+      "type": "decimal",
+      "required": true,
+      "min": 0,
+      "default": 0
+    },
+    "currency": {
+      "type": "string",
+      "required": true,
+      "default": "THB",
+      "maxLength": 3
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": [
+        "pending",
+        "processing",
+        "success",
+        "failed",
+        "refused"
+      ],
+      "required": true,
+      "default": "pending"
+    },
+    "stripeTransferId": {
+      "type": "string",
+      "private": true
+    },
+    "stripePayoutId": {
+      "type": "string",
+      "private": true
+    },
+    "bankAccountLast4": {
+      "type": "string",
+      "maxLength": 4
+    },
+    "scheduledAt": {
+      "type": "datetime"
+    },
+    "processedAt": {
+      "type": "datetime"
+    },
+    "failureReason": {
+      "type": "text"
+    },
+    "notes": {
+      "type": "text"
+    }
+  }
+}

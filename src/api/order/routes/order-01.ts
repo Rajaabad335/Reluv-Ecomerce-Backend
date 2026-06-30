@@ -23,6 +23,22 @@ export default {
         auth: false,
       },
     },
+    {
+      method: "PUT",
+      path: "/orders/:id/update-status",
+      handler: "order.updateStatus",
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: "DELETE",
+      path: "/orders/:id/delete",
+      handler: "order.deleteOrder",
+      config: {
+        auth: false,
+      },
+    },
     
   ],
 };

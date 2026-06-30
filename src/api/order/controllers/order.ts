@@ -131,6 +131,34 @@ export default factories.createCoreController(
         );
       }
     },
+    async updateStatus(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const { orderStatus, paymentStatus } = ctx.request.body;
+
+        const data: any = {};
+        if (orderStatus !== undefined)   data.orderStatus = orderStatus;
+        if (paymentStatus !== undefined) data.paymentStatus = paymentStatus;
+
+        const updated = await strapi.entityService.update("api::order.order", id, { data });
+        return ctx.send({ data: updated });
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to update order status.");
+      }
+    },
+
+    async deleteOrder(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        await strapi.entityService.delete("api::order.order", id);
+        return ctx.send({ ok: true });
+      } catch (error) {
+        strapi.log.error(error);
+        return ctx.internalServerError("Failed to delete order.");
+      }
+    },
+
     async getAllOrders(ctx: any) {
       try {
         const allOrders = await strapi.entityService.findMany(
@@ -148,6 +176,7 @@ export default factories.createCoreController(
         // ✅ Transform data to match frontend UI
         const formattedOrders = allOrders.map((order: any) => ({
           id: order.id,
+          documentId: order.documentId,
 
           buyer: {
             name: order.buyer?.username || "N/A",
@@ -189,6 +218,9 @@ export default factories.createCoreController(
 
           tracking: order.trackingNumber || "N/A",
           carrier: order.carrier || "N/A",
+          paymentStatus: order.paymentStatus || "pending",
+          orderStatus: order.orderStatus || "placed",
+          createdAt: order.createdAt,
         }));
 
         ctx.body = {
