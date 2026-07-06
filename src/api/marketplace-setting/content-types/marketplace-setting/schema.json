@@ -28,19 +28,8 @@
     "currency": {
       "type": "string",
       "required": true,
-      "default": "THB",
+      "default": "TBH",
       "maxLength": 3
-    },
-    "stripePublishableKey": {
-      "type": "string"
-    },
-    "stripeSecretKey": {
-      "type": "string",
-      "private": true
-    },
-    "stripeWebhookSecret": {
-      "type": "string",
-      "private": true
     },
     "autoPayoutEnabled": {
       "type": "boolean",

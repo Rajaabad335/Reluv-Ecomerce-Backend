@@ -2832,7 +2832,7 @@ export default factories.createCoreController(
       .slice(0, 5)
       .map((p) => ({
         name: p.name,
-        amount: `€${p.amount.toLocaleString()}`,
+        amount: `TBH${p.amount.toLocaleString()}`,
         orderCount: p.orderCount,
       }));
 
@@ -2857,7 +2857,7 @@ export default factories.createCoreController(
         order?.buyer?.username ??
         order?.buyer?.email ??
         "Unknown",
-      amount: `€${(order.totalAmount ?? 0).toLocaleString()}`,
+      amount: `TBH${(order.totalAmount ?? 0).toLocaleString()}`,
       status: order.paymentStatus ?? "Unknown",
     }));
 

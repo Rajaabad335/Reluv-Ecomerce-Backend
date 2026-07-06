@@ -188,7 +188,7 @@ export default factories.createCoreController(
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${order.seller?.username || "seller"}`,
           },
 
-          amount: order.totalAmount ? `€${order.totalAmount}` : "€0.00",
+          amount: order.totalAmount ? `TBH${order.totalAmount}` : "TBH0.00",
 
           item: order.product?.title || "Product",
           itemImage: order.product?.image || "https://via.placeholder.com/300",
