@@ -2789,7 +2789,6 @@ export default factories.createCoreController(
     const activeDisputeRecords = await strapi.entityService.findMany(
       "api::dispute.dispute",
       {
-        filters: { status: { $in: ["OPEN", "UNDER_REVIEW"] } },
         populate: { order: true, raisedBy: true, recievedBy: true },
         sort: { createdAt: "desc" },
       }
@@ -2867,7 +2866,7 @@ export default factories.createCoreController(
       { label: "Total Sellers",   value: totalSellers.toLocaleString(),       color: "text-[#007782]"  },
       { label: "Total Orders",    value: allOrders.length.toLocaleString(),   color: "text-[#cb6f4d]"  },
       { label: "Pending Payouts", value: `${pendingPayout.toLocaleString()}`, color: "text-[#007782]" },
-      { label: "Active Disputes", value: activeDisputes.toLocaleString(),     color: "text-red-500"    },
+      { label: "Total Disputes", value: activeDisputes.toLocaleString(),     color: "text-red-500"    },
       { label: "Revenue",         value: `${totalRevenue.toLocaleString()}`, color: "text-[#007782]"  },
     ];
 
