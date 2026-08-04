@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "luxury_brand_configs",
+  "info": {
+    "singularName": "luxury-brand-config",
+    "pluralName": "luxury-brand-configs",
+    "displayName": "Luxury Brand Config",
+    "description": "Configurable list of brands that require manual authenticity-evidence verification before publishing."
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "brand": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::brand.brand",
+      "required": true
+    },
+    "isActive": { "type": "boolean", "default": true, "required": true },
+    "requiredEvidenceTypes": {
+      "type": "json",
+      "default": ["receipt", "authenticityCard", "serialNumber", "logoCloseUp"]
+    },
+    "internalNotes": { "type": "text" }
+  }
+}

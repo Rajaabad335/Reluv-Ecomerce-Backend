@@ -1,0 +1,31 @@
+{
+  "kind": "collectionType",
+  "collectionName": "ai_request_logs",
+  "info": {
+    "singularName": "ai-request-log",
+    "pluralName": "ai-request-logs",
+    "displayName": "AI Request Log",
+    "description": "Audit trail of every AI listing-analysis request: used for rate limiting, failure logging, and safely re-scoping a suggestion to a different category without re-calling Gemini."
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "users_permissions_user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "imageIds": { "type": "json" },
+    "categoryId": { "type": "integer" },
+    "status": {
+      "type": "enumeration",
+      "enum": ["success", "failed"],
+      "required": true
+    },
+    "failureReason": { "type": "text" },
+    "modelVersion": { "type": "string" },
+    "rawValidatedResponse": { "type": "json" },
+    "ipAddress": { "type": "string" },
+    "durationMs": { "type": "integer" }
+  }
+}

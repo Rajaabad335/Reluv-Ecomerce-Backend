@@ -1,0 +1,68 @@
+{
+  "kind": "collectionType",
+  "collectionName": "listing_verifications",
+  "info": {
+    "singularName": "listing-verification",
+    "pluralName": "listing-verifications",
+    "displayName": "Listing Verification",
+    "description": "Luxury-item verification record: AI-detected evidence + the admin's final decision."
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "product": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::product.product",
+      "inversedBy": "listing_verification",
+      "required": true
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["pending", "approved", "rejected", "more_evidence_requested"],
+      "default": "pending",
+      "required": true
+    },
+    "detectedBrandName": { "type": "string" },
+    "detectedBrandConfidence": { "type": "integer" },
+    "luxury_brand_config": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::luxury-brand-config.luxury-brand-config"
+    },
+    "requiredEvidenceTypesSnapshot": { "type": "json" },
+    "receiptDetected": { "type": "boolean", "default": false },
+    "invoiceDetected": { "type": "boolean", "default": false },
+    "authenticityCardDetected": { "type": "boolean", "default": false },
+    "warrantyCardDetected": { "type": "boolean", "default": false },
+    "serialNumberDetected": { "type": "boolean", "default": false },
+    "qrCodeDetected": { "type": "boolean", "default": false },
+    "nfcTagDetected": { "type": "boolean", "default": false },
+    "logoCloseUpDetected": { "type": "boolean", "default": false },
+    "hardwarePhotoDetected": { "type": "boolean", "default": false },
+    "stitchingPhotoDetected": { "type": "boolean", "default": false },
+    "careLabelDetected": { "type": "boolean", "default": false },
+    "materialLabelDetected": { "type": "boolean", "default": false },
+    "missingEvidence": { "type": "json" },
+    "aiNotes": { "type": "text" },
+    "receiptImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "invoiceImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "authenticityCardImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "warrantyCardImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "serialNumberImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "qrCodeImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "nfcTagImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "logoCloseUpImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "hardwarePhotoImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "stitchingPhotoImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "careLabelImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "materialLabelImages": { "type": "media", "multiple": true, "allowedTypes": ["images"] },
+    "adminNotes": { "type": "text" },
+    "reviewedBy": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "reviewedAt": { "type": "datetime" }
+  }
+}
