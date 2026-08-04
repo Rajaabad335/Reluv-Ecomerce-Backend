@@ -45,7 +45,8 @@
         "active",
         "reserved",
         "sold",
-        "hidden"
+        "hidden",
+        "pending_verification"
       ]
     },
     "price": {
@@ -122,6 +123,21 @@
     "isHidden": {
       "type": "boolean",
       "default": false
+    },
+    "listing_verification": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::listing-verification.listing-verification",
+      "mappedBy": "product"
+    },
+    "isVerifiedLuxury": {
+      "type": "boolean",
+      "default": false
+    },
+    "ai_request_log": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::ai-request-log.ai-request-log"
     }
   }
 }

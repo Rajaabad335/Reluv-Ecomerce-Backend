@@ -96,7 +96,7 @@ logs
 results
 node_modules
 .node_history
-
+/node_modules,/bower_components,**/.code-search
 ############################
 # Package managers
 ############################
