@@ -1711,8 +1711,8 @@ export default factories.createCoreController(
             filters: {
               id: { $eq: id },
               $or: [
-                { users_permissions_user: { holidayMode: { $eq: false } } },
-                { users_permissions_user: { holidayMode: { $eq: null } } },
+                { users_permissions_user: { holidayMode: { $ne: true } } },
+                { users_permissions_user: { holidayMode: { $null: true } } }
               ],
             },
             fields: [

@@ -430,6 +430,48 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiAiRequestLogAiRequestLog
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'ai_request_logs';
+  info: {
+    description: 'Audit trail of every AI listing-analysis request: used for rate limiting, failure logging, and safely re-scoping a suggestion to a different category without re-calling Gemini.';
+    displayName: 'AI Request Log';
+    pluralName: 'ai-request-logs';
+    singularName: 'ai-request-log';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    categoryId: Schema.Attribute.Integer;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    durationMs: Schema.Attribute.Integer;
+    failureReason: Schema.Attribute.Text;
+    imageIds: Schema.Attribute.JSON;
+    ipAddress: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::ai-request-log.ai-request-log'
+    > &
+      Schema.Attribute.Private;
+    modelVersion: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    rawValidatedResponse: Schema.Attribute.JSON;
+    status: Schema.Attribute.Enumeration<['success', 'failed']> &
+      Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    users_permissions_user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiBlockBlock extends Struct.CollectionTypeSchema {
   collectionName: 'blocks';
   info: {
@@ -786,6 +828,132 @@ export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
       ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED', 'CLOSED']
     > &
       Schema.Attribute.DefaultTo<'OPEN'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiListingVerificationListingVerification
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'listing_verifications';
+  info: {
+    description: "Luxury-item verification record: AI-detected evidence + the admin's final decision.";
+    displayName: 'Listing Verification';
+    pluralName: 'listing-verifications';
+    singularName: 'listing-verification';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    adminNotes: Schema.Attribute.Text;
+    aiNotes: Schema.Attribute.Text;
+    authenticityCardDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    authenticityCardImages: Schema.Attribute.Media<'images', true>;
+    careLabelDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    careLabelImages: Schema.Attribute.Media<'images', true>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    detectedBrandConfidence: Schema.Attribute.Integer;
+    detectedBrandName: Schema.Attribute.String;
+    hardwarePhotoDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    hardwarePhotoImages: Schema.Attribute.Media<'images', true>;
+    invoiceDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    invoiceImages: Schema.Attribute.Media<'images', true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::listing-verification.listing-verification'
+    > &
+      Schema.Attribute.Private;
+    logoCloseUpDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    logoCloseUpImages: Schema.Attribute.Media<'images', true>;
+    luxury_brand_config: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::luxury-brand-config.luxury-brand-config'
+    >;
+    materialLabelDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    materialLabelImages: Schema.Attribute.Media<'images', true>;
+    missingEvidence: Schema.Attribute.JSON;
+    nfcTagDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    nfcTagImages: Schema.Attribute.Media<'images', true>;
+    product: Schema.Attribute.Relation<'oneToOne', 'api::product.product'> &
+      Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    qrCodeDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    qrCodeImages: Schema.Attribute.Media<'images', true>;
+    receiptDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    receiptImages: Schema.Attribute.Media<'images', true>;
+    requiredEvidenceTypesSnapshot: Schema.Attribute.JSON;
+    reviewedAt: Schema.Attribute.DateTime;
+    reviewedBy: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    serialNumberDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    serialNumberImages: Schema.Attribute.Media<'images', true>;
+    status: Schema.Attribute.Enumeration<
+      ['pending', 'approved', 'rejected', 'more_evidence_requested']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    stitchingPhotoDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    stitchingPhotoImages: Schema.Attribute.Media<'images', true>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    warrantyCardDetected: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
+    warrantyCardImages: Schema.Attribute.Media<'images', true>;
+  };
+}
+
+export interface ApiLuxuryBrandConfigLuxuryBrandConfig
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'luxury_brand_configs';
+  info: {
+    description: 'Configurable list of brands that require manual authenticity-evidence verification before publishing.';
+    displayName: 'Luxury Brand Config';
+    pluralName: 'luxury-brand-configs';
+    singularName: 'luxury-brand-config';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    brand: Schema.Attribute.Relation<'oneToOne', 'api::brand.brand'> &
+      Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    internalNotes: Schema.Attribute.Text;
+    isActive: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::luxury-brand-config.luxury-brand-config'
+    > &
+      Schema.Attribute.Private;
+    publishedAt: Schema.Attribute.DateTime;
+    requiredEvidenceTypes: Schema.Attribute.JSON &
+      Schema.Attribute.DefaultTo<
+        ['receipt', 'authenticityCard', 'serialNumber', 'logoCloseUp']
+      >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1227,6 +1395,10 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     draftAndPublish: false;
   };
   attributes: {
+    ai_request_log: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::ai-request-log.ai-request-log'
+    >;
     brand: Schema.Attribute.Relation<'manyToOne', 'api::brand.brand'>;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
     city: Schema.Attribute.String;
@@ -1246,7 +1418,13 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
     description: Schema.Attribute.Blocks & Schema.Attribute.Required;
     images: Schema.Attribute.Media<'images', true>;
     isHidden: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    isVerifiedLuxury: Schema.Attribute.Boolean &
+      Schema.Attribute.DefaultTo<false>;
     likeCount: Schema.Attribute.Integer;
+    listing_verification: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::listing-verification.listing-verification'
+    >;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1264,7 +1442,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       'api::condition.condition'
     >;
     productStatus: Schema.Attribute.Enumeration<
-      ['draft', 'active', 'reserved', 'sold', 'hidden']
+      ['draft', 'active', 'reserved', 'sold', 'hidden', 'pending_verification']
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'active'>;
@@ -1950,6 +2128,7 @@ declare module '@strapi/strapi' {
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::ai-request-log.ai-request-log': ApiAiRequestLogAiRequestLog;
       'api::block.block': ApiBlockBlock;
       'api::brand.brand': ApiBrandBrand;
       'api::category-attribute-option.category-attribute-option': ApiCategoryAttributeOptionCategoryAttributeOption;
@@ -1959,6 +2138,8 @@ declare module '@strapi/strapi' {
       'api::condition.condition': ApiConditionCondition;
       'api::conversation.conversation': ApiConversationConversation;
       'api::dispute.dispute': ApiDisputeDispute;
+      'api::listing-verification.listing-verification': ApiListingVerificationListingVerification;
+      'api::luxury-brand-config.luxury-brand-config': ApiLuxuryBrandConfigLuxuryBrandConfig;
       'api::marketplace-setting.marketplace-setting': ApiMarketplaceSettingMarketplaceSetting;
       'api::material.material': ApiMaterialMaterial;
       'api::message.message': ApiMessageMessage;
