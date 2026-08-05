@@ -11,7 +11,7 @@ export default {
     const productId = event.result.id;
 
     try {
-      const product = (await strapi.entityService.findOne("api::product.product", productId, {
+      const product = (await strapi.entityService.findOne("api::product.product" as any, productId, {
         populate: { brand: { fields: ["id"] } },
       })) as unknown as { brand?: { id: number } | null } | null;
 
@@ -19,7 +19,7 @@ export default {
       if (!brandId) return;
 
       const configRows = (await strapi.entityService.findMany(
-        "api::luxury-brand-config.luxury-brand-config",
+        "api::luxury-brand-config.luxury-brand-config" as any,
         {
           filters: { brand: { id: { $eq: brandId } }, isActive: { $eq: true } },
           fields: ["id", "requiredEvidenceTypes"],
@@ -30,11 +30,11 @@ export default {
       const config = configRows[0];
       if (!config) return;
 
-      await strapi.entityService.update("api::product.product", productId, {
-        data: { productStatus: "pending_verification" },
+      await strapi.entityService.update("api::product.product" as any, productId, {
+        data: { productStatus: "draft" },
       });
 
-      await strapi.entityService.create("api::listing-verification.listing-verification", {
+      await strapi.entityService.create("api::listing-verification.listing-verification" as any, {
         data: {
           product: productId,
           status: "pending",

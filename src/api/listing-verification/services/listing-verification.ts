@@ -21,7 +21,7 @@ export class NotVerificationOwnerError extends Error {}
 
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   async submitEvidence(userId: number, payload: SubmitLuxuryEvidenceRequest) {
-    const product = (await strapi.entityService.findOne("api::product.product", payload.productId, {
+    const product = (await strapi.entityService.findOne("api::product.product" as any, payload.productId, {
       populate: { users_permissions_user: { fields: ["id"] }, listing_verification: { fields: ["id"] } },
     })) as unknown as { users_permissions_user?: { id: number } | null; listing_verification?: { id: number } | null } | null;
 
@@ -31,7 +31,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     const verificationId = product.listing_verification.id;
     const existing = (await strapi.entityService.findOne(
-      "api::listing-verification.listing-verification",
+      "api::listing-verification.listing-verification" as any,
       verificationId,
       { populate: Object.values(EVIDENCE_FIELD_MAP).reduce((acc, field) => ({ ...acc, [field]: { fields: ["id"] } }), {}) },
     )) as unknown as Record<string, Array<{ id: number }> | undefined>;
@@ -44,12 +44,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       updateData[schemaField] = Array.from(new Set([...existingIds, ...incoming]));
     }
 
-    return strapi.entityService.update("api::listing-verification.listing-verification", verificationId, { data: updateData });
+    return strapi.entityService.update("api::listing-verification.listing-verification" as any, verificationId, { data: updateData });
   },
 
   async applyDecision(verificationId: number, adminUserId: number, decision: VerificationDecisionRequest) {
     const verification = (await strapi.entityService.findOne(
-      "api::listing-verification.listing-verification",
+      "api::listing-verification.listing-verification" as any,
       verificationId,
       { populate: { product: { fields: ["id"] } } },
     )) as unknown as { product?: { id: number } | null } | null;
@@ -59,7 +59,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     const statusMap = { approve: "approved", reject: "rejected", request_more_evidence: "more_evidence_requested" } as const;
     const newStatus = statusMap[decision.decision];
 
-    await strapi.entityService.update("api::listing-verification.listing-verification", verificationId, {
+    await strapi.entityService.update("api::listing-verification.listing-verification" as any, verificationId, {
       data: { status: newStatus, adminNotes: decision.adminNotes, reviewedBy: adminUserId, reviewedAt: new Date().toISOString() },
     });
 

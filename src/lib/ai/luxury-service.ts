@@ -66,7 +66,7 @@ export class LuxuryService {
       return { isLuxury: false, matchedBrandConfigId: null, matchedBrandName: null, evidence, missingEvidence: [], aiNotes: luxurySignal.notes };
     }
 
-    const configRows = (await this.strapi.entityService.findMany("api::luxury-brand-config.luxury-brand-config", {
+      const configRows = (await this.strapi.entityService.findMany("api::luxury-brand-config.luxury-brand-config" as any, {
       filters: { brand: { id: { $eq: resolvedBrand.resolvedId } }, isActive: { $eq: true } },
       populate: { brand: { fields: ["id", "name"] } },
       limit: 1,

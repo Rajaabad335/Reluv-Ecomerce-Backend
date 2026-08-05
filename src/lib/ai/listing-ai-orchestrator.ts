@@ -82,7 +82,7 @@ export class ListingAiOrchestrator {
   async rescope(params: { requestId: string; categoryId: number }): Promise<OrchestratorResult> {
     try {
       const logRow = await this.strapi.entityService.findOne(
-        "api::ai-request-log.ai-request-log",
+        "api::ai-request-log.ai-request-log" as any,
         Number(params.requestId),
         { fields: ["id", "status", "rawValidatedResponse", "modelVersion"] },
       );
@@ -147,27 +147,27 @@ export class ListingAiOrchestrator {
 
   private async buildPromptContext(categoryId: number | null): Promise<PromptContext> {
     const [categories, brands, materials, colors, conditions] = await Promise.all([
-      this.strapi.entityService.findMany("api::category.category", {
+      this.strapi.entityService.findMany("api::category.category" as any, {
         fields: ["name"],
         filters: categoryId ? {} : { categories: { id: { $null: true } } },
         limit: 200,
       }),
-      this.strapi.entityService.findMany("api::brand.brand", {
+      this.strapi.entityService.findMany("api::brand.brand" as any, {
         fields: ["name"],
         filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
         limit: 200,
       }),
-      this.strapi.entityService.findMany("api::material.material", {
+      this.strapi.entityService.findMany("api::material.material" as any, {
         fields: ["name"],
         filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
         limit: 100,
       }),
-      this.strapi.entityService.findMany("api::color.color", {
+      this.strapi.entityService.findMany("api::color.color" as any, {
         fields: ["name"],
         filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
         limit: 100,
       }),
-      this.strapi.entityService.findMany("api::condition.condition", { fields: ["name"], limit: 20 }),
+      this.strapi.entityService.findMany("api::condition.condition" as any, { fields: ["name"], limit: 20 }),
     ]);
 
     const names = (rows: unknown): string[] =>
@@ -190,7 +190,7 @@ export class ListingAiOrchestrator {
   ): Promise<void> {
     this.strapi.log.error(`[listing-ai] analyze failed for user ${params.userId}: ${failureReason}`);
     try {
-      await this.strapi.entityService.create("api::ai-request-log.ai-request-log", {
+      await this.strapi.entityService.create("api::ai-request-log.ai-request-log" as any, {
         data: {
           users_permissions_user: params.userId,
           imageIds: params.imageIds,
@@ -213,7 +213,7 @@ export class ListingAiOrchestrator {
     modelVersion: string,
     startedAt: number,
   ): Promise<string> {
-    const row = await this.strapi.entityService.create("api::ai-request-log.ai-request-log", {
+    const row = await this.strapi.entityService.create("api::ai-request-log.ai-request-log" as any, {
       data: {
         users_permissions_user: params.userId,
         imageIds: params.imageIds,

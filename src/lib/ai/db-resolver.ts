@@ -54,7 +54,7 @@ export class DbResolver {
 
   async resolveBrand(rawField: { value: string | null; confidence: number }, categoryId: number | null): Promise<ResolvedField> {
     if (!rawField.value) return unresolvedField(null, rawField.confidence);
-    const rows = (await this.strapi.entityService.findMany("api::brand.brand", {
+    const rows = (await this.strapi.entityService.findMany("api::brand.brand" as any, {
       filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
       fields: ["id", "name", "slug"],
       limit: 500,
@@ -64,7 +64,7 @@ export class DbResolver {
 
   async resolveMaterial(rawField: { value: string | null; confidence: number }, categoryId: number | null): Promise<ResolvedField> {
     if (!rawField.value) return unresolvedField(null, rawField.confidence);
-    const rows = (await this.strapi.entityService.findMany("api::material.material", {
+    const rows = (await this.strapi.entityService.findMany("api::material.material" as any, {
       filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
       fields: ["id", "name", "slug"],
       limit: 500,
@@ -74,7 +74,7 @@ export class DbResolver {
 
   async resolveColor(rawField: { value: string | null; confidence: number }, categoryId: number | null): Promise<ResolvedField> {
     if (!rawField.value) return unresolvedField(null, rawField.confidence);
-    const rows = (await this.strapi.entityService.findMany("api::color.color", {
+    const rows = (await this.strapi.entityService.findMany("api::color.color" as any, {
       filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
       fields: ["id", "name", "slug"],
       limit: 500,
@@ -84,7 +84,7 @@ export class DbResolver {
 
   async resolveCondition(rawField: { value: string | null; confidence: number }, categoryId: number | null): Promise<ResolvedField> {
     if (!rawField.value) return unresolvedField(null, rawField.confidence);
-    const rows = (await this.strapi.entityService.findMany("api::condition.condition", {
+    const rows = (await this.strapi.entityService.findMany("api::condition.condition" as any, {
       filters: categoryId ? { categories: { id: { $eq: categoryId } } } : {},
       fields: ["id", "name", "slug"],
       limit: 100,
@@ -103,7 +103,7 @@ export class DbResolver {
       };
     }
 
-    const allCategories = (await this.strapi.entityService.findMany("api::category.category", {
+    const allCategories = (await this.strapi.entityService.findMany("api::category.category" as any, {
       fields: ["id", "name", "slug"],
       populate: { category: { fields: ["id", "name"] } },
       limit: 5000,
@@ -132,7 +132,7 @@ export class DbResolver {
 
   async resolveGenderBranch(rawField: { value: string | null; confidence: number }): Promise<ResolvedField> {
     if (!rawField.value) return unresolvedField(null, rawField.confidence);
-    const rootCategories = (await this.strapi.entityService.findMany("api::category.category", {
+    const rootCategories = (await this.strapi.entityService.findMany("api::category.category" as any, {
       filters: { category: { id: { $null: true } } },
       fields: ["id", "name", "slug"],
       limit: 50,
@@ -147,7 +147,7 @@ export class DbResolver {
       ? { categories: { id: { $eq: categoryId } }, code: { $in: STYLE_ATTRIBUTE_CODES } }
       : { code: { $in: STYLE_ATTRIBUTE_CODES } };
 
-    const attributes = (await this.strapi.entityService.findMany("api::category-attribute.category-attribute", {
+    const attributes = (await this.strapi.entityService.findMany("api::category-attribute.category-attribute" as any, {
       filters: attributeFilters,
       fields: ["id", "code"],
       populate: { category_attribute_options: { fields: ["id", "value"] } },

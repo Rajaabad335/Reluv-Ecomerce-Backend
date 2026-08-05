@@ -20,7 +20,7 @@ function helpers(ctx: Context): StrapiCtxHelpers {
 }
 
 export default factories.createCoreController(
-  "api::listing-verification.listing-verification",
+  "api::listing-verification.listing-verification" as any,
   ({ strapi }: { strapi: Core.Strapi }) => ({
     async submitEvidence(ctx: Context) {
       const h = helpers(ctx);
@@ -30,7 +30,7 @@ export default factories.createCoreController(
       const parsed = submitLuxuryEvidenceRequestSchema.safeParse(h.request.body);
       if (!parsed.success) { h.badRequest(`Invalid request: ${parsed.error.message}`); return; }
 
-      const service = strapi.service("api::listing-verification.listing-verification") as unknown as {
+      const service = strapi.service("api::listing-verification.listing-verification" as any) as unknown as {
         submitEvidence: (userId: number, payload: typeof parsed.data) => Promise<unknown>;
       };
 
@@ -54,7 +54,7 @@ export default factories.createCoreController(
       const parsed = verificationDecisionRequestSchema.safeParse(h.request.body);
       if (!parsed.success) { h.badRequest(`Invalid request: ${parsed.error.message}`); return; }
 
-      const service = strapi.service("api::listing-verification.listing-verification") as unknown as {
+      const service = strapi.service("api::listing-verification.listing-verification" as any) as unknown as {
         applyDecision: (verificationId: number, adminUserId: number, decision: typeof parsed.data) => Promise<unknown>;
       };
 
@@ -74,7 +74,7 @@ export default factories.createCoreController(
       const productId = Number(h.params.productId);
       if (!Number.isInteger(productId) || productId <= 0) { h.badRequest("A valid productId is required."); return; }
 
-      const product = (await strapi.entityService.findOne("api::product.product", productId, {
+      const product = (await strapi.entityService.findOne("api::product.product" as any, productId, {
         populate: { users_permissions_user: { fields: ["id"] }, listing_verification: true },
       })) as unknown as { users_permissions_user?: { id: number } | null; listing_verification?: unknown } | null;
 

@@ -18,7 +18,7 @@ export async function checkAndRecordRateLimit(
 ): Promise<RateLimitResult> {
   const windowStart = new Date(Date.now() - config.windowMs).toISOString();
 
-  const recentCount = await strapi.db.query("api::ai-request-log.ai-request-log").count({
+  const recentCount = await strapi.db.query("api::ai-request-log.ai-request-log" as any).count({
     where: {
       users_permissions_user: userId,
       createdAt: { $gte: windowStart },
