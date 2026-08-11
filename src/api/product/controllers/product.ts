@@ -1600,6 +1600,7 @@ export default factories.createCoreController(
               "condition",
               "createdAt",
               "isHidden",
+              "isVerifiedLuxury",
             ] as any[],
             populate: {
               category: { fields: ["name"] },
@@ -1687,6 +1688,7 @@ export default factories.createCoreController(
                       url: img.url,
                     }))
                   : [],
+                isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
                 userId: product?.users_permissions_user ?? null,
                 holidayMode:
                   product?.users_permissions_user?.holidayMode ?? false,
@@ -1724,6 +1726,7 @@ export default factories.createCoreController(
               "likeCount",
               "createdAt",
               "description",
+              "isVerifiedLuxury",
             ],
             populate: {
               category: { fields: ["name"] },
@@ -1822,6 +1825,7 @@ export default factories.createCoreController(
             images: Array.isArray(product?.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],
+            isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
             attributes,
             user: product?.users_permissions_user,
           },
@@ -2095,6 +2099,7 @@ export default factories.createCoreController(
               "condition",
               "createdAt",
               "likeCount",
+              "isVerifiedLuxury",
             ],
             populate: {
               category: { fields: ["name", "slug"] },
@@ -2181,6 +2186,7 @@ export default factories.createCoreController(
             color: fromAttr("colour", "color") ?? product?.color?.name ?? null,
 
             material: fromAttr("material") ?? null,
+            isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
 
             images: Array.isArray(product.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
@@ -2308,6 +2314,7 @@ export default factories.createCoreController(
               "condition",
               "createdAt",
               "likeCount",
+              "isVerifiedLuxury",
             ],
             populate: {
               category: { select: ["name", "slug"] },
@@ -2521,6 +2528,7 @@ export default factories.createCoreController(
               "condition",
               "likeCount",
               "createdAt",
+              "isVerifiedLuxury",
             ],
             populate: {
               category: { fields: ["name", "slug"] },
@@ -2577,6 +2585,7 @@ export default factories.createCoreController(
               null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
+              isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
             images: Array.isArray(product.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
               : [],

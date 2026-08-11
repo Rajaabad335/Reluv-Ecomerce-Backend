@@ -32,7 +32,7 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
             }
           : false,
       },
-      pool: { min: env.int('DATABASE_POOL_MIN', 0), max: env.int('DATABASE_POOL_MAX', 5) },
+      pool: { min: env.int('DATABASE_POOL_MIN', 0), max: env.int('DATABASE_POOL_MAX', 20) },
     },
     sqlite: {
       connection: {
@@ -46,7 +46,7 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
     connection: {
       client,
       ...connections[client],
-      acquireConnectionTimeout: env.int('DATABASE_CONNECTION_TIMEOUT', 10000),
+      acquireConnectionTimeout: env.int('DATABASE_CONNECTION_TIMEOUT', 30000),
     },
   };
 };
