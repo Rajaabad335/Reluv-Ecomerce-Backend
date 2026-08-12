@@ -51,12 +51,9 @@ export const geminiSuggestionSchema = z.object({
   category: detectedFieldSchema,
   subcategory: detectedFieldSchema,
   brand: detectedFieldSchema,
-  primaryColor: detectedFieldSchema,
-  secondaryColor: detectedFieldSchema,
+  Color: detectedFieldSchema,
   material: detectedFieldSchema,
   condition: detectedFieldSchema,
-  gender: detectedFieldSchema,
-  style: detectedFieldSchema,
   title: z.object({ value: z.string().trim().max(120).nullable(), confidence: confidenceSchema }),
   description: z.object({ value: z.string().trim().max(2000).nullable(), confidence: confidenceSchema }),
 });

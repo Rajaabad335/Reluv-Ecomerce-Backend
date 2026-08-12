@@ -2,12 +2,9 @@ export type DetectedFieldName =
   | "category"
   | "subcategory"
   | "brand"
-  | "primaryColor"
-  | "secondaryColor"
+  | "Color"
   | "material"
   | "condition"
-  | "gender"
-  | "style"
   | "title"
   | "description";
 
@@ -40,12 +37,9 @@ export interface ResolvedSuggestions {
   category: ResolvedField;
   subcategory: ResolvedField;
   brand: ResolvedField;
-  primaryColor: ResolvedField;
-  secondaryColor: ResolvedField;
+  Color: ResolvedField;
   material: ResolvedField;
   condition: ResolvedField;
-  gender: ResolvedField;
-  style: ResolvedField;
   title: ResolvedTextField;
   description: ResolvedTextField;
 }

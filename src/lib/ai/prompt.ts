@@ -11,12 +11,9 @@ const RESPONSE_SHAPE_EXAMPLE = `{
     "category": { "value": string | null, "confidence": number },
     "subcategory": { "value": string | null, "confidence": number },
     "brand": { "value": string | null, "confidence": number },
-    "primaryColor": { "value": string | null, "confidence": number },
-    "secondaryColor": { "value": string | null, "confidence": number },
+    "Color": { "value": string | null, "confidence": number },
     "material": { "value": string | null, "confidence": number },
     "condition": { "value": string | null, "confidence": number },
-    "gender": { "value": string | null, "confidence": number },
-    "style": { "value": string | null, "confidence": number },
     "title": { "value": string | null, "confidence": number },
     "description": { "value": string | null, "confidence": number }
   },

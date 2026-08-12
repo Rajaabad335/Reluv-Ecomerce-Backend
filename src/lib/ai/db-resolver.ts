@@ -188,27 +188,21 @@ export async function resolveAllFields(strapi: Core.Strapi, suggestion: Validate
   const resolver = new DbResolver({ strapi });
   const safe = (f: any) => ({ value: f?.value ?? null, confidence: Number(f?.confidence ?? 0) });
 
-  const [brand, material, primaryColor, secondaryColor, condition, categoryPair, gender, style] = await Promise.all([
+  const [brand, material, Color, condition, categoryPair] = await Promise.all([
     resolver.resolveBrand(safe(suggestion.brand), categoryId),
     resolver.resolveMaterial(safe(suggestion.material), categoryId),
-    resolver.resolveColor(safe(suggestion.primaryColor), categoryId),
-    resolver.resolveColor(safe(suggestion.secondaryColor), categoryId),
+    resolver.resolveColor(safe(suggestion.Color), categoryId),
     resolver.resolveCondition(safe(suggestion.condition), categoryId),
     resolver.resolveCategory(safe(suggestion.category), safe(suggestion.subcategory)),
-    resolver.resolveGenderBranch(safe(suggestion.gender)),
-    resolver.resolveStyle(safe(suggestion.style), categoryId),
   ]);
 
   return {
     brand,
     material,
-    primaryColor,
-    secondaryColor,
+    Color,
     condition,
     category: categoryPair.category,
     subcategory: categoryPair.subcategory,
-    gender,
-    style,
     title: resolver.resolveText(safe(suggestion.title)),
     description: resolver.resolveText(safe(suggestion.description)),
   };
