@@ -462,6 +462,11 @@ export interface ApiAiRequestLogAiRequestLog
       Schema.Attribute.Private;
     durationMs: Schema.Attribute.Integer;
     failureReason: Schema.Attribute.Text;
+    feedbackAt: Schema.Attribute.DateTime;
+    feedbackField: Schema.Attribute.String;
+    feedbackRating: Schema.Attribute.Enumeration<
+      ['correct', 'incorrect', 'incomplete']
+    >;
     imageIds: Schema.Attribute.JSON;
     ipAddress: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -1412,6 +1417,7 @@ export interface ApiProductProduct extends Struct.CollectionTypeSchema {
       'manyToOne',
       'api::ai-request-log.ai-request-log'
     >;
+    aiAssisted: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     brand: Schema.Attribute.Relation<'manyToOne', 'api::brand.brand'>;
     category: Schema.Attribute.Relation<'manyToOne', 'api::category.category'>;
     city: Schema.Attribute.String;

@@ -44,6 +44,15 @@ export interface ResolvedSuggestions {
   description: ResolvedTextField;
 }
 
+export interface SuggestedPrice {
+  amount: number | null;
+  lowAmount?: number | null;
+  highAmount?: number | null;
+  currency: string;
+  basis: string;
+  disclaimer: string;
+}
+
 export interface LuxuryEvidenceFlags {
   receiptDetected: boolean;
   invoiceDetected: boolean;
@@ -71,6 +80,7 @@ export interface LuxuryAssessment {
 export interface AnalyzeListingResult {
   requestId: string;
   suggestions: ResolvedSuggestions;
+  suggestedPrice: SuggestedPrice;
   luxury: LuxuryAssessment;
   modelVersion: string;
 }

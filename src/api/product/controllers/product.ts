@@ -418,6 +418,7 @@ export default factories.createCoreController(
         const description = String(body.description || "").trim();
         const priceNumber = Number(body.price);
         const categoryId = Number(body.categoryId);
+        const aiAssisted = body.aiAssisted === true || body.aiAssisted === "true";
         const rawDynamicValues = (() => {
           if (body.dynamicValues && typeof body.dynamicValues === "object")
             return body.dynamicValues;
@@ -701,6 +702,7 @@ export default factories.createCoreController(
               price: String(priceNumber),
               category: categoryId,
               users_permissions_user: body?.userId ? Number(body.userId) : null,
+              aiAssisted: aiAssisted,
               ...(brandId ? { brand: brandId } : {}),
               ...(sizeId ? { size: sizeId } : {}),
               ...(colorId ? { color: colorId } : {}),

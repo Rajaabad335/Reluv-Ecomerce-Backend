@@ -26,6 +26,12 @@
     "modelVersion": { "type": "string" },
     "rawValidatedResponse": { "type": "json" },
     "ipAddress": { "type": "string" },
-    "durationMs": { "type": "integer" }
+    "durationMs": { "type": "integer" },
+    "feedbackRating": {
+      "type": "enumeration",
+      "enum": ["correct", "incorrect", "incomplete"]
+    },
+    "feedbackField": { "type": "string" },
+    "feedbackAt": { "type": "datetime" }
   }
 }

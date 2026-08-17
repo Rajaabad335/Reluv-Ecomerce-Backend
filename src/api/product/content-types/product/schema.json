@@ -138,6 +138,10 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::ai-request-log.ai-request-log"
+    },
+    "aiAssisted": {
+      "type": "boolean",
+      "default": false
     }
   }
 }
