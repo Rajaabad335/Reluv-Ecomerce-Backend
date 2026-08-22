@@ -768,30 +768,6 @@
     ]
   },
   {
-    "name": "Gender",
-    "code": "gender_kids",
-    "type": "enum",
-    "displayType": "list",
-    "selectionType": "single",
-    "isRequired": false,
-    "placeholder": "Select gender",
-    "description": "Gender of the item",
-    "options": [
-      {
-        "value": "Girls",
-        "sortOrder": 1
-      },
-      {
-        "value": "Boys",
-        "sortOrder": 2
-      },
-      {
-        "value": "Unisex",
-        "sortOrder": 3
-      }
-    ]
-  },
-  {
     "name": "Storage",
     "code": "phone_storage",
     "type": "enum",
