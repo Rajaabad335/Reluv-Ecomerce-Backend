@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import sgMail from "@sendgrid/mail";
 
 type SendMailParams = {
@@ -7,26 +8,49 @@ type SendMailParams = {
 };
 
 export async function sendMail({ to, subject, html }: SendMailParams) {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
+  const provider = (process.env.EMAIL_PROVIDER ?? "smtp").toLowerCase();
+  const fromEmail = process.env.EMAIL_FROM ?? process.env.SENDGRID_FROM_EMAIL;
 
-  if (!apiKey) {
-    throw new Error("SENDGRID_API_KEY is not configured");
-  }
   if (!fromEmail) {
-    throw new Error("SENDGRID_FROM_EMAIL is not configured");
+    throw new Error("EMAIL_FROM or SENDGRID_FROM_EMAIL is not configured");
   }
 
-  sgMail.setApiKey(apiKey);
+  if (provider === "sendgrid") {
+    const apiKey = process.env.SENDGRID_API_KEY;
+    if (!apiKey) throw new Error("SENDGRID_API_KEY is not configured");
 
-  const msg = {
+    sgMail.setApiKey(apiKey);
+    await sgMail.send({
+      to: Array.isArray(to) ? to : [to],
+      from: fromEmail,
+      subject,
+      html,
+    });
+    return;
+  }
+
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT ?? 587);
+  const user = process.env.SMTP_USER ?? process.env.SMTP_USERNAME;
+  const password = process.env.SMTP_PASS ?? process.env.SMTP_PASSWORD;
+
+  if (!host || !user || !password) {
+    throw new Error("SMTP_HOST, SMTP_USER, and SMTP_PASS are required");
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass: password },
+  });
+
+  await transporter.sendMail({
     to: Array.isArray(to) ? to : [to],
     from: fromEmail,
     subject,
     html,
-  };
-
-  await sgMail.send(msg);
+  });
 }
 
 
