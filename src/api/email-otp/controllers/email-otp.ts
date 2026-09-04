@@ -1,4 +1,5 @@
 import { Core } from "@strapi/strapi";
+import bcrypt from "bcryptjs";
 import { createNotification } from "../../../lib/createNotification";
 import { sendMail } from "../../../lib/email/sendMail";
 
@@ -81,7 +82,8 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     otpStore.delete(email);
 
-    // Register the user via users-permissions plugin
+    // Register the user — hash password with bcrypt directly then write via db.query
+    // to avoid any double-hashing from user.add() or user service internals
     const pluginStore = await strapi
       .store({ type: "plugin", name: "users-permissions" })
       .get({ key: "advanced" }) as any;
@@ -90,23 +92,20 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       .query("plugin::users-permissions.role")
       .findOne({ where: { type: pluginStore?.default_role ?? "authenticated" } });
 
-    // Hash password before saving — user.add() does not hash automatically
-    const hashedPassword = await strapi
-      .plugin('users-permissions')
-      .service('user')
-      .hashPassword({ password: record.password });
+    const hashedPassword = await bcrypt.hash(record.password, 10);
 
-    const user = await strapi
-      .plugin("users-permissions")
-      .service("user")
-      .add({
-        username: record.username,
-        email,
-        password: hashedPassword,
-        provider: "local",
-        confirmed: true,
-        blocked: false,
-        role: defaultRole?.id,
+    const user = await strapi.db
+      .query("plugin::users-permissions.user")
+      .create({
+        data: {
+          username: record.username,
+          email,
+          password: hashedPassword,
+          provider: "local",
+          confirmed: true,
+          blocked: false,
+          role: defaultRole?.id,
+        },
       });
 
     const jwt = strapi

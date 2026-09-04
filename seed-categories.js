@@ -15,7 +15,7 @@ function groupByLevel(nodes, depth = 0, levels = [], parentPathKey = null, paren
   if (!levels[depth]) levels[depth] = [];
   for (const node of nodes) {
     const pathKey      = parentPathKey      ? `${parentPathKey}>${node.slug}`      : node.slug;
-    const compoundSlug = parentCompoundSlug ? `${parentCompoundSlug}-${node.slug}` : node.slug;
+    const compoundSlug = node.slug;
     levels[depth].push({ ...node, pathKey, parentPathKey, compoundSlug });
     if (node.categories?.length) {
       groupByLevel(node.categories, depth + 1, levels, pathKey, compoundSlug);
