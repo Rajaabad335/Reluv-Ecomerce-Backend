@@ -90,13 +90,19 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       .query("plugin::users-permissions.role")
       .findOne({ where: { type: pluginStore?.default_role ?? "authenticated" } });
 
+    // Hash password before saving — user.add() does not hash automatically
+    const hashedPassword = await strapi
+      .plugin('users-permissions')
+      .service('user')
+      .hashPassword({ password: record.password });
+
     const user = await strapi
       .plugin("users-permissions")
       .service("user")
       .add({
         username: record.username,
         email,
-        password: record.password,
+        password: hashedPassword,
         provider: "local",
         confirmed: true,
         blocked: false,

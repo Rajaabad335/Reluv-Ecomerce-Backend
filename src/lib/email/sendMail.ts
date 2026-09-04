@@ -11,6 +11,8 @@ export async function sendMail({ to, subject, html }: SendMailParams) {
   const provider = (process.env.EMAIL_PROVIDER ?? "smtp").toLowerCase();
   const fromEmail = process.env.EMAIL_FROM ?? process.env.SENDGRID_FROM_EMAIL;
 
+  console.log(`[sendMail] provider=${provider} from=${fromEmail} to=${JSON.stringify(to)}`);
+
   if (!fromEmail) {
     throw new Error("EMAIL_FROM or SENDGRID_FROM_EMAIL is not configured");
   }

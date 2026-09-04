@@ -1,136 +1,15 @@
 [
   {
-    "name": "Men",
-    "slug": "men",
-    "isActive": true,
-    "sortOrder": 0,
-    "categories": [
-      {
-        "name": "Men Shoes",
-        "slug": "men-shoes",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Bags for Men",
-        "slug": "men-bags",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Accessories for Men",
-        "slug": "men-accessories",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Men Clothing",
-        "slug": "men-clothing",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": [
-          {
-            "name": "Jeans",
-            "slug": "men-clothing-jeans",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Jumpers & Sweaters",
-            "slug": "men-clothing-jumpers-and-sweaters",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Shorts",
-            "slug": "men-clothing-shorts",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Jackets & Coats",
-            "slug": "men-clothing-jackets-and-coats",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Suits & Blazers",
-            "slug": "men-clothing-suits-and-blazers",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "T-shirts",
-            "slug": "men-clothing-t-shirts",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Trousers",
-            "slug": "men-clothing-trousers",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Tracksuits",
-            "slug": "men-clothing-tracksuits",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          },
-          {
-            "name": "Other",
-            "slug": "men-clothing-other",
-            "isActive": true,
-            "sortOrder": 0,
-            "categories": []
-          }
-        ]
-      }
-    ]
-  },
-  {
     "name": "Women",
     "slug": "women",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 1,
     "categories": [
-      {
-        "name": "Women Shoes",
-        "slug": "women-shoes",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Bags for Women",
-        "slug": "women-bags",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Accessories for Women",
-        "slug": "women-accessories",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
       {
         "name": "Women Clothing",
         "slug": "women-clothing",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": [
           {
             "name": "Dresses",
@@ -210,6 +89,128 @@
             "categories": []
           }
         ]
+      },
+      {
+        "name": "Women Shoes",
+        "slug": "women-shoes",
+        "isActive": true,
+        "sortOrder": 2,
+        "categories": []
+      },
+      {
+        "name": "Bags for Women",
+        "slug": "women-bags",
+        "isActive": true,
+        "sortOrder": 3,
+        "categories": []
+      },
+      {
+        "name": "Accessories for Women",
+        "slug": "women-accessories",
+        "isActive": true,
+        "sortOrder": 4,
+        "categories": []
+      }
+      
+    ]
+  },
+  {
+    "name": "Men",
+    "slug": "men",
+    "isActive": true,
+    "sortOrder": 2,
+    "categories": [
+      {
+        "name": "Men Clothing",
+        "slug": "men-clothing",
+        "isActive": true,
+        "sortOrder": 1,
+        "categories": [
+          {
+            "name": "Jeans",
+            "slug": "men-clothing-jeans",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Jumpers & Sweaters",
+            "slug": "men-clothing-jumpers-and-sweaters",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Shorts",
+            "slug": "men-clothing-shorts",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Jackets & Coats",
+            "slug": "men-clothing-jackets-and-coats",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Suits & Blazers",
+            "slug": "men-clothing-suits-and-blazers",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "T-shirts",
+            "slug": "men-clothing-t-shirts",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Trousers",
+            "slug": "men-clothing-trousers",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Tracksuits",
+            "slug": "men-clothing-tracksuits",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          },
+          {
+            "name": "Other",
+            "slug": "men-clothing-other",
+            "isActive": true,
+            "sortOrder": 0,
+            "categories": []
+          }
+        ]
+      },
+      {
+        "name": "Men Shoes",
+        "slug": "men-shoes",
+        "isActive": true,
+        "sortOrder": 2,
+        "categories": []
+      },
+      {
+        "name": "Bags for Men",
+        "slug": "men-bags",
+        "isActive": true,
+        "sortOrder": 3,
+        "categories": []
+      },
+      {
+        "name": "Accessories for Men",
+        "slug": "men-accessories",
+        "isActive": true,
+        "sortOrder": 4,
+        "categories": []
       }
     ]
   },
@@ -217,48 +218,48 @@
     "name": "Kids",
     "slug": "kids",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 3,
     "categories": [
-      {
-        "name": "Shoes",
-        "slug": "kids-shoes",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Accessories",
-        "slug": "kids-accessories",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
-      {
-        "name": "Toys",
-        "slug": "kids-toys",
-        "isActive": true,
-        "sortOrder": 0,
-        "categories": []
-      },
       {
         "name": "Girls Clothing",
         "slug": "kids-girls-clothing",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Boys Clothing",
         "slug": "kids-boys-clothing",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
-        "name": "Baby CLothing",
+        "name": "Baby Clothing",
         "slug": "kids-baby-clothing",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
+        "categories": []
+      },
+      {
+        "name": "Shoes",
+        "slug": "kids-shoes",
+        "isActive": true,
+        "sortOrder": 4,
+        "categories": []
+      },
+      {
+        "name": "Accessories",
+        "slug": "kids-accessories",
+        "isActive": true,
+        "sortOrder": 5,
+        "categories": []
+      },
+      {
+        "name": "Toys",
+        "slug": "kids-toys",
+        "isActive": true,
+        "sortOrder": 6,
         "categories": []
       }
     ]
@@ -267,34 +268,34 @@
     "name": "Home Accessories",
     "slug": "home-accessories",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 4,
     "categories": [
       {
         "name": "Home Decor",
         "slug": "home-accessories-decor",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Bedding & Textiles",
         "slug": "home-accessories-bedding-and-textiles",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
         "name": "Small Appliances",
         "slug": "home-accessories-small-appliances",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
         "categories": []
       },
       {
         "name": "Furniture",
         "slug": "home-accessories-furniture",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 4,
         "categories": []
       }
     ]
@@ -303,48 +304,48 @@
     "name": "Electronics",
     "slug": "electronics",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 5,
     "categories": [
       {
         "name": "Phones & Tablets",
         "slug": "electronics-phones-and-tablets",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Computers",
         "slug": "electronics-computers",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
         "name": "Gaming",
         "slug": "electronics-gaming",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
         "categories": []
       },
       {
         "name": "Audio",
         "slug": "electronics-audio",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 4,
         "categories": []
       },
       {
         "name": "Cameras",
         "slug": "electronics-cameras",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 5,
         "categories": []
       },
       {
         "name": "Wearables",
         "slug": "electronics-wearables",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 6,
         "categories": []
       }
     ]
@@ -353,34 +354,34 @@
     "name": "Entertainment",
     "slug": "entertainment",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 6,
     "categories": [
       {
         "name": "Books",
         "slug": "entertainment-books",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Music",
         "slug": "entertainment-music",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
         "name": "Movies",
         "slug": "entertainment-movies",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
         "categories": []
       },
       {
         "name": "Games",
         "slug": "entertainment-games",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 4,
         "categories": []
       }
     ]
@@ -389,41 +390,41 @@
     "name": "Hobbies & Collectibles",
     "slug": "hobbies-and-collectibles",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 7,
     "categories": [
       {
         "name": "Collectibles",
         "slug": "hobbies-and-collectibles-collectibles",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Arts & Crafts",
         "slug": "hobbies-and-collectibles-arts-and-crafts",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
         "name": "Musical Instruments",
         "slug": "hobbies-and-collectibles-musical-instruments",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
         "categories": []
       },
       {
         "name": "Cards & Games",
         "slug": "hobbies-and-collectibles-cards-and-games",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 4,
         "categories": []
       },
       {
         "name": "Other",
         "slug": "hobbies-and-collectibles-other",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 5,
         "categories": []
       }
     ]
@@ -432,36 +433,29 @@
     "name": "Sports & Fitness",
     "slug": "sports-and-fitness",
     "isActive": true,
-    "sortOrder": 0,
+    "sortOrder": 8,
     "categories": [
       {
         "name": "Sportswear",
         "slug": "sports-and-fitness-sportswear",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 1,
         "categories": []
       },
       {
         "name": "Cycling",
         "slug": "sports-and-fitness-cycling",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 2,
         "categories": []
       },
       {
         "name": "Sports Equipment",
         "slug": "sports-and-fitness-sports-equipment",
         "isActive": true,
-        "sortOrder": 0,
+        "sortOrder": 3,
         "categories": []
       }
     ]
-  },
-  {
-    "name": "Others",
-    "slug": "others",
-    "isActive": true,
-    "sortOrder": 0,
-    "categories": []
   }
 ]

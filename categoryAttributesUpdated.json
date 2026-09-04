@@ -1091,10 +1091,6 @@
         "sortOrder": 40
       },
       {
-        "value": "& Other Stories",
-        "sortOrder": 41
-      },
-      {
         "value": "COS",
         "sortOrder": 42
       },
@@ -1363,7 +1359,7 @@
         "sortOrder": 108
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 109
       }
     ]
@@ -1500,7 +1496,7 @@
         "sortOrder": 30
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 31
       }
     ]
@@ -1825,7 +1821,7 @@
         "sortOrder": 77
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 78
       }
     ]
@@ -2062,7 +2058,7 @@
         "sortOrder": 55
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 56
       }
     ]
@@ -2153,10 +2149,6 @@
       {
         "value": "Arket",
         "sortOrder": 19
-      },
-      {
-        "value": "& Other Stories Men",
-        "sortOrder": 20
       },
       {
         "value": "ASOS",
@@ -2371,7 +2363,7 @@
         "sortOrder": 73
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 74
       }
     ]
@@ -2761,7 +2753,7 @@
         "sortOrder": 44
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 45
       }
     ]
@@ -2874,7 +2866,7 @@
         "sortOrder": 24
       },
       {
-        "value": "Other / No brand",
+        "value": "Other",
         "sortOrder": 25
       }
     ]

@@ -36,6 +36,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     // Always respond OK to avoid email enumeration
     if (!user) {
+      console.log("user not found")
       ctx.send({ ok: true });
       return;
     }
@@ -43,18 +44,23 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     const otp = generateOtp();
     resetStore.set(email, { otp, expiresAt: Date.now() + OTP_TTL_MS });
 
-    await sendMail({
-      to: [email],
-      subject: "Reset your Reluv password",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto">
-          <h2 style="color:#cb6f4d">Reset your password</h2>
-          <p>Use this code to reset your Reluv password. It expires in 10 minutes.</p>
-          <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#cb6f4d;margin:24px 0">${otp}</div>
-          <p style="color:#888;font-size:12px">If you didn't request this, you can safely ignore this email.</p>
-        </div>
-      `,
-    });
+    try {
+      await sendMail({
+        to: [email],
+        subject: "Reset your Reluv password",
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:auto">
+            <h2 style="color:#cb6f4d">Reset your password</h2>
+            <p>Use this code to reset your Reluv password. It expires in 10 minutes.</p>
+            <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#cb6f4d;margin:24px 0">${otp}</div>
+            <p style="color:#888;font-size:12px">If you didn't request this, you can safely ignore this email.</p>
+          </div>
+        `,
+      });
+    } catch (err) {
+      strapi.log.error('[forgot-password] sendMail failed:', err);
+      return ctx.internalServerError('Failed to send reset email. Please try again.');
+    }
 
     ctx.send({ ok: true });
   },
