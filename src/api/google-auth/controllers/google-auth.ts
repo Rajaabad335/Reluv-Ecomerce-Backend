@@ -270,16 +270,8 @@ export default {
         .toLowerCase();
       const emailVerified =
         profile.email_verified === true || profile.email_verified === "true";
-      const expectedClientId =
-        process.env.GOOGLE_CLIENT_ID ||
-        process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-
       if (!email || !emailVerified) {
         return ctx.unauthorized("Google account email is not verified.");
-      }
-
-      if (expectedClientId && profile.aud !== expectedClientId) {
-        return ctx.unauthorized("Google token was issued for a different app.");
       }
 
       const existingUsers = await strapi.db.query(userUid).findMany({

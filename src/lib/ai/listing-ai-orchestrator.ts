@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import type { Core } from "@strapi/strapi";
 import { getGeminiClient, type ImageInput } from "./gemini-client";
 import { parseGeminiResponse } from "./schemas";
@@ -14,6 +16,8 @@ interface MediaFileRow {
   id: number;
   url: string;
   mime: string;
+  hash: string;
+  ext: string;
 }
 
 export class ListingAiOrchestrator {
@@ -36,7 +40,7 @@ export class ListingAiOrchestrator {
     try {
       const mediaRows = (await this.strapi.entityService.findMany("plugin::upload.file", {
         filters: { id: { $in: params.imageIds } },
-        fields: ["id", "url", "mime"],
+        fields: ["id", "url", "mime", "hash", "ext"],
       })) as unknown as MediaFileRow[];
 
       if (mediaRows.length !== params.imageIds.length) {
@@ -310,17 +314,23 @@ export class ListingAiOrchestrator {
   }
 
   private async loadImageBytes(mediaRows: MediaFileRow[]): Promise<ImageInput[]> {
-    const rawBackendUrl = process.env.BACKEND_URL;
-    const rawServerUrl = rawBackendUrl ?? (this.strapi.config.get("server.url") as string | undefined) ?? "http://localhost:1337";
-    const normalizedServerUrl = rawServerUrl.match(/^https?:\/\//i)
-      ? rawServerUrl
-      : `http://${rawServerUrl}`;
-
+    const uploadsDir = path.join(process.cwd(), "public", "uploads");
     const images: ImageInput[] = [];
+
     for (const row of mediaRows) {
-      const absoluteUrl = row.url.startsWith("http")
-        ? row.url
-        : new URL(row.url, normalizedServerUrl).toString();
+      const filename = `${row.hash}${row.ext}`;
+      const filePath = path.join(uploadsDir, filename);
+
+      if (fs.existsSync(filePath)) {
+        images.push({ data: fs.readFileSync(filePath), mimeType: row.mime });
+        continue;
+      }
+
+      // Fallback: fetch over HTTP using only the pathname against the local server
+      const rawServerUrl = process.env.BACKEND_URL ?? (this.strapi.config.get("server.url") as string | undefined) ?? "https://reluv.novakonnect.com";
+      const normalizedServerUrl = rawServerUrl.match(/^https?:\/\//i) ? rawServerUrl : `http://${rawServerUrl}`;
+      const urlPathname = row.url.startsWith("http") ? new URL(row.url).pathname : row.url;
+      const absoluteUrl = new URL(urlPathname, normalizedServerUrl).toString();
 
       let response: Response;
       try {
@@ -333,8 +343,7 @@ export class ListingAiOrchestrator {
         throw new Error(`Failed to load image ${row.id} from ${absoluteUrl} (HTTP ${response.status}).`);
       }
 
-      const arrayBuffer = await response.arrayBuffer();
-      images.push({ data: Buffer.from(arrayBuffer), mimeType: row.mime });
+      images.push({ data: Buffer.from(await response.arrayBuffer()), mimeType: row.mime });
     }
     return images;
   }

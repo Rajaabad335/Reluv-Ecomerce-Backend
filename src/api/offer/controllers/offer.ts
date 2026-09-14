@@ -41,7 +41,7 @@ export default factories.createCoreController(
         );
       }
 
-      // Check for existing pending offer from same buyer on same product
+      // Decline any existing pending offer from same buyer on same product
       const existing = await strapi.entityService.findMany(
         "api::offer.offer" as any,
         {
@@ -55,8 +55,10 @@ export default factories.createCoreController(
       );
 
       if ((existing as any[]).length > 0) {
-        return ctx.badRequest(
-          "You already have a pending offer on this product."
+        await strapi.entityService.update(
+          "api::offer.offer" as any,
+          (existing as any[])[0].id,
+          { data: { status: "declined" } }
         );
       }
 
@@ -78,42 +80,34 @@ export default factories.createCoreController(
         },
       });
 
-      // Send chat message if conversationId provided
-      if (conversationId) {
-        const messageUid = 'api::message.message' as any;
-        await strapi.entityService.create(messageUid, {
-          data: {
-            conversation: conversationId,
-            sender: buyerId,
-            content: `Made an offer: $${offerPrice}${message ? ` - "${message}"` : ''}`,
-            offer: offer.id,
-            metadata: { type: 'offer', offerId: offer.id, amount: offerPrice, status: 'pending' },
-          },
-          populate: {
-            sender: true,
-            offer: {
-              populate: ['buyer', 'seller']
-            }
-          },
-        });
-      }
-      
-      // Notify seller
-        // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
-        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.;
-      await strapi.entityService.create(
-        "api::notification.notification" as any,
-        {
-          data: {
-            type: "offer_received",
-            title: "New Offer Received",
-            body: `You received an offer of $${offerPrice} on "${(product as any).title}".`,
-            read: false,
-            link: `/Orders?tab=offers`,
-            recipient: sellerId,
-          },
+      // Fire-and-forget: chat message + notification (don't block the response)
+      setImmediate(async () => {
+        try {
+          if (conversationId) {
+            await strapi.entityService.create('api::message.message' as any, {
+              data: {
+                conversation: conversationId,
+                sender: buyerId,
+                content: `Made an offer: $${offerPrice}${message ? ` - "${message}"` : ''}`,
+                offer: offer.id,
+                metadata: { type: 'offer', offerId: offer.id, amount: offerPrice, status: 'pending' },
+              },
+            });
+          }
+          await strapi.entityService.create('api::notification.notification' as any, {
+            data: {
+              type: 'offer_received',
+              title: 'New Offer Received',
+              body: `You received an offer of $${offerPrice} on "${(product as any).title}".`,
+              read: false,
+              link: `/Orders?tab=offers`,
+              recipient: sellerId,
+            },
+          });
+        } catch (e) {
+          strapi.log.error('makeOffer background tasks failed:', e);
         }
-      );
+      });
 
       return ctx.created({ data: offer });
     },
@@ -173,10 +167,10 @@ export default factories.createCoreController(
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
-      if ((offer as any).seller?.id !== sellerId)
+      if (Number((offer as any).seller?.id) !== Number(sellerId))
         return ctx.forbidden("Not your offer.");
       if ((offer as any).status !== "pending")
-        return ctx.badRequest("Offer is no longer pending.");
+        return ctx.send({ data: offer }); // already responded — return current state silently
 
       const now = new Date();
       const expiresAt = new Date(now.getTime() + OFFER_EXPIRY_HOURS * 60 * 60 * 1000);
@@ -193,65 +187,48 @@ export default factories.createCoreController(
         }
       );
 
-      // Send chat message if conversationId provided
-      if (conversationId) {
-        const messageUid = 'api::message.message' as any;
-        const responseText = action === 'accepted' 
-          ? `Offer Accepted` 
-          : `Offer Declined`;
-        
-        await strapi.entityService.create(messageUid, {
-          data: {
-            conversation: conversationId,
-            sender: sellerId,
-            content: responseText,
-            offer: offerId,
-            metadata: { type: 'offer_response', offerId, action, status: action },
-          },
-          populate: {
-            sender: true,
-            offer: {
-              populate: ['buyer', 'seller']
-            }
-          },
-        });
-      }
-
       const buyerId = (offer as any).buyer?.id;
-      const productTitle = (offer as any).productTitle ?? "the product";
+      const productTitle = (offer as any).productTitle ?? 'the product';
       const offerPrice = (offer as any).offerPrice;
       const productId = (offer as any).product?.id;
 
-      // Notify buyer
-        // const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(prodOwner)
-        // const isCreateNotification =   userNotificationSetting?.notificationSettings?.favourited;
-      await strapi.entityService.create(
-        "api::notification.notification" as any,
-        {
-          data: {
-            type: action === "accepted" ? "offer_accepted" : "offer_declined",
-            title:
-              action === "accepted" ? "Offer Accepted! 🎉" : "Offer Declined",
-            body:
-              action === "accepted"
+      // Fire-and-forget: chat message + notification + product reservation
+      setImmediate(async () => {
+        try {
+          if (conversationId) {
+            await strapi.entityService.create('api::message.message' as any, {
+              data: {
+                conversation: conversationId,
+                sender: sellerId,
+                content: action === 'accepted' ? 'Offer Accepted' : 'Offer Declined',
+                offer: offerId,
+                metadata: { type: 'offer_response', offerId, action, status: action },
+              },
+            });
+          }
+          await strapi.entityService.create('api::notification.notification' as any, {
+            data: {
+              type: action === 'accepted' ? 'offer_accepted' : 'offer_declined',
+              title: action === 'accepted' ? 'Offer Accepted! 🎉' : 'Offer Declined',
+              body: action === 'accepted'
                 ? `Your offer of $${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
                 : `Your offer on "${productTitle}" was declined by the seller.`,
-            read: false,
-            link:
-              action === "accepted"
+              read: false,
+              link: action === 'accepted'
                 ? `/Orders?tab=offers&highlight=${offerId}`
                 : `/products/${productId}`,
-            recipient: buyerId,
-          },
+              recipient: buyerId,
+            },
+          });
+          if (action === 'accepted' && productId) {
+            await strapi.entityService.update('api::product.product', productId, {
+              data: { productStatus: 'reserved' },
+            });
+          }
+        } catch (e) {
+          strapi.log.error('respondToOffer background tasks failed:', e);
         }
-      );
-
-      // If accepted, mark product as reserved
-      if (action === "accepted" && productId) {
-        await strapi.entityService.update("api::product.product", productId, {
-          data: { productStatus: "reserved" },
-        });
-      }
+      });
 
       return ctx.send({ data: updated });
     },

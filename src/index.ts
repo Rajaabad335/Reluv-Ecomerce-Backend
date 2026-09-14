@@ -630,14 +630,19 @@ export default {
         }
       });
 
-      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, clientOfferId }: any) => {
+      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, clientOfferId, parentOfferId }: any) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
             request: {
               body: { productId, buyerId, sellerId, offerPrice, message, conversationId },
             },
+            state: { user: { id: userId } },
             badRequest: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, message: msg });
+              throw new Error(msg);
+            },
+            unauthorized: (msg: string) => {
               socket.emit('offer:error', { clientOfferId, message: msg });
               throw new Error(msg);
             },

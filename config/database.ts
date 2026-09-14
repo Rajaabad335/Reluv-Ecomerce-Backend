@@ -32,7 +32,16 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
             }
           : false,
       },
-      pool: { min: env.int('DATABASE_POOL_MIN', 0), max: env.int('DATABASE_POOL_MAX', 20) },
+      pool: {
+        min: 1,
+        max: env.int('DATABASE_POOL_MAX', 10),
+        acquireTimeoutMillis: 60000,
+        idleTimeoutMillis: 600000,
+        reapIntervalMillis: 1000,
+        afterCreate: (conn: any, done: any) => {
+          conn.query('SELECT 1', (err: any) => done(err, conn));
+        },
+      },
     },
     sqlite: {
       connection: {
