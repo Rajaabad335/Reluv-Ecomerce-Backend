@@ -3,6 +3,15 @@ import { factories } from "@strapi/strapi";
 const MIN_RATIO = 0.5; // offer must be >= 50% of original price
 const MAX_RATIO = 1.5; // offer must be <= 150% of original price
 const OFFER_EXPIRY_HOURS = 48; // Offer expires after 48 hours of acceptance
+const OFFER_POPULATE = {
+  product: {
+    populate: {
+      users_permissions_user: { fields: ["id", "username"] },
+    },
+  },
+  buyer: { fields: ["id", "username"] },
+  seller: { fields: ["id", "username"] },
+};
 
 export default factories.createCoreController(
   "api::offer.offer",
@@ -23,7 +32,7 @@ export default factories.createCoreController(
       const product = await strapi.entityService.findOne(
         "api::product.product",
         productId,
-        { populate: ["images"] }
+        { populate: ["images", "users_permissions_user"] }
       );
 
       if (!product) return ctx.notFound("Product not found.");
@@ -109,7 +118,13 @@ export default factories.createCoreController(
         }
       });
 
-      return ctx.created({ data: offer });
+      const populatedOffer = await strapi.entityService.findOne(
+        "api::offer.offer" as any,
+        (offer as any).id,
+        { populate: OFFER_POPULATE }
+      );
+
+      return ctx.created({ data: populatedOffer ?? offer });
     },
 
     // GET /api/offers/seller/:sellerId
@@ -121,7 +136,7 @@ export default factories.createCoreController(
         "api::offer.offer" as any,
         {
           filters: { seller: { id: sellerId } },
-          populate: ["product", "buyer", "seller"],
+          populate: OFFER_POPULATE,
           sort: { createdAt: "desc" },
           limit: 50,
         }
@@ -139,7 +154,7 @@ export default factories.createCoreController(
         "api::offer.offer" as any,
         {
           filters: { buyer: { id: buyerId } },
-          populate: ["product", "buyer", "seller"],
+          populate: OFFER_POPULATE,
           sort: { createdAt: "desc" },
           limit: 50,
         }
@@ -163,7 +178,7 @@ export default factories.createCoreController(
       const offer = await strapi.entityService.findOne(
         "api::offer.offer" as any,
         offerId,
-        { populate: ["product", "buyer", "seller"] }
+        { populate: OFFER_POPULATE }
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
@@ -185,6 +200,11 @@ export default factories.createCoreController(
             expiresAt: action === "accepted" ? expiresAt.toISOString() : null,
           },
         }
+      );
+      const populatedUpdated = await strapi.entityService.findOne(
+        "api::offer.offer" as any,
+        offerId,
+        { populate: OFFER_POPULATE }
       );
 
       const buyerId = (offer as any).buyer?.id;
@@ -230,7 +250,7 @@ export default factories.createCoreController(
         }
       });
 
-      return ctx.send({ data: updated });
+      return ctx.send({ data: populatedUpdated ?? updated });
     },
 
     // POST /api/offers/:id/complete
@@ -245,7 +265,7 @@ export default factories.createCoreController(
       const offer = await strapi.entityService.findOne(
         "api::offer.offer" as any,
         offerId,
-        { populate: ["buyer", "seller", "product"] }
+        { populate: OFFER_POPULATE }
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
