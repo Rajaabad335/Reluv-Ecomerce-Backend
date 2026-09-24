@@ -18,11 +18,13 @@ function generateOtp() {
 
 export default ({ strapi }: { strapi: Core.Strapi }) => ({
   async send(ctx: any) {
-    const { email, username, password } = ctx.request.body;
+    const { email: rawEmail, username, password } = ctx.request.body;
 
-    if (!email || !username || !password) {
+    if (!rawEmail || !username || !password) {
       return ctx.badRequest("email, username and password are required");
     }
+
+    const email = rawEmail.toLowerCase().trim();
 
     // Check if email already registered
     const existing = await strapi
@@ -59,11 +61,13 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async verify(ctx: any) {
-    const { email, otp } = ctx.request.body;
+    const { email: rawEmail, otp } = ctx.request.body;
 
-    if (!email || !otp) {
+    if (!rawEmail || !otp) {
       return ctx.badRequest("email and otp are required");
     }
+
+    const email = rawEmail.toLowerCase().trim();
 
     const record = otpStore.get(email);
 
@@ -99,7 +103,7 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
       .create({
         data: {
           username: record.username,
-          email,
+          email: email,
           password: hashedPassword,
           provider: "local",
           confirmed: true,

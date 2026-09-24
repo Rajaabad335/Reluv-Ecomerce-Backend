@@ -27,8 +27,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   ───────────────────────────────────────────── */
 
   async sendOtp(ctx: any) {
-    const { email } = ctx.request.body;
-    if (!email) return ctx.badRequest("email is required");
+    const { email: rawEmail } = ctx.request.body;
+    if (!rawEmail) return ctx.badRequest("email is required");
+
+    const email = rawEmail.toLowerCase().trim();
 
     const user = await strapi
       .query("plugin::users-permissions.user")
@@ -66,8 +68,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async verifyOtp(ctx: any) {
-    const { email, otp } = ctx.request.body;
-    if (!email || !otp) return ctx.badRequest("email and otp are required");
+    const { email: rawEmail, otp } = ctx.request.body;
+    if (!rawEmail || !otp) return ctx.badRequest("email and otp are required");
+
+    const email = rawEmail.toLowerCase().trim();
 
     const record = resetStore.get(email);
     if (!record) return ctx.badRequest("No reset code found. Please request a new one.");
@@ -81,9 +85,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
   },
 
   async resetPassword(ctx: any) {
-    const { email, otp, password } = ctx.request.body;
-    if (!email || !otp || !password)
+    const { email: rawEmail, otp, password } = ctx.request.body;
+    if (!rawEmail || !otp || !password)
       return ctx.badRequest("email, otp and password are required");
+
+    const email = rawEmail.toLowerCase().trim();
 
     const record = resetStore.get(email);
     if (!record) return ctx.badRequest("No reset code found. Please request a new one.");
@@ -126,8 +132,10 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
   // Step 1 — Send OTP to current email to confirm identity
   async sendEmailChangeOtp(ctx: any) {
-    const { email } = ctx.request.body;
-    if (!email) return ctx.badRequest("email is required");
+    const { email: rawEmail } = ctx.request.body;
+    if (!rawEmail) return ctx.badRequest("email is required");
+
+    const email = rawEmail.toLowerCase().trim();
 
     const user = await strapi
       .query("plugin::users-permissions.user")
@@ -161,11 +169,14 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
   // Step 2 — Verify OTP from current email + send OTP to new email
   async verifyEmailChangeOtp(ctx: any) {
-    const { email, otp, newEmail } = ctx.request.body;
-    if (!email || !otp || !newEmail)
+    const { email: rawEmail, otp, newEmail: rawNewEmail } = ctx.request.body;
+    if (!rawEmail || !otp || !rawNewEmail)
       return ctx.badRequest("email, otp and newEmail are required");
 
-    if (email.toLowerCase() === newEmail.toLowerCase())
+    const email = rawEmail.toLowerCase().trim();
+    const newEmail = rawNewEmail.toLowerCase().trim();
+
+    if (email === newEmail)
       return ctx.badRequest("New email must be different from your current email.");
 
     // Check new email isn't already taken
@@ -208,9 +219,12 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
   // Step 3 — Verify OTP sent to new email and update the user record
   async confirmNewEmail(ctx: any) {
-    const { email, otp, newEmail } = ctx.request.body;
-    if (!email || !otp || !newEmail)
+    const { email: rawEmail, otp, newEmail: rawNewEmail } = ctx.request.body;
+    if (!rawEmail || !otp || !rawNewEmail)
       return ctx.badRequest("email, otp and newEmail are required");
+
+    const email = rawEmail.toLowerCase().trim();
+    const newEmail = rawNewEmail.toLowerCase().trim();
 
     const record = emailChangeStore.get(email);
     if (!record) return ctx.badRequest("No verification code found. Please request a new one.");
