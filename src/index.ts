@@ -873,11 +873,12 @@ export default {
           unreadConversationCount: await getUnreadConversationCount(receiverId),
         });
 
+        const senderUsername = created.sender?.username ?? 'Someone';
         createNotification({
           strapi,
           recipientId: receiverId,
           type: 'new_message',
-          title: 'New message',
+          title: `${senderUsername} sent you a message`,
           body: preview.slice(0, 80),
           link: `/Messages?conversationId=${id}`,
         });
