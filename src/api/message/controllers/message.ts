@@ -272,7 +272,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           type: 'new_message',
           title: 'New message',
           body: preview.slice(0, 80),
-          link: '/Messages',
+          link: `/Messages?conversationId=${conversationId}`,
         });
       }
 
