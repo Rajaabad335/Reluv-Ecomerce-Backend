@@ -8,6 +8,14 @@ type NotificationType =
   | "review"
   | "add_fav_list"
   | "order"
+  | "offer_received"
+  | "offer_accepted"
+  | "offer_declined"
+  | "dispute_received"
+  | "dispute_raised"
+  | "dispute_status_updated"
+  | "dispute_resolved"
+  | "refund_processed"
   
 
 interface CreateNotificationParams {
