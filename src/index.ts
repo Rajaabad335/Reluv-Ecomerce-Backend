@@ -100,6 +100,9 @@ export default {
         origin: '*',
         methods: ['GET', 'POST'],
       },
+      // Detect dead mobile connections faster so rooms are cleaned up promptly.
+      pingInterval: 10000,
+      pingTimeout: 15000,
     });
 
     strapi.io = io;
@@ -839,7 +842,9 @@ export default {
         });
 
         io.to(`conversation:${id}`).emit('message:new', emitData);
-        io.to(`user:${userId}`).emit('message:new', emitData);
+        // Only push to the receiver's personal room if they haven't joined the
+        // conversation room yet (e.g. they have the app in background / another tab).
+        // The sender is already in the conversation room so they get it once there.
         io.to(`user:${receiverId}`).emit('message:new', emitData);
 
         const updatedConversation = await strapi.entityService.findOne(conversationUid, id, {

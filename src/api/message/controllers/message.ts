@@ -227,15 +227,37 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const io = (strapi as any).io as import('socket.io').Server | undefined;
       if (io) {
         const sanitized = sanitizeMessage(created);
-        strapi.log.info('Emitting message:new with attachments:', {
-          messageId: sanitized.id,
-          hasAttachments: sanitized.attachments?.length > 0,
-          attachments: sanitized.attachments,
-        });
         io.to(`conversation:${conversationId}`).emit('message:new', {
           conversationId,
           ...sanitized,
         });
+        // Also push to the receiver's personal room in case they haven't joined
+        // the conversation room yet (background / different device).
+        if (receiverId) {
+          io.to(`user:${receiverId}`).emit('message:new', {
+            conversationId,
+            ...sanitized,
+          });
+          // Update the receiver's conversation list and unread count
+          const updatedConversation = await strapi.entityService.findOne(conversationUid, conversationId, {
+            populate: {
+              product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
+              buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+              seller: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+            },
+          });
+          const sanitizeConv = (conv: any, hasUnread: boolean) => ({
+            id: conv?.id,
+            product: conv?.product ? { id: conv.product.id, title: conv.product.title, price: conv.product.price, images: conv.product.images ?? [] } : null,
+            buyer: conv?.buyer ? { id: conv.buyer.id, username: conv.buyer.username, avatar: conv.buyer.avatar ?? null } : null,
+            seller: conv?.seller ? { id: conv.seller.id, username: conv.seller.username, avatar: conv.seller.avatar ?? null } : null,
+            lastMessagePreview: conv?.lastMessagePreview ?? null,
+            lastMessageAt: conv?.lastMessageAt ?? null,
+            updatedAt: conv?.updatedAt ?? null,
+            hasUnread,
+          });
+          io.to(`user:${receiverId}`).emit('conversation:upsert', { conversation: sanitizeConv(updatedConversation, true) });
+        }
       }
 
       // Notify the receiver
