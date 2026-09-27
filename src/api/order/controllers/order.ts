@@ -140,7 +140,21 @@ export default factories.createCoreController(
         if (orderStatus !== undefined)   data.orderStatus = orderStatus;
         if (paymentStatus !== undefined) data.paymentStatus = paymentStatus;
 
-        const updated = await strapi.entityService.update("api::order.order", id, { data });
+        // id may be a documentId string — resolve to numeric id first
+        const numericId = Number(id);
+        let resolvedId: number;
+        if (!Number.isNaN(numericId) && numericId > 0) {
+          resolvedId = numericId;
+        } else {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const updated = await strapi.entityService.update("api::order.order", resolvedId, { data });
         return ctx.send({ data: updated });
       } catch (error) {
         strapi.log.error(error);
