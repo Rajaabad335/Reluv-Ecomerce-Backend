@@ -36,11 +36,11 @@ const sanitizeUser = async (strapi: any, user: any, ctx: any) => {
 };
 
 // Exchange authorization code for access token (server-side PKCE flow)
-const exchangeCodeForToken = async (code: string): Promise<string> => {
+const exchangeCodeForToken = async (code: string, redirectUri: string): Promise<string> => {
   const params = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    redirect_uri: process.env.LINE_CALLBACK_URL!,
+    redirect_uri: redirectUri,
     client_id: process.env.LINE_CHANNEL_ID!,
     client_secret: process.env.LINE_CHANNEL_SECRET!,
   });
@@ -100,7 +100,10 @@ export default {
       }
 
       if (!accessToken && code) {
-        accessToken = await exchangeCodeForToken(code);
+        // redirect_uri must exactly match what was sent in the authorization request
+        const redirectUri: string =
+          String(body.redirect_uri ?? "").trim() || process.env.LINE_CALLBACK_URL!;
+        accessToken = await exchangeCodeForToken(code, redirectUri);
       }
 
       await verifyAccessToken(accessToken);
