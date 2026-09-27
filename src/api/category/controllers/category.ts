@@ -22,7 +22,7 @@ const ensureCategoryAttributeLinks = async (strapi: any) => {
   try {
     const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
     if (!linkSchema) {
-      strapi.log.warn('[Reluv] ⚠  Category-attribute link table schema missing at request time, repairing now.');
+      strapi.log.warn('[Relove] ⚠  Category-attribute link table schema missing at request time, repairing now.');
       await repairCategoryAttributeLinks(strapi);
       return;
     }
@@ -31,15 +31,15 @@ const ensureCategoryAttributeLinks = async (strapi: any) => {
       const countRow = await strapi.db.connection(linkSchema.tableName).count('* as count').first();
       const count = Number(countRow?.count ?? 0);
       if (count <= 0) {
-        strapi.log.warn('[Reluv] ⚠  Category-attribute link table is empty at request time, repairing now.');
+        strapi.log.warn('[Relove] ⚠  Category-attribute link table is empty at request time, repairing now.');
         await repairCategoryAttributeLinks(strapi);
       }
     } catch (error) {
-      strapi.log.warn('[Reluv] ⚠  Could not verify category-attribute link table, repairing now.');
+      strapi.log.warn('[Relove] ⚠  Could not verify category-attribute link table, repairing now.');
       await repairCategoryAttributeLinks(strapi);
     }
   } catch (error) {
-    strapi.log.error('[Reluv] ✗ Failed to verify category-attribute links at request time:', error);
+    strapi.log.error('[Relove] ✗ Failed to verify category-attribute links at request time:', error);
     await repairCategoryAttributeLinks(strapi);
   }
 };

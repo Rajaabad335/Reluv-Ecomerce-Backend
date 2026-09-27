@@ -49,11 +49,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
     try {
       await sendMail({
         to: [email],
-        subject: "Reset your Reluv password",
+        subject: "Reset your Relove password",
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:auto">
             <h2 style="color:#cb6f4d">Reset your password</h2>
-            <p>Use this code to reset your Reluv password. It expires in 10 minutes.</p>
+            <p>Use this code to reset your Relove password. It expires in 10 minutes.</p>
             <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#cb6f4d;margin:24px 0">${otp}</div>
             <p style="color:#888;font-size:12px">If you didn't request this, you can safely ignore this email.</p>
           </div>
@@ -152,11 +152,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     await sendMail({
       to: [email],
-      subject: "Confirm your Reluv email change",
+      subject: "Confirm your Relove email change",
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#cb6f4d">Confirm it's you</h2>
-          <p>We received a request to change the email on your Reluv account.</p>
+          <p>We received a request to change the email on your Relove account.</p>
           <p>Use this code to verify your identity. It expires in 10 minutes.</p>
           <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#cb6f4d;margin:24px 0">${otp}</div>
           <p style="color:#888;font-size:12px">If you didn't request this, you can safely ignore this email.</p>
@@ -203,11 +203,11 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     await sendMail({
       to: [newEmail],
-      subject: "Confirm your new Reluv email address",
+      subject: "Confirm your new Relove email address",
       html: `
         <div style="font-family:sans-serif;max-width:480px;margin:auto">
           <h2 style="color:#cb6f4d">Confirm your new email</h2>
-          <p>Enter this code in the Reluv app to complete your email change. It expires in 10 minutes.</p>
+          <p>Enter this code in the Relove app to complete your email change. It expires in 10 minutes.</p>
           <div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#cb6f4d;margin:24px 0">${newOtp}</div>
           <p style="color:#888;font-size:12px">If you didn't request this, please contact support immediately.</p>
         </div>

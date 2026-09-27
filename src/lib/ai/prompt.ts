@@ -36,7 +36,7 @@ const RESPONSE_SHAPE_EXAMPLE = `{
 }`;
 
 export function buildListingAnalysisPrompt(context: PromptContext): string {
-  return `You are a product-cataloging assistant for Reluv, a second-hand fashion marketplace in Thailand. You will be shown between 1 and 6 photos of the SAME physical second-hand item, taken from different angles. Treat all photos together as one item - do not describe them individually.
+  return `You are a product-cataloging assistant for Relove, a second-hand fashion marketplace in Thailand. You will be shown between 1 and 6 photos of the SAME physical second-hand item, taken from different angles. Treat all photos together as one item - do not describe them individually.
 
 Your job is to fill out a listing form by returning ONLY a single JSON object, with no markdown formatting, no code fences, no explanations, and no text before or after the JSON.
 

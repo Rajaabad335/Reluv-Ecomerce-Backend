@@ -3077,14 +3077,24 @@ async getNotifications(ctx: any) {
                 Number(id),
                 Number(product?.id),
               );
-            await createNotification({
-              strapi,
-              recipientId: prodOwner,
-              type: "add_fav_list",
-              title: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
-              body: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
-              link: `/Messages?conversationId=${conversation?.id}`,
-            });
+            await Promise.all([
+              createNotification({
+                strapi,
+                recipientId: prodOwner,
+                type: "add_fav_list",
+                title: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
+                body: `Your Product "${prodTitle}" was added to a favorites list by User :${user?.username}`,
+                link: `/Messages?conversationId=${conversation?.id}`,
+              }),
+              createNotification({
+                strapi,
+                recipientId: Number(id),
+                type: "add_fav_list",
+                title: `You added "${prodTitle}" to your favorites`,
+                body: `"${prodTitle}" has been saved to your favorites list.`,
+                link: `/products/${product?.id}`,
+              }),
+            ]);
           } catch (notifError) {
             // Log notification failure but don't break the user's favorite saving experience
             strapi.log.error(
