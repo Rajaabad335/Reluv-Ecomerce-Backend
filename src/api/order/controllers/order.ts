@@ -11,6 +11,15 @@ export default factories.createCoreController(
     async placeOrder(ctx) {
       try {
         const { body } = ctx.request as any; // Type assertion to access body
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          body.productId,
+          { fields: ["productStatus"] },
+        ) as any;
+        if (!product) return ctx.notFound("Product not found.");
+        if (product.productStatus !== "active") {
+          return ctx.badRequest("This item is no longer available.");
+        }
         // 🔍 Check for existing order
         const existingOrder = await strapi.entityService.findMany(
           "api::order.order",
@@ -55,6 +64,9 @@ export default factories.createCoreController(
             orderStatus: body.OrderStatus,
             paymentStatus: "paid",
           },
+        });
+        await strapi.entityService.update("api::product.product", body.productId, {
+          data: { productStatus: "sold" },
         });
         //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(body.buyerId)
         // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newOrder;

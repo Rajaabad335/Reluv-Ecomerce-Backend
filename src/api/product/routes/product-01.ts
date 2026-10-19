@@ -113,6 +113,12 @@ export default {
       },
     },
     {
+      method: "POST",
+      path: "/products/relist",
+      handler: "product.relistProduct",
+      config: { auth: false },
+    },
+    {
       method: "GET",
       path: "/products/notifications-data",
       handler: "product.getNotifications",

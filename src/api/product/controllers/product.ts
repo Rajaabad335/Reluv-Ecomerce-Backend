@@ -2504,6 +2504,7 @@ export default factories.createCoreController(
     async getProductsByUserId(ctx: any) {
       try {
         const userId = Number(ctx.params?.userId);
+        const includeAll = ctx.query?.includeAll === "true";
         if (!Number.isInteger(userId) || userId <= 0) {
           return ctx.badRequest("A valid user ID is required.");
         }
@@ -2512,28 +2513,10 @@ export default factories.createCoreController(
           "api::product.product",
           {
             filters: {
-              productStatus: { $eq: "active" },
-              $and: [
-                {
-                  users_permissions_user: {
-                    id: { $eq: userId },
-                  },
-                },
-                {
-                  $or: [
-                    {
-                      users_permissions_user: {
-                        holidayMode: { $eq: false },
-                      },
-                    },
-                    {
-                      users_permissions_user: {
-                        holidayMode: { $null: true },
-                      },
-                    },
-                  ],
-                },
-              ],
+              ...(includeAll
+                ? { productStatus: { $in: ["draft", "active", "reserved", "sold", "hidden", "pending_verification"] } }
+                : { productStatus: { $eq: "active" } }),
+              users_permissions_user: { id: { $eq: userId } },
             },
             fields: [
               "id",
@@ -2543,6 +2526,7 @@ export default factories.createCoreController(
               "likeCount",
               "createdAt",
               "isVerifiedLuxury",
+              "productStatus",
             ],
             populate: {
               category: { fields: ["name", "slug"] },
@@ -2599,6 +2583,7 @@ export default factories.createCoreController(
               null,
             material: dynamicByCode.get("material") || null,
             likeCount: Number(product?.likeCount ?? 0) || 0,
+            productStatus: product.productStatus,
               isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
             images: Array.isArray(product.images)
               ? product.images.map((img: any) => ({ id: img.id, url: img.url }))
@@ -3186,6 +3171,25 @@ async getNotifications(ctx: any) {
           "An error occurred while updating visibility.",
         );
       }
+    },
+    async relistProduct(ctx) {
+      const { id, userId } = ctx.request.body ?? {};
+      if (!id || !userId) return ctx.badRequest("Product ID and user ID are required.");
+      const product = await strapi.entityService.findOne("api::product.product", id, {
+        fields: ["productStatus"],
+        populate: { users_permissions_user: { fields: ["id"] } },
+      }) as any;
+      if (!product) return ctx.notFound("Product not found.");
+      if (Number(product.users_permissions_user?.id) !== Number(userId)) {
+        return ctx.forbidden("You can only relist your own items.");
+      }
+      if (product.productStatus !== "sold") {
+        return ctx.badRequest("Only sold items can be relisted.");
+      }
+      const updated = await strapi.entityService.update("api::product.product", id, {
+        data: { productStatus: "active", isHidden: false },
+      });
+      return ctx.send({ data: updated });
     },
   }),
 );
