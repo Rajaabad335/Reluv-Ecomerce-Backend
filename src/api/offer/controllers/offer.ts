@@ -122,7 +122,7 @@ export default factories.createCoreController(
             data: {
               type: 'offer_received',
               title: 'New Offer Received',
-              body: `You received an offer of $${offerPrice} on "${(product as any).title}".`,
+              body: `You received an offer of THB ${offerPrice} on "${(product as any).title}".`,
               read: false,
               link: `/Orders?tab=offers`,
               recipient: sellerId,
@@ -302,7 +302,7 @@ export default factories.createCoreController(
               type: action === 'accepted' ? 'offer_accepted' : 'offer_declined',
               title: action === 'accepted' ? 'Offer Accepted! 🎉' : 'Offer Declined',
               body: action === 'accepted'
-                ? `Your offer of $${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
+                ? `Your offer of THB ${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
                 : `Your offer on "${productTitle}" was declined by the seller.`,
               read: false,
               link: action === 'accepted'
@@ -320,7 +320,7 @@ export default factories.createCoreController(
                 data: {
                   type: 'offer_unavailable',
                   title: 'Offer No Longer Available',
-                  body: `"${productTitle}" has been reserved by another buyer.`,
+                  body: `THB ${offerPrice} on "${productTitle}" has been reserved by another buyer.`,
                   read: false,
                   link: `/products/${productId}`,
                   recipient: otherBuyerId,
