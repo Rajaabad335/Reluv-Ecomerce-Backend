@@ -11,15 +11,131 @@ export default factories.createCoreController(
     async placeOrder(ctx) {
       try {
         const { body } = ctx.request as any; // Type assertion to access body
+        const authenticatedUserId = Number(ctx.state?.user?.id);
+        if (authenticatedUserId && authenticatedUserId !== Number(body.buyerId)) {
+          return ctx.forbidden("You can only place an order for the signed-in buyer.");
+        }
         const product = await strapi.entityService.findOne(
           "api::product.product",
           body.productId,
-          { fields: ["productStatus"] },
+          { fields: ["productStatus", "price"], populate: { users_permissions_user: { fields: ["id"] } } },
         ) as any;
         if (!product) return ctx.notFound("Product not found.");
-        if (product.productStatus !== "active") {
+
+        let acceptedOffer: any = null;
+        if (body.offerId != null && body.offerId !== "") {
+          const offerId = Number(body.offerId);
+          if (!Number.isInteger(offerId) || offerId <= 0) {
+            return ctx.badRequest("Invalid offer.");
+          }
+          acceptedOffer = await strapi.entityService.findOne(
+            "api::offer.offer" as any,
+            offerId,
+            { populate: { product: { fields: ["id"] }, buyer: { fields: ["id"] }, seller: { fields: ["id"] } } },
+          ) as any;
+          if (!acceptedOffer || acceptedOffer.status !== "accepted") {
+            return ctx.badRequest("This offer is no longer available for checkout.");
+          }
+          if (acceptedOffer.expiresAt && new Date(acceptedOffer.expiresAt).getTime() <= Date.now()) {
+            await strapi.entityService.update("api::offer.offer" as any, offerId, {
+              data: { status: "expired" },
+            });
+            return ctx.badRequest("This offer has expired.");
+          }
+          if (
+            Number(acceptedOffer.product?.id) !== Number(body.productId)
+          ) {
+            return ctx.badRequest("The accepted offer does not match this order.");
+          }
+          const listingSellerId = Number(product.users_permissions_user?.id ?? product.users_permissions_user);
+          const offerBuyerId = Number(acceptedOffer.buyer?.id);
+          const offerSellerId = Number(acceptedOffer.seller?.id);
+          const expectedBuyerId = offerBuyerId === listingSellerId ? offerSellerId : offerBuyerId;
+          if (
+            !listingSellerId ||
+            ![offerBuyerId, offerSellerId].includes(listingSellerId) ||
+            Number(body.sellerId) !== listingSellerId ||
+            Number(body.buyerId) !== expectedBuyerId
+          ) {
+            return ctx.badRequest("The accepted offer participants do not match this order.");
+          }
+          // Keep compatibility with offers accepted before reservation was
+          // removed; new accepted offers leave the product active.
+          if (!["active", "reserved"].includes(product.productStatus)) {
+            return ctx.badRequest("This item is no longer available.");
+          }
+        } else {
+          // Some checkout entry points can preserve the accepted price in the
+          // URL while dropping offerId. Recover the buyer's accepted offer so
+          // the listing can still be checked out at that price.
+          const matchingOffers = await strapi.entityService.findMany(
+            "api::offer.offer" as any,
+            {
+              filters: {
+                product: { id: body.productId },
+                buyer: { id: body.buyerId },
+                status: "accepted",
+              },
+              populate: {
+                product: { fields: ["id"] },
+                buyer: { fields: ["id"] },
+                seller: { fields: ["id"] },
+              },
+              limit: 2,
+            },
+          ) as any[];
+
+          if (matchingOffers.length === 1) {
+            acceptedOffer = matchingOffers[0];
+            if (
+              acceptedOffer.expiresAt &&
+              new Date(acceptedOffer.expiresAt).getTime() <= Date.now()
+            ) {
+              await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
+                data: { status: "expired" },
+              });
+              return ctx.badRequest("This offer has expired.");
+            }
+            const offerBuyerId = Number(acceptedOffer.buyer?.id);
+            const offerSellerId = Number(acceptedOffer.seller?.id);
+            const listingSellerId = Number(product.users_permissions_user?.id ?? product.users_permissions_user);
+            const expectedBuyerId = offerBuyerId === listingSellerId ? offerSellerId : offerBuyerId;
+            if (
+              !["active", "reserved"].includes(product.productStatus) ||
+              !listingSellerId ||
+              ![offerBuyerId, offerSellerId].includes(listingSellerId) ||
+              Number(body.sellerId) !== listingSellerId ||
+              Number(body.buyerId) !== expectedBuyerId
+            ) {
+              return ctx.badRequest("The accepted offer participants do not match this order.");
+            }
+          }
+        }
+
+        if (!acceptedOffer && product.productStatus !== "active") {
           return ctx.badRequest("This item is no longer available.");
         }
+
+        const productPrice = acceptedOffer
+          ? Number(acceptedOffer.offerPrice)
+          : Number(product.price);
+        if (!Number.isFinite(productPrice) || productPrice <= 0) {
+          return ctx.badRequest("This item has an invalid price.");
+        }
+
+        const settings = await strapi.documents("api::marketplace-setting.marketplace-setting").findMany({
+          status: "published",
+          sort: { createdAt: "desc" },
+          limit: 1,
+          fields: ["commissionRate"],
+        });
+        const commissionRate = Number(settings?.[0]?.commissionRate ?? 0);
+        const buyerProtectionFee =
+          Number.isFinite(commissionRate) && commissionRate >= 0 && commissionRate <= 100
+            ? Math.round((productPrice * commissionRate / 100 + Number.EPSILON) * 100) / 100
+            : 0;
+        const shippingFee = Math.max(0, Number(body.shippingFee) || 0);
+        const totalAmount = Math.round((productPrice + buyerProtectionFee + shippingFee + Number.EPSILON) * 100) / 100;
         // 🔍 Check for existing order
         const existingOrder = await strapi.entityService.findMany(
           "api::order.order",
@@ -50,12 +166,12 @@ export default factories.createCoreController(
           data: {
             product: body.productId || null,
             productTitle: body.productTitle,
-            productPrice: body.productPrice,
+            productPrice,
             //   currency: body.currency,
             productImage: body.productImage,
-            buyerProtectionFee: body.buyerProtectionFee,
-            shippingFee: body.shippingFee,
-            totalAmount: body.total,
+            buyerProtectionFee,
+            shippingFee,
+            totalAmount,
             seller: Number(body.sellerId) || null,
             buyer: body.buyerId || null,
             phoneNumber: body.phoneNumber || null,
@@ -68,6 +184,11 @@ export default factories.createCoreController(
         await strapi.entityService.update("api::product.product", body.productId, {
           data: { productStatus: "sold" },
         });
+        if (acceptedOffer) {
+          await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
+            data: { status: "completed", order: newOrder.id },
+          });
+        }
         //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(body.buyerId)
         // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newOrder;
         if (newOrder 

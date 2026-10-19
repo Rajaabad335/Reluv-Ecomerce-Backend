@@ -19,7 +19,7 @@ export default factories.createCoreController(
   ({ strapi }) => ({
     // POST /api/offers/make
     async makeOffer(ctx: any) {
-      const { productId, buyerId, sellerId, offerPrice, message, conversationId } =
+      const { productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId } =
         ctx.request.body;
 
       if (!productId || !buyerId || !offerPrice) {
@@ -29,6 +29,10 @@ export default factories.createCoreController(
       if (!sellerId) {
         return ctx.badRequest("This product does not have a seller associated with it. Cannot make an offer.");
       }
+      const authenticatedUserId = Number(ctx.state?.user?.id);
+      if (authenticatedUserId && authenticatedUserId !== Number(buyerId)) {
+        return ctx.forbidden("You can only make an offer as the signed-in buyer.");
+      }
 
       const product = await strapi.entityService.findOne(
         "api::product.product",
@@ -37,6 +41,28 @@ export default factories.createCoreController(
       );
 
       if (!product) return ctx.notFound("Product not found.");
+
+      const productSellerId = Number((product as any).users_permissions_user?.id ?? (product as any).users_permissions_user);
+      if (!productSellerId) {
+        return ctx.badRequest("This product does not have a valid seller.");
+      }
+      if (productSellerId !== Number(sellerId)) {
+        const parentId = Number(parentOfferId);
+        const parent = Number.isInteger(parentId) && parentId > 0
+          ? await strapi.entityService.findOne("api::offer.offer" as any, parentId, {
+              populate: { product: { fields: ["id"] }, buyer: { fields: ["id"] }, seller: { fields: ["id"] } },
+            }) as any
+          : null;
+        const validCounter = parent &&
+          Number(parent.product?.id) === Number(productId) &&
+          Number(parent.seller?.id) === productSellerId &&
+          Number(parent.buyer?.id) === Number(sellerId) &&
+          Number(buyerId) === productSellerId &&
+          ["pending", "declined"].includes(parent.status);
+        if (!validCounter) {
+          return ctx.badRequest("Seller does not match this product.");
+        }
+      }
 
       const productStatus = (product as any).productStatus;
       if (productStatus === 'sold' || productStatus === 'reserved') {
@@ -204,7 +230,8 @@ export default factories.createCoreController(
 
       const productId = (offer as any).product?.id;
 
-      // For acceptance: validate product is still available and atomically reserve it
+      // For acceptance: validate product is still available. The listing stays
+      // active until an order is successfully placed.
       if (action === "accepted" && productId) {
         const product = await strapi.entityService.findOne(
           "api::product.product",
@@ -229,10 +256,6 @@ export default factories.createCoreController(
           });
         }
 
-        // Atomically reserve the product before accepting the offer
-        await strapi.entityService.update("api::product.product", productId, {
-          data: { productStatus: "reserved" },
-        });
       }
 
       const now = new Date();
@@ -354,11 +377,11 @@ export default factories.createCoreController(
       const offer = await strapi.entityService.findOne(
         "api::offer.offer" as any,
         offerId,
-        { populate: OFFER_POPULATE }
+        { populate: { ...OFFER_POPULATE, order: { fields: ["id"] } } }
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
-      if ((offer as any).status !== "accepted")
+      if (!["accepted", "completed"].includes((offer as any).status))
         return ctx.badRequest("Offer is not in accepted state.");
 
       const order = await strapi.entityService.findOne(
@@ -380,6 +403,13 @@ export default factories.createCoreController(
         Number((offer as any).seller?.id) === Number(buyerId);
       if (!isOfferParticipant)
         return ctx.forbidden("You are not part of this offer.");
+
+      if ((offer as any).status === "completed") {
+        if (Number((offer as any).order?.id) === Number(orderId)) {
+          return ctx.send({ ok: true });
+        }
+        return ctx.badRequest("This offer has already been completed with another order.");
+      }
 
       // Check if offer has expired
       const expiresAt = (offer as any).expiresAt;

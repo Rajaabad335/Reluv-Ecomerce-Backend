@@ -23,7 +23,7 @@ export default factories.createCoreController('api::marketplace-setting.marketpl
       const commissionRate =
         entry?.commissionRate !== undefined && entry?.commissionRate !== null
           ? Number(entry.commissionRate)
-          : 0;
+          : 10;
  
       ctx.body = {
         data: { commissionRate },

@@ -633,12 +633,12 @@ export default {
         }
       });
 
-      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, clientOfferId, parentOfferId }: any) => {
+        socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId, clientOfferId }: any) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
             request: {
-              body: { productId, buyerId, sellerId, offerPrice, message, conversationId },
+                body: { productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId },
             },
             state: { user: { id: userId } },
             badRequest: (msg: string) => {
@@ -660,18 +660,25 @@ export default {
           const result = await offerController.makeOffer(mockCtx);
           const offer = result?.data;
 
+          // Acknowledge the sender as soon as the offer is persisted. The
+          // conversation lookup/broadcast is secondary and must not hold up
+          // the create request long enough for clients to report a timeout.
+          socket.emit('offer:created', { clientOfferId, offer });
+
           if (conversationId && offer?.id) {
-            const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
-            if (conversation) {
-              io.to(`conversation:${conversationId}`).emit('offer:created', {
-                clientOfferId,
-                offer,
-                conversationId,
-              });
+            try {
+              const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
+              if (conversation) {
+                io.to(`conversation:${conversationId}`).emit('offer:created', {
+                  clientOfferId,
+                  offer,
+                  conversationId,
+                });
+              }
+            } catch (broadcastError: any) {
+              strapi.log.warn('Offer was created, but conversation broadcast failed:', broadcastError);
             }
           }
-
-          socket.emit('offer:created', { clientOfferId, offer });
         } catch (error: any) {
           socket.emit('offer:error', {
             clientOfferId,
