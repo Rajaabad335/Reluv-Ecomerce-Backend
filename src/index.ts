@@ -654,6 +654,7 @@ export default {
               throw new Error(msg);
             },
             created: (data: any) => data,
+            send: (data: any) => data,
           };
 
           const result = await offerController.makeOffer(mockCtx);
@@ -705,6 +706,12 @@ export default {
           const result = await offerController.respondToOffer(mockCtx);
           const offer = result?.data;
 
+          // Conflict: product already taken by another buyer
+          if (result?.conflict) {
+            socket.emit('offer:responded', { offerId, offer, conflict: true, message: result.message });
+            return;
+          }
+
           if (conversationId) {
             io.to(`conversation:${conversationId}`).emit('offer:responded', {
               offerId,
@@ -714,6 +721,21 @@ export default {
           }
 
           socket.emit('offer:responded', { offerId, offer });
+
+          // Broadcast invalidation to all other affected conversations
+          const invalidatedConversationIds: number[] = result?.invalidatedConversationIds ?? [];
+          const invalidatedOfferIds: number[] = result?.invalidatedOfferIds ?? [];
+          for (let i = 0; i < invalidatedConversationIds.length; i++) {
+            const convId = invalidatedConversationIds[i];
+            const invOfferId = invalidatedOfferIds[i];
+            if (convId) {
+              io.to(`conversation:${convId}`).emit('offer:invalidated', {
+                offerId: invOfferId,
+                conversationId: convId,
+                reason: 'Item has been reserved by another buyer.',
+              });
+            }
+          }
         } catch (error: any) {
           socket.emit('offer:error', {
             offerId,

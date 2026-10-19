@@ -11,6 +11,7 @@ const OFFER_POPULATE = {
   },
   buyer: { fields: ["id", "username"] },
   seller: { fields: ["id", "username"] },
+  conversation: { fields: ["id"] },
 };
 
 export default factories.createCoreController(
@@ -36,6 +37,11 @@ export default factories.createCoreController(
       );
 
       if (!product) return ctx.notFound("Product not found.");
+
+      const productStatus = (product as any).productStatus;
+      if (productStatus === 'sold' || productStatus === 'reserved') {
+        return ctx.badRequest('This item is no longer available for offers.');
+      }
 
       const originalPrice = (product as any).price;
 
@@ -64,11 +70,19 @@ export default factories.createCoreController(
       );
 
       if ((existing as any[]).length > 0) {
-        await strapi.entityService.update(
+        // Update the existing pending offer price instead of creating a new one
+        const existingOffer = (existing as any[])[0];
+        const updatedOffer = await strapi.entityService.update(
           "api::offer.offer" as any,
-          (existing as any[])[0].id,
-          { data: { status: "declined" } }
+          existingOffer.id,
+          { data: { offerPrice, message: message ?? null, conversation: conversationId ?? existingOffer.conversation ?? null } }
         );
+        const populatedUpdated = await strapi.entityService.findOne(
+          "api::offer.offer" as any,
+          existingOffer.id,
+          { populate: OFFER_POPULATE }
+        );
+        return ctx.send({ data: populatedUpdated ?? updatedOffer });
       }
 
       const images = (product as any).images ?? [];
@@ -86,6 +100,7 @@ export default factories.createCoreController(
           seller: sellerId,
           productTitle: (product as any).title,
           productImage: firstImage,
+          conversation: conversationId ?? null,
         },
       });
 
@@ -185,7 +200,40 @@ export default factories.createCoreController(
       if (Number((offer as any).seller?.id) !== Number(sellerId))
         return ctx.forbidden("Not your offer.");
       if ((offer as any).status !== "pending")
-        return ctx.send({ data: offer }); // already responded — return current state silently
+        return ctx.send({ data: offer, alreadyResponded: true }); // already responded — return current state
+
+      const productId = (offer as any).product?.id;
+
+      // For acceptance: validate product is still available and atomically reserve it
+      if (action === "accepted" && productId) {
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+          { fields: ["productStatus"] }
+        ) as any;
+
+        if (!product) return ctx.notFound("Product not found.");
+
+        if (product.productStatus === "sold" || product.productStatus === "reserved") {
+          // Product already taken — mark this offer unavailable and return conflict
+          await strapi.entityService.update("api::offer.offer" as any, offerId, {
+            data: { status: "unavailable" },
+          });
+          const unavailableOffer = await strapi.entityService.findOne(
+            "api::offer.offer" as any, offerId, { populate: OFFER_POPULATE }
+          );
+          return ctx.send({
+            data: unavailableOffer,
+            conflict: true,
+            message: "This item is no longer available.",
+          });
+        }
+
+        // Atomically reserve the product before accepting the offer
+        await strapi.entityService.update("api::product.product", productId, {
+          data: { productStatus: "reserved" },
+        });
+      }
 
       const now = new Date();
       const expiresAt = new Date(now.getTime() + OFFER_EXPIRY_HOURS * 60 * 60 * 1000);
@@ -210,9 +258,32 @@ export default factories.createCoreController(
       const buyerId = (offer as any).buyer?.id;
       const productTitle = (offer as any).productTitle ?? 'the product';
       const offerPrice = (offer as any).offerPrice;
-      const productId = (offer as any).product?.id;
 
-      // Fire-and-forget: chat message + notification + product reservation
+      // When accepted, invalidate all other pending offers for this product
+      let invalidatedOffers: any[] = [];
+      if (action === "accepted" && productId) {
+        const otherPending = await strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: {
+              product: { id: productId },
+              status: "pending",
+              id: { $ne: offerId },
+            },
+            populate: { conversation: { fields: ["id"] }, buyer: { fields: ["id"] } },
+            limit: 100,
+          }
+        ) as any[];
+
+        for (const otherOffer of otherPending) {
+          await strapi.entityService.update("api::offer.offer" as any, otherOffer.id, {
+            data: { status: "unavailable" },
+          });
+          invalidatedOffers.push(otherOffer);
+        }
+      }
+
+      // Fire-and-forget: chat message + notification
       setImmediate(async () => {
         try {
           if (conversationId) {
@@ -240,17 +311,35 @@ export default factories.createCoreController(
               recipient: buyerId,
             },
           });
-          if (action === 'accepted' && productId) {
-            await strapi.entityService.update('api::product.product', productId, {
-              data: { productStatus: 'reserved' },
-            });
+
+          // Notify buyers whose offers were invalidated
+          for (const otherOffer of invalidatedOffers) {
+            const otherBuyerId = otherOffer.buyer?.id;
+            if (otherBuyerId) {
+              await strapi.entityService.create('api::notification.notification' as any, {
+                data: {
+                  type: 'offer_unavailable',
+                  title: 'Offer No Longer Available',
+                  body: `"${productTitle}" has been reserved by another buyer.`,
+                  read: false,
+                  link: `/products/${productId}`,
+                  recipient: otherBuyerId,
+                },
+              });
+            }
           }
         } catch (e) {
           strapi.log.error('respondToOffer background tasks failed:', e);
         }
       });
 
-      return ctx.send({ data: populatedUpdated ?? updated });
+      return ctx.send({
+        data: populatedUpdated ?? updated,
+        invalidatedOfferIds: invalidatedOffers.map((o) => o.id),
+        invalidatedConversationIds: invalidatedOffers
+          .map((o) => o.conversation?.id)
+          .filter(Boolean),
+      });
     },
 
     // POST /api/offers/:id/complete

@@ -22,7 +22,7 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["pending", "accepted", "declined", "expired", "completed"],
+      "enum": ["pending", "accepted", "declined", "expired", "completed", "unavailable"],
       "default": "pending",
       "required": true
     },
@@ -53,6 +53,11 @@
       "type": "relation",
       "relation": "oneToOne",
       "target": "api::order.order"
+    },
+    "conversation": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::conversation.conversation"
     }
   }
 }

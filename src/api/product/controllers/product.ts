@@ -1746,7 +1746,11 @@ export default factories.createCoreController(
               images: { fields: ["id", "url"] },
               users_permissions_user: {
                 fields: ["id", "username", "rating_avg", "city", "country"],
-              },
+                populate: {
+                  avatar: { fields: ["id", "url"] },
+                  received_reviews: { fields: ["id"] },
+                },
+              } as any,
             },
             limit: 1,
           },
@@ -1829,7 +1833,15 @@ export default factories.createCoreController(
               : [],
             isVerifiedLuxury: Boolean(product?.isVerifiedLuxury),
             attributes,
-            user: product?.users_permissions_user,
+            user: product?.users_permissions_user
+              ? {
+                  ...product.users_permissions_user,
+                  avatar: product.users_permissions_user.avatar ?? null,
+                  reviews: Array.isArray(product.users_permissions_user.received_reviews)
+                    ? product.users_permissions_user.received_reviews.length
+                    : 0,
+                }
+              : null,
           },
         };
       } catch (error) {

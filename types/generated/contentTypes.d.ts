@@ -1194,6 +1194,10 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    conversation: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::conversation.conversation'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1214,7 +1218,7 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     status: Schema.Attribute.Enumeration<
-      ['pending', 'accepted', 'declined', 'expired', 'completed']
+      ['pending', 'accepted', 'declined', 'expired', 'completed', 'unavailable']
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;
