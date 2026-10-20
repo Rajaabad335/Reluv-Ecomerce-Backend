@@ -87,4 +87,16 @@ export default ({ strapi }: { strapi: Core.Strapi }) => ({
 
     ctx.body = { ok: true };
   },
+
+  // DELETE /api/notifications/clear-all
+  async clearAll(ctx: any) {
+    const userId = await getUserIdFromCtx(strapi, ctx);
+    if (!userId) return ctx.unauthorized("Authentication required.");
+
+    await strapi.db.query("api::notification.notification").deleteMany({
+      where: { recipient: { id: userId } },
+    });
+
+    ctx.body = { ok: true };
+  },
 });

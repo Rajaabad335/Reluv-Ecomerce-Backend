@@ -18,5 +18,11 @@ export default {
       handler: "notification.markAllRead",
       config: { auth: false, middlewares: [], policies: [] },
     },
+    {
+      method: "DELETE",
+      path: "/notifications/clear-all",
+      handler: "notification.clearAll",
+      config: { auth: false, middlewares: [], policies: [] },
+    },
   ],
 };
