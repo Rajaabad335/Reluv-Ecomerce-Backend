@@ -776,7 +776,7 @@ export default {
           messageData.offer = metadata.offerId;
         }
 
-        const created = await strapi.entityService.create(messageUid, {
+        let created = await strapi.entityService.create(messageUid, {
           data: messageData,
           populate: {
             sender: true,
@@ -784,6 +784,38 @@ export default {
             offer: { populate: { product: true } },
           },
         });
+
+        // Strapi 5 does not officially support `connect` on media attributes
+        // through the entity/document service, and it silently drops the link.
+        // Attach the uploaded files via the query layer, then reload the
+        // populated message so message:new carries the real attachments.
+        if (attachmentIds.length > 0 && !(created.attachments?.length > 0)) {
+          // Link from the file side: the upload_file_morph join rows are owned
+          // by the upload plugin's file entity (`related` morph relation).
+          // Files here are freshly uploaded per message, so overwriting `related`
+          // cannot detach anything else.
+          for (const attachmentId of attachmentIds) {
+            try {
+              await strapi.db.query('plugin::upload.file').update({
+                where: { id: attachmentId },
+                data: { related: [{ id: created.id, __type: messageUid }] },
+              });
+            } catch (linkError) {
+              strapi.log.warn('[Socket] Failed to link attachment:', {
+                messageId: created.id,
+                attachmentId,
+                error: linkError instanceof Error ? linkError.message : String(linkError),
+              });
+            }
+          }
+          created = await strapi.entityService.findOne(messageUid, created.id, {
+            populate: {
+              sender: true,
+              attachments: true,
+              offer: { populate: { product: true } },
+            },
+          }) as any;
+        }
 
         strapi.log.info('[Socket] Message created:', {
           id: created.id,

@@ -207,12 +207,9 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
         messageData.offer = ctx.request.body.metadata.offerId;
       }
 
-      const created = await strapi.entityService.create(messageUid, {
+      let created = await strapi.entityService.create(messageUid, {
         data: {
           ...messageData,
-          attachments: attachmentIds.length > 0
-            ? { connect: attachmentIds.map((attachmentId: number) => ({ id: attachmentId })) }
-            : undefined,
           metadata: ctx.request?.body?.metadata || undefined,
         },
         populate: {
@@ -223,6 +220,37 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           }
         },
       });
+
+      // Strapi 5 does not officially support `connect` on media attributes
+      // through the entity service and silently drops the link. Attach the
+      // uploaded files via the query layer, then reload the populated message.
+      if (attachmentIds.length > 0 && !(created.attachments?.length > 0)) {
+        // Link from the file side: the upload_file_morph join rows are owned
+        // by the upload plugin's file entity (`related` morph relation).
+        for (const attachmentId of attachmentIds) {
+          try {
+            await strapi.db.query('plugin::upload.file').update({
+              where: { id: attachmentId },
+              data: { related: [{ id: created.id, __type: messageUid }] },
+            });
+          } catch (linkError) {
+            strapi.log.warn('Failed to link attachment:', {
+              messageId: created.id,
+              attachmentId,
+              error: linkError instanceof Error ? linkError.message : String(linkError),
+            });
+          }
+        }
+        created = await strapi.entityService.findOne(messageUid, created.id, {
+          populate: {
+            sender: true,
+            attachments: true,
+            offer: {
+              populate: ['buyer', 'seller', 'product']
+            }
+          },
+        }) as any;
+      }
 
       strapi.log.info('Created message with attachments:', {
         messageId: created.id,
