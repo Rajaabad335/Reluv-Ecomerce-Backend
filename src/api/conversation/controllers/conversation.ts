@@ -3,6 +3,10 @@
  */
 
 import { factories } from "@strapi/strapi";
+import {
+  findOrCreateConversationForPair,
+  sanitizeConversationPayload,
+} from "../../../lib/unified-conversations";
 
 const conversationUid = "api::conversation.conversation" as any;
 const productUid = "api::product.product" as any;
@@ -302,62 +306,21 @@ export default factories.createCoreController(
           buyerId = otherUserId;
         }
 
-        const existing = (await strapi.entityService.findMany(conversationUid, {
-          filters: {
-            product: { id: { $eq: productId } },
-            buyer: { id: { $eq: buyerId } },
-            seller: { id: { $eq: sellerId } },
-          },
-          populate: {
-            product: {
-              fields: ["id", "title", "price"],
-              populate: { images: { fields: ["url"] } },
-            },
-            buyer: {
-              fields: ["id", "username"],
-              populate: { avatar: { fields: ["url"] } },
-            },
-            seller: {
-              fields: ["id", "username"],
-              populate: { avatar: { fields: ["url"] } },
-            },
-          },
-          limit: 1,
-        })) as any[];
+        // Unified lookup: one conversation per buyer-seller pair, regardless of
+        // which product triggered it. Reopening from another product reuses the
+        // existing conversation and posts a product_ref message instead.
+        const conversation = await findOrCreateConversationForPair(
+          strapi,
+          buyerId,
+          sellerId,
+          productId,
+          userId,
+        );
 
-        if (existing?.[0]) {
-          ctx.body = {
-            ok: true,
-            conversation: sanitizeConversation(existing[0], false),
-          };
-          return;
-        }
-
-        const created = await strapi.entityService.create(conversationUid, {
-          data: {
-            product: productId,
-            buyer: buyerId,
-            seller: sellerId,
-            lastMessageAt: new Date().toISOString(),
-            lastMessagePreview: "",
-          },
-          populate: {
-            product: {
-              fields: ["id", "title", "price"],
-              populate: { images: { fields: ["url"] } },
-            },
-            buyer: {
-              fields: ["id", "username"],
-              populate: { avatar: { fields: ["url"] } },
-            },
-            seller: {
-              fields: ["id", "username"],
-              populate: { avatar: { fields: ["url"] } },
-            },
-          },
-        });
-
-        ctx.body = { ok: true, conversation: sanitizeConversation(created, false) };
+        ctx.body = {
+          ok: true,
+          conversation: sanitizeConversationPayload(conversation, false),
+        };
       } catch (error) {
         strapi.log.error(error);
         return ctx.internalServerError("Failed to create conversation.");

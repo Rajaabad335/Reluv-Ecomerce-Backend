@@ -2,6 +2,13 @@ import { Server } from 'socket.io';
 import { repairCategoryAttributeLinks, resolveCategoryAttributeLinkSchema } from './lib/repairCategoryAttributeLinks';
 import { autoSyncColumns } from "./database/migrations/auto-sync-columns";
 import { createNotification } from './lib/createNotification';
+import {
+  findOrCreateConversationForPair,
+  mergeDuplicateConversations,
+  sanitizeConversationPayload as sanitizeUnifiedConversation,
+  ensureProductRefMessage,
+  loadProductById,
+} from './lib/unified-conversations';
 
 
 // ─── Seed data (inlined to avoid file I/O on Render) ────────────────────────
@@ -72,6 +79,21 @@ export default {
       strapi.log.error(`[Reluv] ✗ Link repair failed: ${err.message}`);
     }
 
+    // ── 1a. Unified conversations migration (safe to rerun) ────────────────
+    try {
+      const migration = await mergeDuplicateConversations(strapi);
+      if (
+        migration.mergedPairs > 0 ||
+        migration.deletedConversations > 0
+      ) {
+        strapi.log.info(
+          `[Reluv] Unified conversations: merged ${migration.mergedPairs} buyer-seller pair(s), moved ${migration.movedMessages} message(s) and ${migration.movedOffers} offer(s), deleted ${migration.deletedConversations} duplicate conversation(s).`,
+        );
+      }
+    } catch (err: any) {
+      strapi.log.error(`[Reluv] ✗ Unified conversation migration failed: ${err.message}`);
+    }
+
     // ── 1b. Ensure custom user enum column exists ──────────────────────────
     try {
       const userTable = 'up_users';
@@ -137,35 +159,7 @@ export default {
       return new Date(conversation.lastMessageAt).getTime() > new Date(deletedAt).getTime();
     };
 
-    const sanitizeConversation = (conversation: any, hasUnread = false) => ({
-      id: conversation?.id,
-      product: conversation?.product
-        ? {
-            id: conversation.product.id,
-            title: conversation.product.title,
-            price: conversation.product.price,
-            images: conversation.product.images ?? [],
-          }
-        : null,
-      buyer: conversation?.buyer
-        ? {
-            id: conversation.buyer.id,
-            username: conversation.buyer.username,
-            avatar: conversation.buyer.avatar ?? null,
-          }
-        : null,
-      seller: conversation?.seller
-        ? {
-            id: conversation.seller.id,
-            username: conversation.seller.username,
-            avatar: conversation.seller.avatar ?? null,
-          }
-        : null,
-      lastMessagePreview: conversation?.lastMessagePreview ?? null,
-      lastMessageAt: conversation?.lastMessageAt ?? null,
-      updatedAt: conversation?.updatedAt ?? null,
-      hasUnread,
-    });
+    const sanitizeConversation = (conversation: any, hasUnread = false) => sanitizeUnifiedConversation(conversation, hasUnread);
 
     const sanitizeMessage = (message: any) => ({
       id: message?.id,
@@ -196,6 +190,17 @@ export default {
             offerPrice: message.offer.offerPrice,
             originalPrice: message.offer.originalPrice,
             status: message.offer.status,
+            productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
+            productImage: message.offer.productImage ?? null,
+            product: message.offer.product
+              ? {
+                  id: message.offer.product.id,
+                  documentId: message.offer.product.documentId ?? null,
+                  title: message.offer.product.title ?? null,
+                  price: message.offer.product.price ?? null,
+                  productStatus: message.offer.product.productStatus ?? null,
+                }
+              : null,
             buyer: message.offer.buyer
               ? { id: message.offer.buyer.id, username: message.offer.buyer.username }
               : null,
@@ -326,7 +331,7 @@ export default {
         populate: {
           sender: true,
           attachments: true,
-          offer: { populate: ['buyer', 'seller'] },
+          offer: { populate: ['buyer', 'seller', 'product'] },
         },
         sort: { createdAt: 'asc' },
         limit: 2000,
@@ -405,70 +410,36 @@ export default {
       socket.on('conversation:createForProduct', async ({ productId, otherUserId }: any, ack?: Function) => {
         try {
           const productIdNum = Number(productId);
-          const otherUserIdNum = otherUserId ? Number(otherUserId) : null;
           if (!Number.isInteger(productIdNum) || productIdNum <= 0) {
             throw new Error('productId is required.');
           }
 
-          const productRows = (await strapi.entityService.findMany(productUid, {
-            filters: { id: { $eq: productIdNum } },
-            fields: ['id'],
-            populate: { users_permissions_user: { fields: ['id'] } },
-            limit: 1,
-          })) as any[];
-          const product = productRows?.[0];
+          const product = await loadProductById(strapi, productIdNum);
           if (!product) throw new Error('Product not found.');
 
-          const sellerId = Number(product?.users_permissions_user?.id);
+          const sellerId = Number((product as any).users_permissions_user?.id);
           if (!Number.isInteger(sellerId) || sellerId <= 0) {
             throw new Error('Seller not found for product.');
           }
 
           let buyerId = userId;
           if (userId === sellerId) {
-            if (!otherUserIdNum || !Number.isInteger(otherUserIdNum) || otherUserIdNum <= 0) {
+            if (!otherUserId || !Number.isInteger(Number(otherUserId)) || Number(otherUserId) <= 0) {
               throw new Error('otherUserId is required when seller creates a conversation.');
             }
-            buyerId = otherUserIdNum;
+            buyerId = Number(otherUserId);
           }
 
-          const populate = {
-            product: {
-              fields: ['id', 'title', 'price'],
-              populate: { images: { fields: ['url'] } },
-            },
-            buyer: {
-              fields: ['id', 'username'],
-              populate: { avatar: { fields: ['url'] } },
-            },
-            seller: {
-              fields: ['id', 'username'],
-              populate: { avatar: { fields: ['url'] } },
-            },
-          };
-
-          const existing = (await strapi.entityService.findMany(conversationUid, {
-            filters: {
-              product: { id: { $eq: productIdNum } },
-              buyer: { id: { $eq: buyerId } },
-              seller: { id: { $eq: sellerId } },
-            },
-            populate,
-            limit: 1,
-          })) as any[];
-
-          const conversation =
-            existing?.[0] ??
-            (await strapi.entityService.create(conversationUid, {
-              data: {
-                product: productIdNum,
-                buyer: buyerId,
-                seller: sellerId,
-                lastMessageAt: new Date().toISOString(),
-                lastMessagePreview: '',
-              },
-              populate,
-            }));
+          // Unified lookup: one conversation per buyer-seller pair. Opening from
+          // another product reuses the conversation and posts a product_ref
+          // message instead of creating a duplicate conversation.
+          const conversation = await findOrCreateConversationForPair(
+            strapi,
+            buyerId,
+            sellerId,
+            productIdNum,
+            userId,
+          );
 
           const sanitized = sanitizeConversation(conversation, false);
           socket.join(`conversation:${sanitized.id}`);
@@ -695,6 +666,7 @@ export default {
             request: {
               body: { action, sellerId, conversationId },
             },
+            state: { user: { id: userId } },
             badRequest: (msg: string) => {
               socket.emit('offer:error', { offerId, message: msg });
               throw new Error(msg);
@@ -729,20 +701,6 @@ export default {
 
           socket.emit('offer:responded', { offerId, offer });
 
-          // Broadcast invalidation to all other affected conversations
-          const invalidatedConversationIds: number[] = result?.invalidatedConversationIds ?? [];
-          const invalidatedOfferIds: number[] = result?.invalidatedOfferIds ?? [];
-          for (let i = 0; i < invalidatedConversationIds.length; i++) {
-            const convId = invalidatedConversationIds[i];
-            const invOfferId = invalidatedOfferIds[i];
-            if (convId) {
-              io.to(`conversation:${convId}`).emit('offer:invalidated', {
-                offerId: invOfferId,
-                conversationId: convId,
-                reason: 'Item has been reserved by another buyer.',
-              });
-            }
-          }
         } catch (error: any) {
           socket.emit('offer:error', {
             offerId,
@@ -752,9 +710,12 @@ export default {
       });
 
       socket.on('message:send', async ({ conversationId, content, attachments, metadata, clientMessageId }: any) => {
+        try {
         const id = Number(conversationId);
         const text = String(content ?? '').trim();
-        const attachmentIds = Array.isArray(attachments) ? attachments : [];
+        const attachmentIds = Array.isArray(attachments)
+          ? attachments.map((value: any) => Number(value?.id ?? value)).filter((value: number) => Number.isInteger(value) && value > 0)
+          : [];
         
         strapi.log.info('[Socket] message:send received:', {
           conversationId: id,
@@ -804,7 +765,9 @@ export default {
           conversation: id,
           sender: userId,
           content: text || '',
-          attachments: attachmentIds.length > 0 ? attachmentIds : undefined,
+          attachments: attachmentIds.length > 0
+            ? { connect: attachmentIds.map((attachmentId: number) => ({ id: attachmentId })) }
+            : undefined,
           metadata: metadata || undefined,
         };
 
@@ -815,7 +778,11 @@ export default {
 
         const created = await strapi.entityService.create(messageUid, {
           data: messageData,
-          populate: ['sender', 'attachments', 'offer'],
+          populate: {
+            sender: true,
+            attachments: true,
+            offer: { populate: { product: true } },
+          },
         });
 
         strapi.log.info('[Socket] Message created:', {
@@ -862,6 +829,17 @@ export default {
             offerPrice: created.offer.offerPrice,
             originalPrice: created.offer.originalPrice,
             status: created.offer.status,
+            productTitle: created.offer.productTitle ?? created.offer.product?.title ?? null,
+            productImage: created.offer.productImage ?? null,
+            product: created.offer.product
+              ? {
+                  id: created.offer.product.id,
+                  documentId: created.offer.product.documentId ?? null,
+                  title: created.offer.product.title ?? null,
+                  price: created.offer.product.price ?? null,
+                  productStatus: created.offer.product.productStatus ?? null,
+                }
+              : null,
           } : undefined,
         };
 
@@ -870,11 +848,13 @@ export default {
           attachmentsCount: emitData.attachments.length,
         });
 
-        io.to(`conversation:${id}`).emit('message:new', emitData);
-        // Only push to the receiver's personal room if they haven't joined the
-        // conversation room yet (e.g. they have the app in background / another tab).
-        // The sender is already in the conversation room so they get it once there.
-        io.to(`user:${receiverId}`).emit('message:new', emitData);
+        // Send once to the union of the conversation and both participant rooms.
+        // This reaches the sender even if their client has not joined the room
+        // yet, and Socket.IO de-duplicates sockets present in multiple rooms.
+        io.to(`conversation:${id}`)
+          .to(`user:${userId}`)
+          .to(`user:${receiverId}`)
+          .emit('message:new', emitData);
 
         const updatedConversation = await strapi.entityService.findOne(conversationUid, id, {
           populate: {
@@ -911,6 +891,14 @@ export default {
           body: preview.slice(0, 80),
           link: `/Messages?conversationId=${id}`,
         });
+        } catch (error: any) {
+          strapi.log.error('[Socket] Failed to send message:', error);
+          socket.emit('message:error', {
+            conversationId: Number(conversationId),
+            clientMessageId,
+            message: error?.message || 'Failed to send message.',
+          });
+        }
       });
     });
   },

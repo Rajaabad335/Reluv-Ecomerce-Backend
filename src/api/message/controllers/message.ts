@@ -39,6 +39,15 @@ const sanitizeMessage = (message: any) => ({
     offerPrice: message.offer.offerPrice,
     originalPrice: message.offer.originalPrice,
     status: message.offer.status,
+    productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
+    productImage: message.offer.productImage ?? null,
+    product: message.offer.product ? {
+      id: message.offer.product.id,
+      documentId: message.offer.product.documentId ?? null,
+      title: message.offer.product.title ?? null,
+      price: message.offer.product.price ?? null,
+      productStatus: message.offer.product.productStatus ?? null,
+    } : null,
     buyer: message.offer.buyer ? {
       id: message.offer.buyer.id,
       username: message.offer.buyer.username
@@ -108,7 +117,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller']
+            populate: ['buyer', 'seller', 'product']
           }
         },
         sort: { createdAt: 'asc' },
@@ -155,7 +164,11 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       const conversationId = Number(ctx.request?.body?.conversationId);
       const content = String(ctx.request?.body?.content ?? '').trim();
-      const attachmentIds = ctx.request?.body?.attachments || [];
+      const attachmentIds = Array.isArray(ctx.request?.body?.attachments)
+        ? ctx.request.body.attachments
+            .map((value: any) => Number(value?.id ?? value))
+            .filter((value: number) => Number.isInteger(value) && value > 0)
+        : [];
 
       if (!Number.isInteger(conversationId) || conversationId <= 0) {
         return ctx.badRequest('conversationId is required.');
@@ -197,14 +210,16 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const created = await strapi.entityService.create(messageUid, {
         data: {
           ...messageData,
-          attachments: attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
+          attachments: attachmentIds.length > 0
+            ? { connect: attachmentIds.map((attachmentId: number) => ({ id: attachmentId })) }
+            : undefined,
           metadata: ctx.request?.body?.metadata || undefined,
         },
         populate: {
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller']
+            populate: ['buyer', 'seller', 'product']
           }
         },
       });
@@ -227,17 +242,13 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const io = (strapi as any).io as import('socket.io').Server | undefined;
       if (io) {
         const sanitized = sanitizeMessage(created);
-        io.to(`conversation:${conversationId}`).emit('message:new', {
-          conversationId,
-          ...sanitized,
-        });
-        // Also push to the receiver's personal room in case they haven't joined
-        // the conversation room yet (background / different device).
+        let messageTarget = io.to(`conversation:${conversationId}`).to(`user:${userId}`);
         if (receiverId) {
-          io.to(`user:${receiverId}`).emit('message:new', {
-            conversationId,
-            ...sanitized,
-          });
+          messageTarget = messageTarget.to(`user:${receiverId}`);
+        }
+        messageTarget.emit('message:new', { conversationId, ...sanitized });
+
+        if (receiverId) {
           // Update the receiver's conversation list and unread count
           const updatedConversation = await strapi.entityService.findOne(conversationUid, conversationId, {
             populate: {

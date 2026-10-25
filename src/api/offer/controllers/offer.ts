@@ -14,6 +14,68 @@ const OFFER_POPULATE = {
   conversation: { fields: ["id"] },
 };
 
+async function createOfferChatMessage(strapi: any, conversationId: number, data: any) {
+  const message = await strapi.entityService.create("api::message.message" as any, {
+    data: { ...data, conversation: conversationId },
+    populate: {
+      sender: { fields: ["id", "username"], populate: { avatar: { fields: ["url"] } } },
+      offer: {
+        populate: {
+          buyer: { fields: ["id", "username"] },
+          seller: { fields: ["id", "username"] },
+          product: { fields: ["id", "documentId", "title", "price", "productStatus"] },
+        },
+      },
+    },
+  }) as any;
+
+  const offer = message.offer;
+  const event = {
+    id: message.id,
+    conversationId,
+    content: message.content ?? "",
+    createdAt: message.createdAt ?? new Date().toISOString(),
+    sender: message.sender
+      ? { id: message.sender.id, username: message.sender.username, avatar: message.sender.avatar ?? null }
+      : null,
+    attachments: [],
+    metadata: message.metadata ?? undefined,
+    offer: offer
+      ? {
+          id: offer.id,
+          offerPrice: offer.offerPrice,
+          originalPrice: offer.originalPrice,
+          status: offer.status,
+          productTitle: offer.productTitle ?? offer.product?.title ?? null,
+          productImage: offer.productImage ?? null,
+          product: offer.product
+            ? {
+                id: offer.product.id,
+                documentId: offer.product.documentId ?? null,
+                title: offer.product.title ?? null,
+                price: offer.product.price ?? null,
+                productStatus: offer.product.productStatus ?? null,
+              }
+            : null,
+          buyer: offer.buyer ? { id: offer.buyer.id, username: offer.buyer.username } : null,
+          seller: offer.seller ? { id: offer.seller.id, username: offer.seller.username } : null,
+        }
+      : undefined,
+  };
+
+  const io = (strapi as any).io;
+  if (io) {
+    const buyerId = Number(offer?.buyer?.id);
+    const sellerId = Number(offer?.seller?.id);
+    let target = io.to(`conversation:${conversationId}`);
+    if (buyerId) target = target.to(`user:${buyerId}`);
+    if (sellerId) target = target.to(`user:${sellerId}`);
+    target.emit("message:new", event);
+  }
+
+  return message;
+}
+
 export default factories.createCoreController(
   "api::offer.offer",
   ({ strapi }) => ({
@@ -30,8 +92,8 @@ export default factories.createCoreController(
         return ctx.badRequest("This product does not have a seller associated with it. Cannot make an offer.");
       }
       const authenticatedUserId = Number(ctx.state?.user?.id);
-      if (authenticatedUserId && authenticatedUserId !== Number(buyerId)) {
-        return ctx.forbidden("You can only make an offer as the signed-in buyer.");
+      if (authenticatedUserId && authenticatedUserId !== Number(buyerId) && authenticatedUserId !== Number(sellerId)) {
+        return ctx.forbidden("You must be a participant in this offer.");
       }
 
       const product = await strapi.entityService.findOne(
@@ -61,6 +123,22 @@ export default factories.createCoreController(
           ["pending", "declined"].includes(parent.status);
         if (!validCounter) {
           return ctx.badRequest("Seller does not match this product.");
+        }
+      }
+
+      // A supplied conversation is valid only for these two participants.
+      // This remains true for counteroffers, where buyer/seller roles reverse.
+      if (conversationId) {
+        const conversation = await strapi.entityService.findOne(
+          "api::conversation.conversation" as any,
+          Number(conversationId),
+          { populate: { buyer: { fields: ["id"] }, seller: { fields: ["id"] } } },
+        ) as any;
+        if (!conversation) return ctx.notFound("Conversation not found.");
+        const participants = [Number(conversation.buyer?.id), Number(conversation.seller?.id)].sort((a, b) => a - b);
+        const offerParticipants = [Number(buyerId), Number(sellerId)].sort((a, b) => a - b);
+        if (participants[0] !== offerParticipants[0] || participants[1] !== offerParticipants[1]) {
+          return ctx.badRequest("Conversation does not match the offer participants.");
         }
       }
 
@@ -134,13 +212,26 @@ export default factories.createCoreController(
       setImmediate(async () => {
         try {
           if (conversationId) {
-            await strapi.entityService.create('api::message.message' as any, {
-              data: {
-                conversation: conversationId,
+            await createOfferChatMessage(strapi, Number(conversationId), {
                 sender: buyerId,
-                content: `Made an offer: $${offerPrice}${message ? ` - "${message}"` : ''}`,
+                content: `Made an offer: THB${offerPrice}${message ? ` - "${message}"` : ''}`,
                 offer: offer.id,
-                metadata: { type: 'offer', offerId: offer.id, amount: offerPrice, status: 'pending' },
+                metadata: {
+                  type: 'offer',
+                  offerId: offer.id,
+                  amount: offerPrice,
+                  status: 'pending',
+                  // Product identity travels with the offer, not the conversation:
+                  // one conversation can hold offers for several products.
+                  productId: (offer as any).product?.id ?? productId,
+                  productTitle: (offer as any).productTitle ?? (product as any).title,
+                  productImage: (offer as any).productImage ?? firstImage,
+                },
+            });
+            await strapi.entityService.update('api::conversation.conversation' as any, Number(conversationId), {
+              data: {
+                lastMessageAt: new Date().toISOString(),
+                lastMessagePreview: 'Offer sent',
               },
             });
           }
@@ -223,6 +314,9 @@ export default factories.createCoreController(
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
+      const authenticatedUserId = Number(ctx.state?.user?.id);
+      if (authenticatedUserId && authenticatedUserId !== Number((offer as any).seller?.id))
+        return ctx.forbidden("Only the offer seller can respond.");
       if (Number((offer as any).seller?.id) !== Number(sellerId))
         return ctx.forbidden("Not your offer.");
       if ((offer as any).status !== "pending")
@@ -281,42 +375,77 @@ export default factories.createCoreController(
       const buyerId = (offer as any).buyer?.id;
       const productTitle = (offer as any).productTitle ?? 'the product';
       const offerPrice = (offer as any).offerPrice;
-
-      // When accepted, invalidate all other pending offers for this product
       let invalidatedOffers: any[] = [];
-      if (action === "accepted" && productId) {
-        const otherPending = await strapi.entityService.findMany(
-          "api::offer.offer" as any,
-          {
-            filters: {
-              product: { id: productId },
-              status: "pending",
-              id: { $ne: offerId },
-            },
-            populate: { conversation: { fields: ["id"] }, buyer: { fields: ["id"] } },
-            limit: 100,
-          }
-        ) as any[];
 
-        for (const otherOffer of otherPending) {
-          await strapi.entityService.update("api::offer.offer" as any, otherOffer.id, {
-            data: { status: "unavailable" },
-          });
-          invalidatedOffers.push(otherOffer);
+      // Keep offer states consistent before acknowledging acceptance, but do
+      // the updates in one database statement instead of one request per offer.
+      if (action === "accepted" && productId) {
+        try {
+          const offersToInvalidate = await strapi.entityService.findMany(
+            "api::offer.offer" as any,
+            {
+              filters: {
+                product: { id: productId },
+                status: "pending",
+                id: { $ne: offerId },
+              },
+              populate: { conversation: { fields: ["id"] }, buyer: { fields: ["id"] } },
+              limit: 100,
+            }
+          ) as any[];
+
+          if (offersToInvalidate.length > 0) {
+            await strapi.db.query("api::offer.offer" as any).updateMany({
+              where: {
+                id: { $in: offersToInvalidate.map((item) => item.id) },
+                status: "pending",
+              },
+              data: { status: "unavailable" },
+            });
+          }
+          invalidatedOffers = offersToInvalidate;
+        } catch (invalidationError) {
+          // An invalidation failure must not turn a persisted acceptance into
+          // a timeout/error for the seller. Log it for backend diagnostics.
+          strapi.log.error("Failed to invalidate other pending offers:", invalidationError);
         }
       }
 
-      // Fire-and-forget: chat message + notification
+      // Fire-and-forget: chat message, notification, and invalidation of other
+      // pending offers. The responding client gets its acknowledgement as soon
+      // as this offer is persisted, without waiting on unrelated offers.
       setImmediate(async () => {
         try {
-          if (conversationId) {
-            await strapi.entityService.create('api::message.message' as any, {
-              data: {
-                conversation: conversationId,
+          for (const otherOffer of invalidatedOffers) {
+            const otherConversationId = Number(otherOffer.conversation?.id);
+            if (otherConversationId) {
+              (strapi as any).io?.to(`conversation:${otherConversationId}`).emit("offer:invalidated", {
+                offerId: otherOffer.id,
+                conversationId: otherConversationId,
+                reason: "Item has been reserved by another buyer.",
+              });
+            }
+          }
+
+          const offerConversationId = (offer as any).conversation?.id;
+          if (offerConversationId) {
+            await createOfferChatMessage(strapi, Number(offerConversationId), {
                 sender: sellerId,
                 content: action === 'accepted' ? 'Offer Accepted' : 'Offer Declined',
                 offer: offerId,
-                metadata: { type: 'offer_response', offerId, action, status: action },
+                metadata: {
+                  type: 'offer_response',
+                  offerId,
+                  action,
+                  status: action,
+                  productId,
+                  productTitle: (offer as any).productTitle,
+                },
+            });
+            await strapi.entityService.update('api::conversation.conversation' as any, Number(offerConversationId), {
+              data: {
+                lastMessageAt: new Date().toISOString(),
+                lastMessagePreview: action === 'accepted' ? 'Offer accepted' : 'Offer declined',
               },
             });
           }
@@ -358,10 +487,6 @@ export default factories.createCoreController(
 
       return ctx.send({
         data: populatedUpdated ?? updated,
-        invalidatedOfferIds: invalidatedOffers.map((o) => o.id),
-        invalidatedConversationIds: invalidatedOffers
-          .map((o) => o.conversation?.id)
-          .filter(Boolean),
       });
     },
 
