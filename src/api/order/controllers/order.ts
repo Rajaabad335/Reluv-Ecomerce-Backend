@@ -60,8 +60,10 @@ export default factories.createCoreController(
             return ctx.badRequest("The accepted offer participants do not match this order.");
           }
           // Keep compatibility with offers accepted before reservation was
-          // removed; new accepted offers leave the product active.
-          if (!["active", "reserved"].includes(product.productStatus)) {
+          // removed; new accepted offers leave the product active. Do not
+          // early-return here: the atomic product claim below is the single
+          // authoritative sold check and answers with a clear conflict.
+          if (!Number.isInteger(Number(product.id))) {
             return ctx.badRequest("This item is no longer available.");
           }
         } else {
@@ -113,6 +115,17 @@ export default factories.createCoreController(
         }
 
         if (!acceptedOffer && product.productStatus !== "active") {
+          if (product.productStatus === "sold" || product.productStatus === "reserved") {
+            return ctx.send(
+              {
+                error: {
+                  message: "This product has already been purchased and is no longer available.",
+                  code: "PRODUCT_SOLD",
+                },
+              },
+              409,
+            );
+          }
           return ctx.badRequest("This item is no longer available.");
         }
 
@@ -161,57 +174,154 @@ export default factories.createCoreController(
             "Order already exists for this buyer, seller, and product.",
           );
         }
-        // Create the order using Strapi's entity service
-        const newOrder = await strapi.entityService.create("api::order.order", {
-          data: {
-            product: body.productId || null,
-            productTitle: body.productTitle,
-            productPrice,
-            //   currency: body.currency,
-            productImage: body.productImage,
-            buyerProtectionFee,
-            shippingFee,
-            totalAmount,
-            seller: Number(body.sellerId) || null,
-            buyer: body.buyerId || null,
-            phoneNumber: body.phoneNumber || null,
-            address: body.address || null,
-            deliveryMethod: body.deliveryMethod || null,
-            orderStatus: body.OrderStatus,
-            paymentStatus: "paid",
-          },
-        });
-        await strapi.entityService.update("api::product.product", body.productId, {
-          data: { productStatus: "sold" },
-        });
-        if (acceptedOffer) {
-          await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
-            data: { status: "completed", order: newOrder.id },
-          });
+
+        // ── Atomic product claim ─────────
+        // Two buyers may reach checkout at the same time. Only the request
+        // whose conditional UPDATE actually flips the product row from an
+        // available state to 'sold' may proceed to create the order; every
+        // other concurrent request loses the race and is rejected here,
+        // before any order is created or payment is charged.
+        const claimedRows = await strapi.db.connection("products")
+          .where("id", Number(body.productId))
+          .whereIn("product_status", ["active", "reserved"])
+          .update({ product_status: "sold", updated_at: new Date() });
+
+        if (!claimedRows) {
+          return ctx.send(
+            {
+              error: {
+                message: "This product has already been purchased and is no longer available.",
+                code: "PRODUCT_SOLD",
+              },
+            },
+            409,
+          );
         }
+
+        try {
+          // Create the order using Strapi's entity service
+          const newOrder = await strapi.entityService.create("api::order.order", {
+            data: {
+              product: body.productId || null,
+              productTitle: body.productTitle,
+              productPrice,
+              //   currency: body.currency,
+              productImage: body.productImage,
+              buyerProtectionFee,
+              shippingFee,
+              totalAmount,
+              seller: Number(body.sellerId) || null,
+              buyer: body.buyerId || null,
+              phoneNumber: body.phoneNumber || null,
+              address: body.address || null,
+              deliveryMethod: body.deliveryMethod || null,
+              orderStatus: body.OrderStatus,
+              paymentStatus: "paid",
+            },
+          });
+          if (acceptedOffer) {
+            await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
+              data: { status: "completed", order: newOrder.id },
+            });
+          }
+
+          // ── Post-purchase invalidation of competing offers ──────────────
+          // Only after the purchase is confirmed: every other still-actionable
+          // offer (pending or accepted) for this product becomes unavailable.
+          try {
+            const competingOffers = await strapi.entityService.findMany(
+              "api::offer.offer" as any,
+              {
+                filters: {
+                  product: { id: body.productId },
+                  status: ["pending", "accepted"],
+                  id: acceptedOffer ? { $ne: acceptedOffer.id } : {},
+                },
+                populate: { buyer: { fields: ["id"] }, conversation: { fields: ["id"] } },
+                limit: 100,
+              }
+            ) as any[];
+
+            if (competingOffers.length > 0) {
+              await strapi.db.query("api::offer.offer" as any).updateMany({
+                where: {
+                  id: { $in: competingOffers.map((o) => o.id) },
+                  status: ["pending", "accepted"],
+                },
+                data: { status: "unavailable" },
+              });
+            }
+
+            // Notify affected buyers after the purchase is confirmed.
+            setImmediate(async () => {
+              try {
+                for (const other of competingOffers) {
+                  const otherBuyerId = other.buyer?.id;
+                  if (otherBuyerId) {
+                    await strapi.entityService.create('api::notification.notification' as any, {
+                      data: {
+                        type: 'offer_unavailable',
+                        title: 'Offer No Longer Available',
+                        body: `"${body.productTitle ?? 'The product'}" has already been purchased and is no longer available.`,
+                        read: false,
+                        link: `/products/${body.productId}`,
+                        recipient: otherBuyerId,
+                      },
+                    });
+                  }
+                  const otherConversationId = Number(other.conversation?.id);
+                  if (otherConversationId) {
+                    (strapi as any).io?.to(`conversation:${otherConversationId}`).emit("offer:invalidated", {
+                      offerId: other.id,
+                      conversationId: otherConversationId,
+                      reason: "This product has already been purchased and is no longer available.",
+                    });
+                  }
+                }
+              } catch (e) {
+                strapi.log.error('Post-purchase offer invalidation notifications failed:', e);
+              }
+            });
+          } catch (invalidationError) {
+            // Invalidation must not fail the confirmed purchase.
+            strapi.log.error('Failed to invalidate competing offers:', invalidationError);
+          }
+
         //  const userNotificationSetting = await strapi.config.index.findUserNotificationSettingByUserID(body.buyerId)
         // const isCreateNotification =   userNotificationSetting?.notificationSettings?.newOrder;
-        if (newOrder 
-          // && isCreateNotification
-        ) {
-          try {
-            await createNotification({
-              strapi,
-              recipientId: body.sellerId,
-              type: "order",
-              title: "New Order Received",
-              body: `You received an order from ${body.username} on ${body.productTitle}.`,
-              link: `/Orders`,
-            });
-          } catch (notifError) {
-            // Log notification failure but don't break the user's favorite saving experience
-            strapi.log.error(
-              "Failed to send favorite notification:",
-              notifError,
-            );
+          if (newOrder 
+            // && isCreateNotification
+          ) {
+            try {
+              await createNotification({
+                strapi,
+                recipientId: body.sellerId,
+                type: "order",
+                title: "New Order Received",
+                body: `You received an order from ${body.username} on ${body.productTitle}.`,
+                link: `/Orders`,
+              });
+            } catch (notifError) {
+              // Log notification failure but don't break the user's favorite saving experience
+              strapi.log.error(
+                "Failed to send favorite notification:",
+                notifError,
+              );
+            }
           }
+          return ctx.created(newOrder);
+        } catch (orderError) {
+          // The order could not be persisted — release the claim so the
+          // product is not left permanently unavailable by a failed purchase.
+          await strapi.db.connection("products")
+            .where("id", Number(body.productId))
+            .where("product_status", "sold")
+            .update({ product_status: "active", updated_at: new Date() })
+            .catch((releaseError: any) =>
+              strapi.log.error('Failed to release product claim after order failure:', releaseError),
+            );
+          throw orderError;
         }
-        return ctx.created(newOrder);
       } catch (error) {
         console.error("Error placing order:", error); // Debugging line
         return ctx.internalServerError(

@@ -375,58 +375,11 @@ export default factories.createCoreController(
       const buyerId = (offer as any).buyer?.id;
       const productTitle = (offer as any).productTitle ?? 'the product';
       const offerPrice = (offer as any).offerPrice;
-      let invalidatedOffers: any[] = [];
 
-      // Keep offer states consistent before acknowledging acceptance, but do
-      // the updates in one database statement instead of one request per offer.
-      if (action === "accepted" && productId) {
-        try {
-          const offersToInvalidate = await strapi.entityService.findMany(
-            "api::offer.offer" as any,
-            {
-              filters: {
-                product: { id: productId },
-                status: "pending",
-                id: { $ne: offerId },
-              },
-              populate: { conversation: { fields: ["id"] }, buyer: { fields: ["id"] } },
-              limit: 100,
-            }
-          ) as any[];
-
-          if (offersToInvalidate.length > 0) {
-            await strapi.db.query("api::offer.offer" as any).updateMany({
-              where: {
-                id: { $in: offersToInvalidate.map((item) => item.id) },
-                status: "pending",
-              },
-              data: { status: "unavailable" },
-            });
-          }
-          invalidatedOffers = offersToInvalidate;
-        } catch (invalidationError) {
-          // An invalidation failure must not turn a persisted acceptance into
-          // a timeout/error for the seller. Log it for backend diagnostics.
-          strapi.log.error("Failed to invalidate other pending offers:", invalidationError);
-        }
-      }
-
-      // Fire-and-forget: chat message, notification, and invalidation of other
-      // pending offers. The responding client gets its acknowledgement as soon
-      // as this offer is persisted, without waiting on unrelated offers.
+      // Fire-and-forget: chat message and notification. Acceptance does not
+      // affect other buyers' offers, so nothing else is broadcast here.
       setImmediate(async () => {
         try {
-          for (const otherOffer of invalidatedOffers) {
-            const otherConversationId = Number(otherOffer.conversation?.id);
-            if (otherConversationId) {
-              (strapi as any).io?.to(`conversation:${otherConversationId}`).emit("offer:invalidated", {
-                offerId: otherOffer.id,
-                conversationId: otherConversationId,
-                reason: "Item has been reserved by another buyer.",
-              });
-            }
-          }
-
           const offerConversationId = (offer as any).conversation?.id;
           if (offerConversationId) {
             await createOfferChatMessage(strapi, Number(offerConversationId), {
@@ -463,23 +416,6 @@ export default factories.createCoreController(
               recipient: buyerId,
             },
           });
-
-          // Notify buyers whose offers were invalidated
-          for (const otherOffer of invalidatedOffers) {
-            const otherBuyerId = otherOffer.buyer?.id;
-            if (otherBuyerId) {
-              await strapi.entityService.create('api::notification.notification' as any, {
-                data: {
-                  type: 'offer_unavailable',
-                  title: 'Offer No Longer Available',
-                  body: `THB ${offerPrice} on "${productTitle}" has been reserved by another buyer.`,
-                  read: false,
-                  link: `/products/${productId}`,
-                  recipient: otherBuyerId,
-                },
-              });
-            }
-          }
         } catch (e) {
           strapi.log.error('respondToOffer background tasks failed:', e);
         }

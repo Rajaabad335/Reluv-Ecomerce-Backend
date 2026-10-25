@@ -23,13 +23,21 @@ module.exports = {
           data: { status: "expired" },
         });
 
-        // Unreserve product
+        // Unreserve product, but never resurrect a product that has been
+        // purchased (productStatus is authoritative after a confirmed sale).
         if (offer.product?.id) {
-          await strapi.entityService.update(
+          const product = await strapi.entityService.findOne(
             "api::product.product",
             offer.product.id,
-            { data: { productStatus: "active" } }
+            { fields: ["productStatus"] }
           );
+          if (product && product.productStatus !== "sold") {
+            await strapi.entityService.update(
+              "api::product.product",
+              offer.product.id,
+              { data: { productStatus: "active" } }
+            );
+          }
         }
 
         expiredCount++;
