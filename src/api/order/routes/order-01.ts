@@ -8,7 +8,8 @@ export default {
         auth: false,
       },
     },
-    {   method: "POST",
+    {
+      method: "POST",
       path: "/orders/fetch-orders-by-user",
       handler: "order.fetchOrdersByUser",
       config: {
@@ -19,7 +20,7 @@ export default {
       method: "GET",
       path: "/orders/get-all-orders",
       handler: "order.getAllOrders",
-       config: {
+      config: {
         auth: false,
       },
     },
@@ -39,6 +40,17 @@ export default {
         auth: false,
       },
     },
-    
+    {
+      method: "POST",
+      path: "/orders/create-payment-intent",
+      handler: "order.createPaymentIntent",
+      config: { policies: [] },
+    },
+    {
+      method: "POST",
+      path: "/orders/sync-payment-intent",
+      handler: "order.syncPaymentIntent",
+      config: { policies: [] },
+    },
   ],
 };

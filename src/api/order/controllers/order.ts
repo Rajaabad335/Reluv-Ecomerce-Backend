@@ -4,10 +4,102 @@
 
 import { factories } from "@strapi/strapi";
 import { createNotification } from "../../../lib/createNotification";
+import { stripe } from "../../../utils/stripe";
 
 export default factories.createCoreController(
   "api::order.order",
   ({ strapi }) => ({
+    async createPaymentIntent(ctx) {
+      try {
+        const { body } = ctx.request as any;
+        const { productId, buyerProtectionFee, shippingFee, currencyCode } =
+          body;
+
+        // Re-derive price from DB — do not trust client-sent price/total for the charge
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+        );
+        if (!product) return ctx.badRequest("Product not found.");
+
+        const amount =
+          Number(product.price) +
+          Number(buyerProtectionFee || 0) +
+          Number(shippingFee || 0);
+        const amountInMinorUnits = Math.round(amount * 100); // Stripe expects cents
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInMinorUnits,
+          currency: (currencyCode || "thb").toLowerCase(),
+          metadata: {
+            productId: String(productId),
+            buyerId: String(body.buyerId),
+            sellerId: String(body.sellerId),
+          },
+          automatic_payment_methods: { enabled: true },
+        });
+
+        return ctx.send({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount,
+        });
+      } catch (error) {
+        strapi.log.error("Error creating payment intent:", error);
+        return ctx.internalServerError("Could not create payment intent.");
+      }
+    },
+    async syncPaymentIntent(ctx) {
+      try {
+        const { body } = ctx.request as any;
+        const {
+          productId,
+          buyerProtectionFee,
+          shippingFee,
+          currencyCode,
+          paymentIntentId,
+        } = body;
+
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+        );
+        if (!product) return ctx.badRequest("Product not found.");
+
+        const amount =
+          Number(product.price) +
+          Number(buyerProtectionFee || 0) +
+          Number(shippingFee || 0);
+        const amountInMinorUnits = Math.round(amount * 100);
+
+        let paymentIntent;
+        if (paymentIntentId) {
+          paymentIntent = await stripe.paymentIntents.update(paymentIntentId, {
+            amount: amountInMinorUnits,
+          });
+        } else {
+          paymentIntent = await stripe.paymentIntents.create({
+            amount: amountInMinorUnits,
+            currency: (currencyCode || "thb").toLowerCase(),
+            metadata: {
+              productId: String(productId),
+              buyerId: String(body.buyerId),
+              sellerId: String(body.sellerId),
+            },
+            automatic_payment_methods: { enabled: true },
+          });
+        }
+
+        return ctx.send({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount,
+        });
+      } catch (error) {
+        strapi.log.error("Error syncing payment intent:", error);
+        return ctx.internalServerError("Could not prepare payment.");
+      }
+    },
     async placeOrder(ctx) {
       try {
         const { body } = ctx.request as any; // Type assertion to access body
@@ -380,7 +472,7 @@ export default factories.createCoreController(
         const { orderStatus, paymentStatus } = ctx.request.body;
 
         const data: any = {};
-        if (orderStatus !== undefined)   data.orderStatus = orderStatus;
+        if (orderStatus !== undefined) data.orderStatus = orderStatus;
         if (paymentStatus !== undefined) data.paymentStatus = paymentStatus;
 
         // id may be a documentId string — resolve to numeric id first
@@ -445,7 +537,7 @@ export default factories.createCoreController(
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${order.seller?.username || "seller"}`,
           },
 
-          amount: order.totalAmount ? `TBH${order.totalAmount}` : "TBH0.00",
+          amount: order.totalAmount ? `thb${order.totalAmount}` : "thb0.00",
 
           item: order.product?.title || "Product",
           itemImage: order.product?.image || "https://via.placeholder.com/300",

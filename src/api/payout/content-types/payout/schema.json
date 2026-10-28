@@ -49,7 +49,7 @@
     "currency": {
       "type": "string",
       "required": true,
-      "default": "TBH",
+      "default": "thb",
       "maxLength": 3
     },
     "status": {
