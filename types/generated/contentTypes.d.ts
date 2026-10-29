@@ -1018,7 +1018,7 @@ export interface ApiMarketplaceSettingMarketplaceSetting
       Schema.Attribute.SetMinMaxLength<{
         maxLength: 3;
       }> &
-      Schema.Attribute.DefaultTo<'TBH'>;
+      Schema.Attribute.DefaultTo<'thb'>;
     escrowDays: Schema.Attribute.Integer &
       Schema.Attribute.Required &
       Schema.Attribute.SetMinMax<
@@ -1318,7 +1318,7 @@ export interface ApiPayoutPayout extends Struct.CollectionTypeSchema {
       Schema.Attribute.SetMinMaxLength<{
         maxLength: 3;
       }> &
-      Schema.Attribute.DefaultTo<'TBH'>;
+      Schema.Attribute.DefaultTo<'thb'>;
     failureReason: Schema.Attribute.Text;
     grossAmount: Schema.Attribute.Decimal &
       Schema.Attribute.Required &
