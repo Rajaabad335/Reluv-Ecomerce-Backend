@@ -41,6 +41,21 @@ function pairKey(buyerId: number, sellerId: number) {
   return `${buyerId}:${sellerId}`;
 }
 
+/** Resolve a retained legacy ID to its canonical conversation. */
+export async function resolveCanonicalConversation(strapi: any, conversationId: number) {
+  let current = await strapi.entityService.findOne(conversationUid, conversationId, {
+    populate: { mergedInto: { fields: ["id"] } },
+  });
+  const seen = new Set<number>();
+  while (current?.mergedInto?.id && !seen.has(Number(current.id))) {
+    seen.add(Number(current.id));
+    current = await strapi.entityService.findOne(conversationUid, Number(current.mergedInto.id), {
+      populate: { mergedInto: { fields: ["id"] } },
+    });
+  }
+  return current ?? null;
+}
+
 export function buildProductRefSnapshot(product: any) {
   const images = product?.images ?? [];
   const image = images[0]?.url ?? images[0]?.formats?.thumbnail?.url ?? null;
@@ -149,6 +164,7 @@ export async function findOrCreateConversationForPair(
       filters: {
         buyer: { id: { $eq: buyerId } },
         seller: { id: { $eq: sellerId } },
+        pairKey: { $eq: pairKey(buyerId, sellerId) },
       },
       populate: CONVERSATION_POPULATE,
       sort: { lastMessageAt: "desc" },
@@ -160,16 +176,29 @@ export async function findOrCreateConversationForPair(
     if (!conversation) {
       // Product is set as the conversation's primary product (legacy display),
       // but the identity of the conversation is the buyer-seller pair.
-      conversation = (await strapi.entityService.create(conversationUid, {
-        data: {
-          ...(productId ? { product: Number(productId) } : {}),
-          buyer: buyerId,
-          seller: sellerId,
-          lastMessageAt: new Date().toISOString(),
-          lastMessagePreview: "",
-        },
-        populate: CONVERSATION_POPULATE,
-      })) as any;
+      try {
+        conversation = (await strapi.entityService.create(conversationUid, {
+          data: {
+            ...(productId ? { product: Number(productId) } : {}),
+            buyer: buyerId,
+            seller: sellerId,
+            pairKey: pairKey(buyerId, sellerId),
+            lastMessageAt: new Date().toISOString(),
+            lastMessagePreview: "",
+          },
+          populate: CONVERSATION_POPULATE,
+        })) as any;
+      } catch (error) {
+        // The unique pairKey is the cross-process guard; concurrent requests
+        // that race to create the same relationship reuse the winning row.
+        const winner = (await strapi.entityService.findMany(conversationUid, {
+          filters: { pairKey: { $eq: pairKey(buyerId, sellerId) } },
+          populate: CONVERSATION_POPULATE,
+          limit: 1,
+        })) as any[];
+        if (!winner?.[0]) throw error;
+        conversation = winner[0];
+      }
     }
 
     // Every product opened from chat gets an in-thread card, including the
@@ -178,6 +207,9 @@ export async function findOrCreateConversationForPair(
       const product = await loadProduct(strapi, Number(productId));
       if (product) {
         await ensureProductRefMessage(strapi, conversation, product, referenceSenderId);
+        conversation = await strapi.entityService.findOne(conversationUid, Number(conversation.id), {
+          populate: CONVERSATION_POPULATE,
+        });
       }
     }
 
@@ -229,8 +261,8 @@ export function sanitizeConversationPayload(conversation: any, hasUnread = false
 /**
  * Safe rerunnable migration: merge legacy duplicate conversations for the same
  * buyer-seller pair. Messages and offers are moved (not copied) onto the
- * earliest conversation; empty duplicates are removed. Offer product relations
- * are untouched, so every offer stays tied to its own product.
+ * earliest conversation; legacy rows remain as ID aliases. Offer product
+ * relations are untouched, so every offer stays tied to its own product.
  */
 export async function mergeDuplicateConversations(strapi: any): Promise<{
   mergedPairs: number;
@@ -246,7 +278,7 @@ export async function mergeDuplicateConversations(strapi: any): Promise<{
   };
 
   const all = (await strapi.entityService.findMany(conversationUid, {
-    filters: {},
+    filters: { mergedInto: { id: { $null: true } } },
     populate: {
       buyer: { fields: ["id"] },
       seller: { fields: ["id"] },
@@ -267,7 +299,14 @@ export async function mergeDuplicateConversations(strapi: any): Promise<{
   }
 
   for (const [, duplicates] of groups) {
-    if (duplicates.length <= 1) continue;
+    if (duplicates.length === 1) {
+      const only = duplicates[0];
+      await strapi.db.query(conversationUid).update({
+        where: { id: only.id },
+        data: { pairKey: pairKey(Number(only.buyer?.id), Number(only.seller?.id)) },
+      });
+      continue;
+    }
     result.mergedPairs++;
 
     // Keep the oldest conversation so legacy links still resolve.
@@ -289,13 +328,28 @@ export async function mergeDuplicateConversations(strapi: any): Promise<{
     for (const dup of duplicates.slice(1)) {
       const dupId = Number(dup.id);
 
+      if (dup.lastMessageAt && (!latestMessageAt || new Date(dup.lastMessageAt) > new Date(latestMessageAt))) {
+        latestMessageAt = dup.lastMessageAt;
+        latestPreview = dup.lastMessagePreview ?? latestPreview;
+      }
+
       const dupMessages = (await strapi.entityService.findMany(messageUid, {
         filters: { conversation: { id: { $eq: dupId } } },
-        fields: ["id", "createdAt"],
+        fields: ["id", "createdAt", "metadata"],
         limit: -1,
       })) as any[];
 
       for (const msg of dupMessages) {
+        const referencedProductId = Number(msg?.metadata?.productRef?.id);
+        if (
+          msg?.metadata?.type === "product_ref" &&
+          Number.isInteger(referencedProductId) &&
+          await hasProductRefMessage(strapi, keepId, referencedProductId)
+        ) {
+          // Keep the legacy duplicate row intact, while showing one canonical
+          // card for this product in the merged chat.
+          continue;
+        }
         // Move (not copy): the message's own conversation relation is rewritten,
         // preserving content, attachments, offers and createdAt ordering.
         await strapi.db.query(messageUid).update({
@@ -325,13 +379,18 @@ export async function mergeDuplicateConversations(strapi: any): Promise<{
         result.movedOffers++;
       }
 
-      await strapi.db.query(conversationUid).delete({ where: { id: dupId } });
-      result.deletedConversations++;
+      // Retain the legacy row so old links and references keep a stable ID.
+      // The canonical row alone owns the unique pairKey.
+      await strapi.db.query(conversationUid).update({
+        where: { id: dupId },
+        data: { mergedInto: keepId, pairKey: null },
+      });
     }
 
     await strapi.db.query(conversationUid).update({
       where: { id: keepId },
       data: {
+        pairKey: pairKey(Number(keep.buyer?.id), Number(keep.seller?.id)),
         lastMessageAt: latestMessageAt ?? keep.lastMessageAt ?? null,
         ...(latestPreview ? { lastMessagePreview: latestPreview } : {}),
         ...(buyerDeletedAt ? { buyerDeletedAt } : {}),

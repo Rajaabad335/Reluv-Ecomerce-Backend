@@ -5,6 +5,7 @@ import { createNotification } from './lib/createNotification';
 import {
   findOrCreateConversationForPair,
   mergeDuplicateConversations,
+  resolveCanonicalConversation,
   sanitizeConversationPayload as sanitizeUnifiedConversation,
   ensureProductRefMessage,
   loadProductById,
@@ -87,7 +88,7 @@ export default {
         migration.deletedConversations > 0
       ) {
         strapi.log.info(
-          `[Reluv] Unified conversations: merged ${migration.mergedPairs} buyer-seller pair(s), moved ${migration.movedMessages} message(s) and ${migration.movedOffers} offer(s), deleted ${migration.deletedConversations} duplicate conversation(s).`,
+          `[Reluv] Unified conversations: merged ${migration.mergedPairs} buyer-seller pair(s), moved ${migration.movedMessages} message(s) and ${migration.movedOffers} offer(s); legacy IDs retained.`,
         );
       }
     } catch (err: any) {
@@ -229,6 +230,7 @@ export default {
     const getUnreadConversationCount = async (currentUserId: number): Promise<number> => {
       const conversations = (await strapi.entityService.findMany(conversationUid, {
         filters: {
+          mergedInto: { id: { $null: true } },
           $or: [
             { buyer: { id: { $eq: currentUserId } } },
             { seller: { id: { $eq: currentUserId } } },
@@ -266,6 +268,7 @@ export default {
     const listConversationsForUser = async (currentUserId: number) => {
       const conversations = (await strapi.entityService.findMany(conversationUid, {
         filters: {
+          mergedInto: { id: { $null: true } },
           $or: [
             { buyer: { id: { $eq: currentUserId } } },
             { seller: { id: { $eq: currentUserId } } },
@@ -315,7 +318,11 @@ export default {
       const allowed = await isParticipant(conversationId, currentUserId);
       if (!allowed) throw new Error('Not allowed.');
 
-      const conversation = (await strapi.entityService.findOne(conversationUid, conversationId, {
+      const canonical = await resolveCanonicalConversation(strapi, conversationId);
+      if (!canonical) throw new Error('Conversation not found.');
+      const canonicalId = Number(canonical.id);
+
+      const conversation = (await strapi.entityService.findOne(conversationUid, canonicalId, {
         populate: {
           buyer: { fields: ['id'] },
           seller: { fields: ['id'] },
@@ -325,7 +332,7 @@ export default {
 
       const messages = (await strapi.entityService.findMany(messageUid, {
         filters: {
-          conversation: { id: { $eq: conversationId } },
+          conversation: { id: { $eq: canonicalId } },
           ...(deletedAt ? { createdAt: { $gt: deletedAt } } : {}),
         },
         populate: {
@@ -346,8 +353,8 @@ export default {
             }),
           ),
         );
-        io.to(`conversation:${conversationId}`).emit('messages:read', {
-          conversationId,
+        io.to(`conversation:${canonicalId}`).emit('messages:read', {
+          conversationId: canonicalId,
           readBy: currentUserId,
         });
       }
@@ -383,7 +390,8 @@ export default {
         if (!Number.isInteger(id) || id <= 0) return;
         const allowed = await isParticipant(id, userId);
         if (!allowed) return;
-        socket.join(`conversation:${id}`);
+        const canonical = await resolveCanonicalConversation(strapi, id);
+        if (canonical?.id) socket.join(`conversation:${canonical.id}`);
       });
 
       socket.on('conversations:list', async (_payload: any, ack?: Function) => {
@@ -455,9 +463,11 @@ export default {
         try {
           const id = Number(conversationId);
           if (!Number.isInteger(id) || id <= 0) throw new Error('Conversation id is required.');
-          socket.join(`conversation:${id}`);
+          const canonical = await resolveCanonicalConversation(strapi, id);
+          if (!canonical) throw new Error('Conversation not found.');
+          socket.join(`conversation:${canonical.id}`);
           const messages = await listMessagesForConversation(id, userId);
-          ack?.({ ok: true, messages });
+          ack?.({ ok: true, conversationId: canonical.id, messages });
         } catch (error: any) {
           ack?.({ ok: false, message: error.message || 'Failed to load messages.' });
         }
@@ -469,10 +479,13 @@ export default {
           if (!Number.isInteger(id) || id <= 0) throw new Error('Conversation id is required.');
           const allowed = await isParticipant(id, userId);
           if (!allowed) throw new Error('Not allowed.');
+          const canonical = await resolveCanonicalConversation(strapi, id);
+          if (!canonical) throw new Error('Conversation not found.');
+          const canonicalId = Number(canonical.id);
 
           const unreadMessages = (await strapi.entityService.findMany(messageUid, {
             filters: {
-              conversation: { id: { $eq: id } },
+              conversation: { id: { $eq: canonicalId } },
               sender: { id: { $ne: userId } },
               readAt: { $null: true },
             },
@@ -488,8 +501,8 @@ export default {
                 }),
               ),
             );
-            io.to(`conversation:${id}`).emit('messages:read', {
-              conversationId: id,
+            io.to(`conversation:${canonicalId}`).emit('messages:read', {
+              conversationId: canonicalId,
               readBy: userId,
             });
             io.to(`user:${userId}`).emit('conversations:unread-count', {
@@ -732,7 +745,11 @@ export default {
         const allowed = await isParticipant(id, userId);
         if (!allowed) return;
 
-        const conversation = await strapi.entityService.findOne(conversationUid, id, {
+        const canonical = await resolveCanonicalConversation(strapi, id);
+        if (!canonical) return;
+        const canonicalId = Number(canonical.id);
+
+        const conversation = await strapi.entityService.findOne(conversationUid, canonicalId, {
           populate: {
             buyer: { fields: ['id'] },
             seller: { fields: ['id'] },
@@ -762,7 +779,7 @@ export default {
         }
 
         const messageData: any = {
-          conversation: id,
+          conversation: canonicalId,
           sender: userId,
           content: text || '',
           attachments: attachmentIds.length > 0
@@ -824,7 +841,7 @@ export default {
         });
 
         const preview = text || (attachmentIds.length > 0 ? `📎 ${attachmentIds.length} file(s)` : 'Message');
-        await strapi.entityService.update(conversationUid, id, {
+        await strapi.entityService.update(conversationUid, canonicalId, {
           data: {
             lastMessageAt: new Date().toISOString(),
             lastMessagePreview: preview.slice(0, 120),
@@ -832,7 +849,7 @@ export default {
         });
 
         const emitData = {
-          conversationId: id,
+          conversationId: canonicalId,
           clientMessageId: clientMessageId ? String(clientMessageId) : undefined,
           id: created.id,
           content: created.content,
@@ -883,12 +900,12 @@ export default {
         // Send once to the union of the conversation and both participant rooms.
         // This reaches the sender even if their client has not joined the room
         // yet, and Socket.IO de-duplicates sockets present in multiple rooms.
-        io.to(`conversation:${id}`)
+        io.to(`conversation:${canonicalId}`)
           .to(`user:${userId}`)
           .to(`user:${receiverId}`)
           .emit('message:new', emitData);
 
-        const updatedConversation = await strapi.entityService.findOne(conversationUid, id, {
+        const updatedConversation = await strapi.entityService.findOne(conversationUid, canonicalId, {
           populate: {
             product: {
               fields: ['id', 'title', 'price'],
@@ -921,7 +938,7 @@ export default {
           type: 'new_message',
           title: `${senderUsername} sent you a message`,
           body: preview.slice(0, 80),
-          link: `/Messages?conversationId=${id}`,
+          link: `/Messages?conversationId=${canonicalId}`,
         });
         } catch (error: any) {
           strapi.log.error('[Socket] Failed to send message:', error);

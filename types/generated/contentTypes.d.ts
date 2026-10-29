@@ -767,7 +767,7 @@ export interface ApiConversationConversation
   extends Struct.CollectionTypeSchema {
   collectionName: 'conversations';
   info: {
-    description: 'Buyer and seller conversation tied to a product';
+    description: 'Buyer and seller conversation that can reference multiple products';
     displayName: 'Conversation';
     pluralName: 'conversations';
     singularName: 'conversation';
@@ -792,7 +792,12 @@ export interface ApiConversationConversation
       'api::conversation.conversation'
     > &
       Schema.Attribute.Private;
+    mergedInto: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::conversation.conversation'
+    >;
     messages: Schema.Attribute.Relation<'oneToMany', 'api::message.message'>;
+    pairKey: Schema.Attribute.String & Schema.Attribute.Unique;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     publishedAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<

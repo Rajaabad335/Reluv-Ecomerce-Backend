@@ -5,12 +5,21 @@
     "singularName": "conversation",
     "pluralName": "conversations",
     "displayName": "Conversation",
-    "description": "Buyer and seller conversation tied to a product"
+    "description": "Buyer and seller conversation that can reference multiple products"
   },
   "options": {
     "draftAndPublish": false
   },
   "attributes": {
+    "pairKey": {
+      "type": "string",
+      "unique": true
+    },
+    "mergedInto": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::conversation.conversation"
+    },
     "product": {
       "type": "relation",
       "relation": "manyToOne",

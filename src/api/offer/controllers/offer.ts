@@ -14,6 +14,20 @@ const OFFER_POPULATE = {
   conversation: { fields: ["id"] },
 };
 
+async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
+  const stateId = Number(ctx?.state?.user?.id);
+  if (Number.isInteger(stateId) && stateId > 0) return stateId;
+  const authorization = String(ctx?.request?.headers?.authorization ?? "");
+  if (!authorization.startsWith("Bearer ")) return null;
+  try {
+    const payload = await strapi.plugin("users-permissions").service("jwt").verify(authorization.slice(7).trim());
+    const id = Number(payload?.id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 async function createOfferChatMessage(strapi: any, conversationId: number, data: any) {
   const message = await strapi.entityService.create("api::message.message" as any, {
     data: { ...data, conversation: conversationId },
@@ -91,8 +105,9 @@ export default factories.createCoreController(
       if (!sellerId) {
         return ctx.badRequest("This product does not have a seller associated with it. Cannot make an offer.");
       }
-      const authenticatedUserId = Number(ctx.state?.user?.id);
-      if (authenticatedUserId && authenticatedUserId !== Number(buyerId) && authenticatedUserId !== Number(sellerId)) {
+      const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
+      if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
+      if (authenticatedUserId !== Number(buyerId) && authenticatedUserId !== Number(sellerId)) {
         return ctx.forbidden("You must be a participant in this offer.");
       }
 
@@ -314,8 +329,9 @@ export default factories.createCoreController(
       );
 
       if (!offer) return ctx.notFound("Offer not found.");
-      const authenticatedUserId = Number(ctx.state?.user?.id);
-      if (authenticatedUserId && authenticatedUserId !== Number((offer as any).seller?.id))
+      const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
+      if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
+      if (authenticatedUserId !== Number((offer as any).seller?.id))
         return ctx.forbidden("Only the offer seller can respond.");
       if (Number((offer as any).seller?.id) !== Number(sellerId))
         return ctx.forbidden("Not your offer.");
@@ -376,8 +392,9 @@ export default factories.createCoreController(
       const productTitle = (offer as any).productTitle ?? 'the product';
       const offerPrice = (offer as any).offerPrice;
 
-      // Fire-and-forget: chat message and notification. Acceptance does not
-      // affect other buyers' offers, so nothing else is broadcast here.
+      // Acceptance is per offer. Competing offers remain actionable until the
+      // order endpoint atomically confirms a successful purchase.
+      // Fire-and-forget chat message and notification.
       setImmediate(async () => {
         try {
           const offerConversationId = (offer as any).conversation?.id;

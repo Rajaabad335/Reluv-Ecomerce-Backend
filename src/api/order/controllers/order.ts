@@ -5,19 +5,38 @@
 import { factories } from "@strapi/strapi";
 import { createNotification } from "../../../lib/createNotification";
 
+async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
+  const stateId = Number(ctx?.state?.user?.id);
+  if (Number.isInteger(stateId) && stateId > 0) return stateId;
+  const authorization = String(ctx?.request?.headers?.authorization ?? "");
+  if (!authorization.startsWith("Bearer ")) return null;
+  try {
+    const payload = await strapi.plugin("users-permissions").service("jwt").verify(authorization.slice(7).trim());
+    const id = Number(payload?.id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 export default factories.createCoreController(
   "api::order.order",
   ({ strapi }) => ({
     async placeOrder(ctx) {
       try {
         const { body } = ctx.request as any; // Type assertion to access body
-        const authenticatedUserId = Number(ctx.state?.user?.id);
-        if (authenticatedUserId && authenticatedUserId !== Number(body.buyerId)) {
+        const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
+        if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
+        if (authenticatedUserId !== Number(body.buyerId)) {
           return ctx.forbidden("You can only place an order for the signed-in buyer.");
+        }
+        const productId = Number(body.productId);
+        if (!Number.isInteger(productId) || productId <= 0) {
+          return ctx.badRequest("A valid product is required.");
         }
         const product = await strapi.entityService.findOne(
           "api::product.product",
-          body.productId,
+          productId,
           { fields: ["productStatus", "price"], populate: { users_permissions_user: { fields: ["id"] } } },
         ) as any;
         if (!product) return ctx.notFound("Product not found.");
@@ -103,7 +122,6 @@ export default factories.createCoreController(
             const listingSellerId = Number(product.users_permissions_user?.id ?? product.users_permissions_user);
             const expectedBuyerId = offerBuyerId === listingSellerId ? offerSellerId : offerBuyerId;
             if (
-              !["active", "reserved"].includes(product.productStatus) ||
               !listingSellerId ||
               ![offerBuyerId, offerSellerId].includes(listingSellerId) ||
               Number(body.sellerId) !== listingSellerId ||
@@ -111,11 +129,18 @@ export default factories.createCoreController(
             ) {
               return ctx.badRequest("The accepted offer participants do not match this order.");
             }
+          } else if (matchingOffers.length > 1) {
+            return ctx.badRequest("Offer ID is required when more than one accepted offer applies to this product.");
           }
         }
 
-        if (!acceptedOffer && product.productStatus !== "active") {
-          if (product.productStatus === "sold" || product.productStatus === "reserved") {
+        const productSellerId = Number(product.users_permissions_user?.id ?? product.users_permissions_user);
+        if (!productSellerId || Number(body.sellerId) !== productSellerId) {
+          return ctx.badRequest("The order seller does not match this product.");
+        }
+
+        if (!["active", "reserved"].includes(product.productStatus)) {
+          if (product.productStatus === "sold") {
             return ctx.send(
               {
                 error: {
@@ -176,17 +201,45 @@ export default factories.createCoreController(
         }
 
         // ── Atomic product claim ─────────
-        // Two buyers may reach checkout at the same time. Only the request
-        // whose conditional UPDATE actually flips the product row from an
-        // available state to 'sold' may proceed to create the order; every
-        // other concurrent request loses the race and is rejected here,
-        // before any order is created or payment is charged.
-        const claimedRows = await strapi.db.connection("products")
-          .where("id", Number(body.productId))
-          .whereIn("product_status", ["active", "reserved"])
-          .update({ product_status: "sold", updated_at: new Date() });
+        // This endpoint is the current checkout's successful-purchase boundary
+        // (it records paymentStatus=paid). Claim only here, after offer
+        // acceptance and checkout review. A conditional update ensures that
+        // only one concurrent buyer can create the paid order.
+        const purchase = await strapi.db.transaction(async ({ trx }: any) => {
+          const claimedRows = await trx("products")
+            .where("id", productId)
+            .whereIn("product_status", ["active", "reserved"])
+            .update({ product_status: "sold", updated_at: new Date() });
+          if (!claimedRows) return null;
 
-        if (!claimedRows) {
+          const order = await strapi.entityService.create("api::order.order", {
+            data: {
+              product: productId,
+              productTitle: body.productTitle,
+              productPrice,
+              productImage: body.productImage,
+              buyerProtectionFee,
+              shippingFee,
+              totalAmount,
+              seller: productSellerId,
+              buyer: authenticatedUserId,
+              phoneNumber: body.phoneNumber || null,
+              address: body.address || null,
+              deliveryMethod: body.deliveryMethod || null,
+              orderStatus: body.OrderStatus,
+              paymentStatus: "paid",
+            },
+          });
+
+          if (acceptedOffer) {
+            await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
+              data: { status: "completed", order: order.id },
+            });
+          }
+          return order;
+        });
+
+        if (!purchase) {
           return ctx.send(
             {
               error: {
@@ -198,32 +251,8 @@ export default factories.createCoreController(
           );
         }
 
+        const newOrder = purchase;
         try {
-          // Create the order using Strapi's entity service
-          const newOrder = await strapi.entityService.create("api::order.order", {
-            data: {
-              product: body.productId || null,
-              productTitle: body.productTitle,
-              productPrice,
-              //   currency: body.currency,
-              productImage: body.productImage,
-              buyerProtectionFee,
-              shippingFee,
-              totalAmount,
-              seller: Number(body.sellerId) || null,
-              buyer: body.buyerId || null,
-              phoneNumber: body.phoneNumber || null,
-              address: body.address || null,
-              deliveryMethod: body.deliveryMethod || null,
-              orderStatus: body.OrderStatus,
-              paymentStatus: "paid",
-            },
-          });
-          if (acceptedOffer) {
-            await strapi.entityService.update("api::offer.offer" as any, acceptedOffer.id, {
-              data: { status: "completed", order: newOrder.id },
-            });
-          }
 
           // ── Post-purchase invalidation of competing offers ──────────────
           // Only after the purchase is confirmed: every other still-actionable
@@ -311,16 +340,10 @@ export default factories.createCoreController(
           }
           return ctx.created(newOrder);
         } catch (orderError) {
-          // The order could not be persisted — release the claim so the
-          // product is not left permanently unavailable by a failed purchase.
-          await strapi.db.connection("products")
-            .where("id", Number(body.productId))
-            .where("product_status", "sold")
-            .update({ product_status: "active", updated_at: new Date() })
-            .catch((releaseError: any) =>
-              strapi.log.error('Failed to release product claim after order failure:', releaseError),
-            );
-          throw orderError;
+          // The order and product claim already committed together. A later
+          // side-effect failure must not undo the confirmed purchase.
+          strapi.log.error("Order was placed, but post-purchase processing failed:", orderError);
+          return ctx.created(newOrder);
         }
       } catch (error) {
         console.error("Error placing order:", error); // Debugging line

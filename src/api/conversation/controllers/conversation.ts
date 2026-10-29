@@ -5,6 +5,7 @@
 import { factories } from "@strapi/strapi";
 import {
   findOrCreateConversationForPair,
+  resolveCanonicalConversation,
   sanitizeConversationPayload,
 } from "../../../lib/unified-conversations";
 
@@ -131,6 +132,7 @@ export default factories.createCoreController(
           conversationUid,
           {
             filters: {
+              mergedInto: { id: { $null: true } },
               $or: [
                 { buyer: { id: { $eq: userId } } },
                 { seller: { id: { $eq: userId } } },
@@ -200,6 +202,7 @@ export default factories.createCoreController(
           conversationUid,
           {
             filters: {
+              mergedInto: { id: { $null: true } },
               $or: [
                 { buyer: { id: { $eq: userId } } },
                 { seller: { id: { $eq: userId } } },
@@ -327,7 +330,7 @@ export default factories.createCoreController(
       }
     },
     async deleteConversation(ctx: any) {
-      const conversationId = Number(ctx.params?.id);
+      let conversationId = Number(ctx.params?.id);
       const userId = Number(ctx.state.user?.id);
 
       if (!userId) return ctx.unauthorized("You must be logged in.");
@@ -335,7 +338,7 @@ export default factories.createCoreController(
         return ctx.badRequest("A valid conversation id is required.");
       }
 
-      const conversation = await strapi.db
+      let conversation = await strapi.db
         .query("api::conversation.conversation")
         .findOne({
           where: { id: conversationId },
@@ -349,6 +352,17 @@ export default factories.createCoreController(
 
       if (!isBuyer && !isSeller) {
         return ctx.forbidden("You are not part of this conversation.");
+      }
+
+      const canonical = await resolveCanonicalConversation(strapi, conversationId);
+      if (!canonical) return ctx.notFound("Conversation not found.");
+      if (Number(canonical.id) !== conversationId) {
+        conversationId = Number(canonical.id);
+        conversation = await strapi.db.query("api::conversation.conversation").findOne({
+          where: { id: conversationId },
+          populate: ["buyer", "seller"],
+        });
+        if (!conversation) return ctx.notFound("Conversation not found.");
       }
 
       const deletionField = isBuyer ? "buyerDeletedAt" : "sellerDeletedAt";
