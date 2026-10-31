@@ -7,6 +7,18 @@ export default {
       config: { auth: false },
     },
     {
+      method: "PATCH",
+      path: "/offers/:id",
+      handler: "offer.editOfferPrice",
+      config: { auth: false },
+    },
+    {
+      method: "PATCH",
+      path: "/offers/:id/seen",
+      handler: "offer.markOfferSeen",
+      config: { auth: false },
+    },
+    {
       method: "GET",
       path: "/offers/seller/:sellerId",
       handler: "offer.getOffersForSeller",

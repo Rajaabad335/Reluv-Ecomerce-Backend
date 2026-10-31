@@ -191,6 +191,9 @@ export default {
             offerPrice: message.offer.offerPrice,
             originalPrice: message.offer.originalPrice,
             status: message.offer.status,
+            editedAt: message.offer.editedAt ?? null,
+            editCount: message.offer.editCount ?? 0,
+            seenAt: message.offer.seenAt ?? null,
             productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
             productImage: message.offer.productImage ?? null,
             product: message.offer.product
@@ -719,6 +722,69 @@ export default {
             offerId,
             message: error.message || 'Failed to respond to offer',
           });
+        }
+      });
+
+      
+      socket.on('offer:edit', async ({ offerId, offerPrice, price, conversationId, clientOfferId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            params: { id: offerId },
+            request: {
+              body: { offerPrice: offerPrice ?? price, conversationId },
+            },
+            state: { user: { id: userId } },
+            badRequest: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              throw new Error(msg);
+            },
+            notFound: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              throw new Error(msg);
+            },
+            forbidden: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              throw new Error(msg);
+            },
+            internalServerError: (msg: string) => {
+              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              throw new Error(msg);
+            },
+            send: (data: any) => data,
+          };
+
+          const result = await offerController.editOfferPrice(mockCtx);
+          const offer = result?.data;
+          socket.emit('offer:edited', { clientOfferId, offerId, offer });
+        } catch (error: any) {
+          socket.emit('offer:error', {
+            clientOfferId,
+            offerId,
+            message: error.message || 'Failed to edit offer',
+          });
+        }
+      });
+
+      socket.on('offer:seen', async ({ offerId, conversationId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            params: { id: offerId },
+            request: {
+              body: { conversationId },
+            },
+            state: { user: { id: userId } },
+            badRequest: (msg: string) => { throw new Error(msg); },
+            notFound: (msg: string) => { throw new Error(msg); },
+            forbidden: (msg: string) => { throw new Error(msg); },
+            internalServerError: (msg: string) => { throw new Error(msg); },
+            send: (data: any) => data,
+          };
+
+          await offerController.markOfferSeen(mockCtx);
+        } catch (error: any) {
+          strapi.log.warn('Failed to mark offer seen via socket:', error);
         }
       });
 

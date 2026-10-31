@@ -11,6 +11,7 @@ const OFFER_POPULATE = {
   },
   buyer: { fields: ["id", "username"] },
   seller: { fields: ["id", "username"] },
+  sender: { fields: ["id", "username"] },
   conversation: { fields: ["id"] },
 };
 
@@ -37,6 +38,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
         populate: {
           buyer: { fields: ["id", "username"] },
           seller: { fields: ["id", "username"] },
+  sender: { fields: ["id", "username"] },
           product: { fields: ["id", "documentId", "title", "price", "productStatus"] },
         },
       },
@@ -58,6 +60,9 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
       ? {
           id: offer.id,
           offerPrice: offer.offerPrice,
+          editedAt: offer.editedAt ?? null,
+          editCount: offer.editCount ?? 0,
+          seenAt: offer.seenAt ?? null,
           originalPrice: offer.originalPrice,
           status: offer.status,
           productTitle: offer.productTitle ?? offer.product?.title ?? null,
@@ -217,6 +222,7 @@ export default factories.createCoreController(
           product: productId,
           buyer: buyerId,
           seller: sellerId,
+          sender: authenticatedUserId,
           productTitle: (product as any).title,
           productImage: firstImage,
           conversation: conversationId ?? null,
@@ -557,5 +563,330 @@ export default factories.createCoreController(
         return ctx.internalServerError("Failed to check expired offers.");
       }
     },
+
+    // PATCH /api/offers/:id
+    async editOfferPrice(ctx: any) {
+      const offerId = Number(ctx.params.id);
+      if (!Number.isInteger(offerId) || offerId <= 0) {
+        return ctx.badRequest("Invalid offer id.");
+      }
+
+      const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
+      if (!authenticatedUserId) {
+        return ctx.unauthorized("Authentication required.");
+      }
+
+      const rawPrice = ctx.request.body?.offerPrice ?? ctx.request.body?.price;
+      const numPrice = Number(rawPrice);
+      if (!Number.isFinite(numPrice) || numPrice <= 0) {
+        return ctx.badRequest("Price must be a valid number greater than zero.");
+      }
+
+      // Safe decimal handling (2 decimal places)
+      const newPrice = Number(numPrice.toFixed(2));
+
+      // Guard: Disallow updating unauthorized fields
+      const allowedBodyKeys = new Set(["offerPrice", "price", "conversationId"]);
+      for (const key of Object.keys(ctx.request.body || {})) {
+        if (!allowedBodyKeys.has(key)) {
+          return ctx.badRequest(`Field '${key}' cannot be modified.`);
+        }
+      }
+
+      let updatedOffer: any;
+      let updatedMessage: any;
+      let finalConversationId: number | null = null;
+      let buyerId: number | null = null;
+      let sellerId: number | null = null;
+
+      try {
+        await strapi.db.transaction(async (trx: any) => {
+          // 1. Load the offer and required relations atomically inside transaction
+          const offer = await strapi.db.query("api::offer.offer").findOne({
+            where: { id: offerId },
+            populate: {
+              product: { populate: { users_permissions_user: true } },
+              buyer: true,
+              seller: true,
+              sender: true,
+              conversation: true,
+              order: true,
+            },
+          });
+
+          if (!offer) {
+            const err: any = new Error("Offer not found.");
+            err.status = 404;
+            throw err;
+          }
+
+          // 2. Conversation validation if provided
+          const reqConvId = Number(ctx.request.body?.conversationId);
+          if (Number.isInteger(reqConvId) && reqConvId > 0 && offer.conversation?.id) {
+            if (Number(offer.conversation.id) !== reqConvId) {
+              const err: any = new Error("Offer does not belong to this conversation.");
+              err.status = 400;
+              throw err;
+            }
+          }
+          finalConversationId = offer.conversation ? Number(offer.conversation.id) : (Number.isInteger(reqConvId) ? reqConvId : null);
+          buyerId = offer.buyer ? Number(offer.buyer.id) : null;
+          sellerId = offer.seller ? Number(offer.seller.id) : null;
+
+          // 3. Verify original sender ownership
+          let offerSenderId = offer.sender ? Number(offer.sender.id) : null;
+
+          // Find the chat message linked to this offer
+          const messages = await strapi.db.query("api::message.message").findMany({
+            where: { offer: { id: offerId } },
+            populate: { sender: true },
+            limit: 1,
+          });
+          const message = messages?.[0];
+
+          if (!offerSenderId && message?.sender) {
+            offerSenderId = Number(message.sender.id);
+          }
+          if (!offerSenderId && offer.buyer) {
+            offerSenderId = Number(offer.buyer.id);
+          }
+
+          if (offerSenderId !== authenticatedUserId) {
+            const err: any = new Error("You can only edit offers you have sent.");
+            err.status = 403;
+            throw err;
+          }
+
+          // 4. Validate offer status
+          if (["accepted", "declined"].includes(offer.status)) {
+            const err: any = new Error("This offer has already been responded to.");
+            err.status = 400;
+            throw err;
+          }
+          if (offer.status !== "pending") {
+            const err: any = new Error("This offer is no longer available for editing.");
+            err.status = 400;
+            throw err;
+          }
+
+          // Check offer expiry
+          if (offer.expiresAt && new Date(offer.expiresAt).getTime() <= Date.now()) {
+            const err: any = new Error("This offer is no longer available for editing.");
+            err.status = 400;
+            throw err;
+          }
+
+          // 5. Validate that no response or order has occurred
+          if (offer.acceptedAt || offer.order) {
+            const err: any = new Error("This offer has already been responded to.");
+            err.status = 400;
+            throw err;
+          }
+
+          // 6. Validate recipient seen status
+          if (offer.seenAt) {
+            const err: any = new Error("You cannot edit this offer because the recipient has already viewed it.");
+            err.status = 400;
+            throw err;
+          }
+
+          if (message && message.readAt) {
+            const err: any = new Error("You cannot edit this offer because the recipient has already viewed it.");
+            err.status = 400;
+            throw err;
+          }
+
+          if (!message && !offer.seenAt) {
+            // Cannot establish accurate seen status for this offer
+            const err: any = new Error("This offer is no longer available for editing.");
+            err.status = 400;
+            throw err;
+          }
+
+          // 7. Validate product availability
+          const product = await strapi.db.query("api::product.product").findOne({
+            where: { id: offer.product?.id },
+          });
+          if (!product || product.productStatus === "sold" || product.productStatus === "reserved" || product.productStatus === "hidden") {
+            const err: any = new Error("This product is no longer available.");
+            err.status = 400;
+            throw err;
+          }
+
+          // 8. Validate the new price
+          const currentOfferPrice = Number(offer.offerPrice);
+          if (newPrice === currentOfferPrice) {
+            const err: any = new Error("Offer price cannot be the same as the current offer price.");
+            err.status = 400;
+            throw err;
+          }
+
+          const originalPrice = Number(offer.originalPrice ?? product.price);
+          if (newPrice < originalPrice * MIN_RATIO) {
+            const err: any = new Error(`Offer is too low. Minimum offer is ${(originalPrice * MIN_RATIO).toFixed(2)}.`);
+            err.status = 400;
+            throw err;
+          }
+          if (newPrice > originalPrice * MAX_RATIO) {
+            const err: any = new Error(`Offer is too high. Maximum offer is ${(originalPrice * MAX_RATIO).toFixed(2)}.`);
+            err.status = 400;
+            throw err;
+          }
+
+          // 9. Update existing offer atomically
+          const now = new Date().toISOString();
+          const nextEditCount = (Number(offer.editCount) || 0) + 1;
+
+          await strapi.db.query("api::offer.offer").update({
+            where: { id: offerId },
+            data: {
+              offerPrice: newPrice,
+              editedAt: now,
+              editCount: nextEditCount,
+            },
+          });
+
+          // 10. Update any existing message-level price snapshot
+          if (message) {
+            const newContent = `Made an offer: THB${newPrice}${offer.message ? ` - "${offer.message}"` : ''}`;
+            const newMetadata = {
+              ...(message.metadata || {}),
+              amount: newPrice,
+              offerPrice: newPrice,
+              editedAt: now,
+            };
+            await strapi.db.query("api::message.message").update({
+              where: { id: message.id },
+              data: {
+                content: newContent,
+                metadata: newMetadata,
+              },
+            });
+            updatedMessage = {
+              ...message,
+              content: newContent,
+              metadata: newMetadata,
+            };
+          }
+        });
+      } catch (err: any) {
+        const status = err.status || 500;
+        if (status === 400) return ctx.badRequest(err.message);
+        if (status === 403) return ctx.forbidden(err.message);
+        if (status === 404) return ctx.notFound(err.message);
+        strapi.log.error("Failed to edit offer price:", err);
+        return ctx.internalServerError("Failed to update offer price.");
+      }
+
+      // Fetch freshly populated offer
+      const populated = await strapi.entityService.findOne(
+        "api::offer.offer" as any,
+        offerId,
+        { populate: OFFER_POPULATE }
+      );
+
+      // Notify connected clients of the successful update
+      const io = (strapi as any).io;
+      if (io) {
+        const updatePayload = {
+          offerId,
+          conversationId: finalConversationId,
+          price: newPrice,
+          offerPrice: newPrice,
+          status: "pending",
+          editedAt: (populated as any)?.editedAt,
+          editCount: (populated as any)?.editCount,
+          offer: populated,
+          message: updatedMessage,
+        };
+
+        if (finalConversationId) {
+          io.to(`conversation:${finalConversationId}`).emit("offer:updated", updatePayload);
+        }
+        if (buyerId) {
+          io.to(`user:${buyerId}`).emit("offer:updated", updatePayload);
+        }
+        if (sellerId && sellerId !== buyerId) {
+          io.to(`user:${sellerId}`).emit("offer:updated", updatePayload);
+        }
+      }
+
+      return ctx.send({ ok: true, data: populated });
+    },
+
+    // PATCH /api/offers/:id/seen
+    async markOfferSeen(ctx: any) {
+      const offerId = Number(ctx.params.id);
+      if (!Number.isInteger(offerId) || offerId <= 0) {
+        return ctx.badRequest("Invalid offer id.");
+      }
+
+      const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
+      if (!authenticatedUserId) {
+        return ctx.unauthorized("Authentication required.");
+      }
+
+      const offer = await strapi.entityService.findOne(
+        "api::offer.offer" as any,
+        offerId,
+        { populate: OFFER_POPULATE }
+      ) as any;
+
+      if (!offer) return ctx.notFound("Offer not found.");
+
+      // Check if user is recipient (either buyer or seller who did not send it)
+      const senderId = offer.sender?.id ? Number(offer.sender.id) : (offer.buyer?.id ? Number(offer.buyer.id) : null);
+      if (senderId && authenticatedUserId === senderId) {
+        // Sender viewing their own offer does not mark as seen
+        return ctx.send({ ok: true, alreadySeen: false });
+      }
+
+      const isBuyer = offer.buyer && Number(offer.buyer.id) === authenticatedUserId;
+      const isSeller = offer.seller && Number(offer.seller.id) === authenticatedUserId;
+      if (!isBuyer && !isSeller) {
+        return ctx.forbidden("Not a participant in this offer.");
+      }
+
+      if (offer.seenAt) {
+        return ctx.send({ ok: true, alreadySeen: true });
+      }
+
+      const now = new Date().toISOString();
+      await strapi.entityService.update("api::offer.offer" as any, offerId, {
+        data: { seenAt: now },
+      });
+
+      // Also mark the associated message as read if unread
+      const messages = await strapi.entityService.findMany("api::message.message" as any, {
+        filters: { offer: { id: offerId } },
+        limit: 1,
+      }) as any[];
+      if (messages?.[0] && !messages[0].readAt) {
+        await strapi.entityService.update("api::message.message" as any, messages[0].id, {
+          data: { readAt: now },
+        });
+      }
+
+      // Emit offer:seen event to notify sender and conversation
+      const io = (strapi as any).io;
+      if (io) {
+        const conversationId = offer.conversation?.id;
+        const seenPayload = {
+          offerId,
+          conversationId,
+          seenAt: now,
+          seenBy: authenticatedUserId,
+        };
+        if (conversationId) {
+          io.to(`conversation:${conversationId}`).emit("offer:seen", seenPayload);
+        }
+        if (senderId) {
+          io.to(`user:${senderId}`).emit("offer:seen", seenPayload);
+        }
+      }
+
+      return ctx.send({ ok: true, seenAt: now });
+    },
+
   })
 );

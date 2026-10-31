@@ -6,7 +6,9 @@
     "pluralName": "offers",
     "displayName": "Offer"
   },
-  "options": { "draftAndPublish": false },
+  "options": {
+    "draftAndPublish": false
+  },
   "pluginOptions": {},
   "attributes": {
     "offerPrice": {
@@ -22,7 +24,14 @@
     },
     "status": {
       "type": "enumeration",
-      "enum": ["pending", "accepted", "declined", "expired", "completed", "unavailable"],
+      "enum": [
+        "pending",
+        "accepted",
+        "declined",
+        "expired",
+        "completed",
+        "unavailable"
+      ],
       "default": "pending",
       "required": true
     },
@@ -47,8 +56,12 @@
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
     },
-    "productTitle": { "type": "string" },
-    "productImage": { "type": "string" },
+    "productTitle": {
+      "type": "string"
+    },
+    "productImage": {
+      "type": "string"
+    },
     "order": {
       "type": "relation",
       "relation": "oneToOne",
@@ -58,6 +71,21 @@
       "type": "relation",
       "relation": "manyToOne",
       "target": "api::conversation.conversation"
+    },
+    "sender": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
+    },
+    "editedAt": {
+      "type": "datetime"
+    },
+    "editCount": {
+      "type": "integer",
+      "default": 0
+    },
+    "seenAt": {
+      "type": "datetime"
     }
   }
 }
