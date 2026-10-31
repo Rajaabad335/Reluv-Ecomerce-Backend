@@ -814,13 +814,16 @@ export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
     singularName: 'dispute';
   };
   options: {
-    draftAndPublish: true;
+    draftAndPublish: false;
   };
   attributes: {
+    adminDecision: Schema.Attribute.String;
+    adminNotes: Schema.Attribute.Text;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     description: Schema.Attribute.Text;
+    evidence: Schema.Attribute.Text;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -834,18 +837,43 @@ export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     reason: Schema.Attribute.Enumeration<
-      ['ITEM_NOT_RECEIVED', 'DAMAGED_PRODUCT', 'WRONG_ITEM', 'PAYMENT_ISSUE']
+      [
+        'ITEM_NOT_RECEIVED',
+        'DAMAGED_PRODUCT',
+        'WRONG_ITEM',
+        'PAYMENT_ISSUE',
+        'PRODUCT_NOT_AS_DESCRIBED',
+        'MISSING_ITEMS',
+        'OTHER',
+      ]
     >;
     recievedBy: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
     >;
     refundAmount: Schema.Attribute.Decimal;
+    refundStatus: Schema.Attribute.Enumeration<
+      ['NONE', 'PENDING', 'PROCESSING', 'SUCCEEDED', 'FAILED', 'CANCELLED']
+    > &
+      Schema.Attribute.DefaultTo<'NONE'>;
+    requestType: Schema.Attribute.Enumeration<['DISPUTE', 'REFUND_REQUEST']> &
+      Schema.Attribute.DefaultTo<'DISPUTE'>;
     resolution: Schema.Attribute.Text;
+    resolvedAt: Schema.Attribute.DateTime;
     status: Schema.Attribute.Enumeration<
-      ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED', 'CLOSED']
+      [
+        'OPEN',
+        'UNDER_REVIEW',
+        'AWAITING_INFORMATION',
+        'RESOLVED_REFUND',
+        'RESOLVED_RELEASE',
+        'RESOLVED',
+        'REJECTED',
+        'CLOSED',
+      ]
     > &
       Schema.Attribute.DefaultTo<'OPEN'>;
+    stripeRefundId: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1245,20 +1273,65 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     buyerProtectionFee: Schema.Attribute.Decimal;
+    chargeId: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    currency: Schema.Attribute.String & Schema.Attribute.DefaultTo<'thb'>;
+    deliveredAt: Schema.Attribute.DateTime;
     deliveryMethod: Schema.Attribute.Enumeration<['pickup', 'home']>;
+    disputeDeadline: Schema.Attribute.DateTime;
+    disputeWindowStatus: Schema.Attribute.Enumeration<['OPEN', 'CLOSED']> &
+      Schema.Attribute.DefaultTo<'CLOSED'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::order.order'> &
       Schema.Attribute.Private;
     orderStatus: Schema.Attribute.Enumeration<
-      ['placed', 'in progress', 'shipped', 'delivered', 'cancelled']
+      [
+        'placed',
+        'in progress',
+        'shipped',
+        'delivered',
+        'cancelled',
+        'PENDING',
+        'CONFIRMED',
+        'PROCESSING',
+        'SHIPPED',
+        'DELIVERED',
+        'CANCELLED',
+      ]
     > &
       Schema.Attribute.DefaultTo<'placed'>;
-    paymentStatus: Schema.Attribute.Enumeration<['pending', 'paid', 'failed']> &
+    paymentIntentId: Schema.Attribute.String;
+    paymentStatus: Schema.Attribute.Enumeration<
+      ['pending', 'paid', 'failed', 'refunded', 'PAID', 'REFUNDED', 'FAILED']
+    > &
       Schema.Attribute.DefaultTo<'pending'>;
+    payoutEligibleAt: Schema.Attribute.DateTime;
+    payoutStatus: Schema.Attribute.Enumeration<
+      [
+        'NOT_ELIGIBLE',
+        'ELIGIBLE',
+        'ON_HOLD',
+        'PROCESSING',
+        'TRANSFERRED',
+        'BANK_PAYOUT_PENDING',
+        'PAID',
+        'FAILED',
+        'CANCELLED',
+        'not_eligible',
+        'eligible',
+        'on_hold',
+        'pending',
+        'processing',
+        'transferred',
+        'paid',
+        'success',
+      ]
+    > &
+      Schema.Attribute.DefaultTo<'NOT_ELIGIBLE'>;
     phoneNumber: Schema.Attribute.String;
+    platformCommission: Schema.Attribute.Decimal;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     productImage: Schema.Attribute.String;
     productPrice: Schema.Attribute.Decimal;
@@ -1268,7 +1341,9 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+    sellerEarnings: Schema.Attribute.Decimal;
     shippingFee: Schema.Attribute.Decimal;
+    stripeFee: Schema.Attribute.Decimal;
     totalAmount: Schema.Attribute.Decimal;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1329,6 +1404,7 @@ export interface ApiPayoutPayout extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<0>;
+    isMock: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1354,12 +1430,34 @@ export interface ApiPayoutPayout extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     status: Schema.Attribute.Enumeration<
-      ['pending', 'processing', 'success', 'failed', 'refused']
+      [
+        'NOT_ELIGIBLE',
+        'ELIGIBLE',
+        'ON_HOLD',
+        'PROCESSING',
+        'TRANSFERRED',
+        'BANK_PAYOUT_PENDING',
+        'PAID',
+        'FAILED',
+        'CANCELLED',
+        'not_eligible',
+        'eligible',
+        'on_hold',
+        'pending',
+        'processing',
+        'transferred',
+        'bank_payout_pending',
+        'paid',
+        'success',
+        'failed',
+        'refused',
+      ]
     > &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<'pending'>;
-    stripePayoutId: Schema.Attribute.String & Schema.Attribute.Private;
-    stripeTransferId: Schema.Attribute.String & Schema.Attribute.Private;
+    stripeAccountId: Schema.Attribute.String;
+    stripePayoutId: Schema.Attribute.String;
+    stripeTransferId: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

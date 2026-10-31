@@ -39,6 +39,7 @@ export default factories.createCoreController(
               reason: data.reason,
               description: data.details ?? null,
               status: "OPEN",
+              refundAmount: data.refundAmount ? Number(data.refundAmount) : null,
             } as any,
           },
         );
