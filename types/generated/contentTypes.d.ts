@@ -839,7 +839,13 @@ export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
       'plugin::users-permissions.user'
     >;
     reason: Schema.Attribute.Enumeration<
-      ['ITEM_NOT_RECEIVED', 'DAMAGED_PRODUCT', 'WRONG_ITEM', 'PAYMENT_ISSUE']
+      [
+        'ITEM_NOT_RECEIVED',
+        'DAMAGED_PRODUCT',
+        'WRONG_ITEM',
+        'PAYMENT_ISSUE',
+        'OTHER',
+      ]
     >;
     recievedBy: Schema.Attribute.Relation<
       'manyToOne',
@@ -848,7 +854,15 @@ export interface ApiDisputeDispute extends Struct.CollectionTypeSchema {
     refundAmount: Schema.Attribute.Decimal;
     resolution: Schema.Attribute.Text;
     status: Schema.Attribute.Enumeration<
-      ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED', 'CLOSED']
+      [
+        'OPEN',
+        'UNDER_REVIEW',
+        'RESOLVED',
+        'RESOLVED_REFUND',
+        'RESOLVED_RELEASE',
+        'REJECTED',
+        'CLOSED',
+      ]
     > &
       Schema.Attribute.DefaultTo<'OPEN'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -1206,6 +1220,8 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    editCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    editedAt: Schema.Attribute.DateTime;
     expiresAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::offer.offer'> &
@@ -1218,7 +1234,12 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     productImage: Schema.Attribute.String;
     productTitle: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    seenAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    sender: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
     >;

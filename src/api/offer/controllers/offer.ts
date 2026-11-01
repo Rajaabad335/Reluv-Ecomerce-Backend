@@ -1,4 +1,8 @@
 import { factories } from "@strapi/strapi";
+import {
+  fetchStatusGroupPage,
+  parseListPagination,
+} from "../../../lib/paginatedStatusGroups";
 
 const MIN_RATIO = 0.5; // offer must be >= 50% of original price
 const MAX_RATIO = 1.5; // offer must be <= 150% of original price
@@ -14,6 +18,27 @@ const OFFER_POPULATE = {
   sender: { fields: ["id", "username"] },
   conversation: { fields: ["id"] },
 };
+const USER_OFFER_POPULATE = {
+  product: {
+    fields: ["id", "documentId"],
+    populate: {
+      users_permissions_user: { fields: ["id", "username"] },
+    },
+  },
+  buyer: { fields: ["id", "username"] },
+  seller: { fields: ["id", "username"] },
+  sender: { fields: ["id", "username"] },
+  conversation: { fields: ["id"] },
+  order: { fields: ["id", "orderStatus"] },
+};
+const OFFER_STATUS_PRIORITY = [
+  "pending",
+  "accepted",
+  "completed",
+  "unavailable",
+  "declined",
+  "expired",
+] as const;
 
 async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
   const stateId = Number(ctx?.state?.user?.id);
@@ -78,6 +103,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
             : null,
           buyer: offer.buyer ? { id: offer.buyer.id, username: offer.buyer.username } : null,
           seller: offer.seller ? { id: offer.seller.id, username: offer.seller.username } : null,
+          sender: offer.sender ? { id: offer.sender.id, username: offer.sender.username } : null,
         }
       : undefined,
   };
@@ -107,14 +133,8 @@ export default factories.createCoreController(
         return ctx.badRequest("Missing required fields: productId, buyerId, and offerPrice are required.");
       }
 
-      if (!sellerId) {
-        return ctx.badRequest("This product does not have a seller associated with it. Cannot make an offer.");
-      }
       const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
       if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
-      if (authenticatedUserId !== Number(buyerId) && authenticatedUserId !== Number(sellerId)) {
-        return ctx.forbidden("You must be a participant in this offer.");
-      }
 
       const product = await strapi.entityService.findOne(
         "api::product.product",
@@ -128,26 +148,20 @@ export default factories.createCoreController(
       if (!productSellerId) {
         return ctx.badRequest("This product does not have a valid seller.");
       }
-      if (productSellerId !== Number(sellerId)) {
-        const parentId = Number(parentOfferId);
-        const parent = Number.isInteger(parentId) && parentId > 0
-          ? await strapi.entityService.findOne("api::offer.offer" as any, parentId, {
-              populate: { product: { fields: ["id"] }, buyer: { fields: ["id"] }, seller: { fields: ["id"] } },
-            }) as any
-          : null;
-        const validCounter = parent &&
-          Number(parent.product?.id) === Number(productId) &&
-          Number(parent.seller?.id) === productSellerId &&
-          Number(parent.buyer?.id) === Number(sellerId) &&
-          Number(buyerId) === productSellerId &&
-          ["pending", "declined"].includes(parent.status);
-        if (!validCounter) {
-          return ctx.badRequest("Seller does not match this product.");
-        }
+
+      // Authoritative seller is always the owner of the product
+      const actualSellerId = productSellerId;
+      let actualBuyerId: number | null = null;
+
+      const rawBuyerId = Number(buyerId);
+      const rawSellerId = Number(sellerId);
+
+      if (rawSellerId === productSellerId && rawBuyerId && rawBuyerId !== productSellerId) {
+        actualBuyerId = rawBuyerId;
+      } else if (rawBuyerId === productSellerId && rawSellerId && rawSellerId !== productSellerId) {
+        actualBuyerId = rawSellerId;
       }
 
-      // A supplied conversation is valid only for these two participants.
-      // This remains true for counteroffers, where buyer/seller roles reverse.
       if (conversationId) {
         const conversation = await strapi.entityService.findOne(
           "api::conversation.conversation" as any,
@@ -155,11 +169,35 @@ export default factories.createCoreController(
           { populate: { buyer: { fields: ["id"] }, seller: { fields: ["id"] } } },
         ) as any;
         if (!conversation) return ctx.notFound("Conversation not found.");
-        const participants = [Number(conversation.buyer?.id), Number(conversation.seller?.id)].sort((a, b) => a - b);
-        const offerParticipants = [Number(buyerId), Number(sellerId)].sort((a, b) => a - b);
-        if (participants[0] !== offerParticipants[0] || participants[1] !== offerParticipants[1]) {
-          return ctx.badRequest("Conversation does not match the offer participants.");
+
+        const convBuyerId = Number(conversation.buyer?.id);
+        const convSellerId = Number(conversation.seller?.id);
+
+        if (convBuyerId === productSellerId) {
+          actualBuyerId = convSellerId;
+        } else if (convSellerId === productSellerId) {
+          actualBuyerId = convBuyerId;
+        } else if (!actualBuyerId) {
+          return ctx.badRequest("Seller does not match this product.");
         }
+      }
+
+      if (!actualBuyerId) {
+        if (authenticatedUserId === productSellerId) {
+          actualBuyerId = (rawSellerId && rawSellerId !== productSellerId)
+            ? rawSellerId
+            : ((rawBuyerId && rawBuyerId !== productSellerId) ? rawBuyerId : null);
+        } else {
+          actualBuyerId = authenticatedUserId;
+        }
+      }
+
+      if (!actualBuyerId || actualBuyerId === actualSellerId) {
+        return ctx.badRequest("Seller does not match this product.");
+      }
+
+      if (authenticatedUserId !== actualSellerId && authenticatedUserId !== actualBuyerId) {
+        return ctx.forbidden("You must be a participant in this offer.");
       }
 
       const productStatus = (product as any).productStatus;
@@ -220,8 +258,8 @@ export default factories.createCoreController(
           message: message ?? null,
           status: "pending",
           product: productId,
-          buyer: buyerId,
-          seller: sellerId,
+          buyer: actualBuyerId,
+          seller: actualSellerId,
           sender: authenticatedUserId,
           productTitle: (product as any).title,
           productImage: firstImage,
@@ -234,7 +272,7 @@ export default factories.createCoreController(
         try {
           if (conversationId) {
             await createOfferChatMessage(strapi, Number(conversationId), {
-                sender: buyerId,
+                sender: authenticatedUserId || buyerId,
                 content: `Made an offer: THB${offerPrice}${message ? ` - "${message}"` : ''}`,
                 offer: offer.id,
                 metadata: {
@@ -263,7 +301,7 @@ export default factories.createCoreController(
               body: `You received an offer of THB ${offerPrice} on "${(product as any).title}".`,
               read: false,
               link: `/Orders?tab=offers`,
-              recipient: sellerId,
+              recipient: authenticatedUserId === actualSellerId ? actualBuyerId : actualSellerId,
             },
           });
         } catch (e) {
@@ -314,6 +352,70 @@ export default factories.createCoreController(
       );
 
       return ctx.send({ data: offers });
+    },
+
+    // GET /api/offers/user/:userId
+    async getOffersForUser(ctx: any) {
+      const userId = Number(ctx.params.userId);
+      if (!Number.isInteger(userId) || userId <= 0) {
+        return ctx.badRequest("A valid userId is required.");
+      }
+
+      const requestedStatus = String(ctx.query.status ?? "all").trim().toLowerCase();
+      if (requestedStatus !== "all" && !OFFER_STATUS_PRIORITY.includes(requestedStatus as any)) {
+        return ctx.badRequest(`status must be All or one of: ${OFFER_STATUS_PRIORITY.join(", ")}.`);
+      }
+
+      const { page: requestedPage, pageSize } = parseListPagination(ctx.query.page, ctx.query.pageSize);
+      const participantFilters: any = {
+        $or: [{ buyer: { id: userId } }, { seller: { id: userId } }],
+      };
+      const filtersForStatus = (status: string): any => ({
+        $and: [participantFilters, { status }],
+      });
+      const selectedStatuses = requestedStatus === "all"
+        ? OFFER_STATUS_PRIORITY
+        : [requestedStatus as typeof OFFER_STATUS_PRIORITY[number]];
+      const [allCount, groups] = await Promise.all([
+        strapi.entityService.count("api::offer.offer" as any, {
+          filters: participantFilters,
+        }),
+        Promise.all(selectedStatuses.map(async (status) => ({
+          key: status,
+          total: await strapi.entityService.count("api::offer.offer" as any, {
+            filters: filtersForStatus(status),
+          }),
+        }))),
+      ]);
+
+      const paged = await fetchStatusGroupPage({
+        groups,
+        page: requestedPage,
+        pageSize,
+        fetchGroup: (status, start, limit) => strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: filtersForStatus(status),
+            populate: USER_OFFER_POPULATE,
+            sort: [{ createdAt: "desc" }, { id: "desc" }],
+            start,
+            limit,
+          },
+        ),
+      });
+
+      const data = paged.data.map((offer: any) => ({
+        ...offer,
+        role: Number(offer.seller?.id ?? offer.seller) === userId ? "seller" : "buyer",
+      }));
+
+      return ctx.send({
+        data,
+        meta: {
+          pagination: paged.pagination,
+          counts: { all: allCount },
+        },
+      });
     },
 
     // PATCH /api/offers/:id/respond

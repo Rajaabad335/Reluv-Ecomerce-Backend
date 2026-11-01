@@ -4,6 +4,17 @@
 
 import { factories } from "@strapi/strapi";
 import { createNotification } from "../../../lib/createNotification";
+import {
+  fetchStatusGroupPage,
+  parseListPagination,
+} from "../../../lib/paginatedStatusGroups";
+
+const ORDER_STATUS_GROUPS = [
+  { key: "placed", statuses: ["placed"] },
+  { key: "in progress", statuses: ["in progress", "shipped"] },
+  { key: "delivered", statuses: ["delivered"] },
+  { key: "cancelled", statuses: ["cancelled"] },
+] as const;
 
 async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
   const stateId = Number(ctx?.state?.user?.id);
@@ -354,42 +365,95 @@ export default factories.createCoreController(
     },
     async fetchOrdersByUser(ctx) {
       try {
-        const { body } = ctx.request as any; // Type assertion to access body
-        console.log("Received order data:", body);
-        // Debugging line
+        const { body = {} } = ctx.request as any;
+        const userId = Number(body.userId);
+        if (!Number.isInteger(userId) || userId <= 0) {
+          return ctx.badRequest("A valid userId is required.");
+        }
 
-        //   if (!userId) {
-        //     return ctx.badRequest("Missing required parameter: userId");
-        //   }
+        const requestedType = String(body.type ?? "all").toLowerCase();
+        const type = requestedType === "bought" || requestedType === "sold"
+          ? requestedType
+          : requestedType === "all" ? "all" : null;
+        if (!type) return ctx.badRequest("type must be all, Bought, or Sold.");
 
-        const boughtOrders = await strapi.entityService.findMany(
-          "api::order.order",
-          {
+        const requestedStatus = String(body.status ?? "all").trim().toLowerCase();
+        const statusAliases: Record<string, string> = {
+          all: "all",
+          placed: "placed",
+          "in progress": "in progress",
+          shipped: "in progress",
+          completed: "delivered",
+          delivered: "delivered",
+          cancelled: "cancelled",
+        };
+        const statusKey = statusAliases[requestedStatus];
+        if (!statusKey) {
+          return ctx.badRequest("status must be All, Placed, In Progress, Completed, or Cancelled.");
+        }
+
+        const { page: requestedPage, pageSize } = parseListPagination(body.page, body.pageSize);
+        const participantFilters: any = type === "bought"
+          ? { buyer: { id: userId } }
+          : type === "sold"
+            ? { seller: { id: userId }, buyer: { id: { $ne: userId } } }
+            : { $or: [{ buyer: { id: userId } }, { seller: { id: userId } }] };
+
+        const selectedGroups = statusKey === "all"
+          ? ORDER_STATUS_GROUPS
+          : ORDER_STATUS_GROUPS.filter((group) => group.key === statusKey);
+        const groups = await Promise.all(selectedGroups.map(async (group) => ({
+          key: group.key,
+          statuses: group.statuses,
+          total: await strapi.entityService.count("api::order.order", {
             filters: {
-              buyer: { id: Number(body.userId) },
+              $and: [participantFilters, { orderStatus: { $in: [...group.statuses] } }],
             },
-            populate: "*",
+          }),
+        })));
+
+        const [paged, [bought, soldIncludingSelf, selfPurchased]] = await Promise.all([
+          fetchStatusGroupPage({
+            groups,
+            page: requestedPage,
+            pageSize,
+            fetchGroup: async (_groupKey, start, limit) => strapi.entityService.findMany(
+              "api::order.order",
+              {
+                filters: {
+                  $and: [participantFilters, { orderStatus: { $in: [...groups.find((group) => group.key === _groupKey)!.statuses] } }],
+                },
+                populate: {
+                  product: { fields: ["id", "title"] },
+                  buyer: { fields: ["id", "username"] },
+                  seller: { fields: ["id", "username"] },
+                },
+                sort: [{ createdAt: "desc" }, { id: "desc" }],
+                start,
+                limit,
+              },
+            ),
+          }),
+          Promise.all([
+            strapi.entityService.count("api::order.order", { filters: { buyer: { id: userId } } }),
+            strapi.entityService.count("api::order.order", { filters: { seller: { id: userId } } }),
+            strapi.entityService.count("api::order.order", {
+              filters: { buyer: { id: userId }, seller: { id: userId } },
+            }),
+          ]),
+        ]);
+        const data = paged.data.map((order: any) => ({
+          ...order,
+          type: Number(order.buyer?.id ?? order.buyer) === userId ? "Bought" : "Sold",
+        }));
+
+        return ctx.send({
+          data,
+          meta: {
+            pagination: paged.pagination,
+            counts: { bought, sold: Math.max(0, soldIncludingSelf - selfPurchased) },
           },
-        );
-        const soldOrders = await strapi.entityService.findMany(
-          "api::order.order",
-          {
-            filters: {
-              seller: { id: Number(body.userId) },
-            },
-            populate: "*",
-          },
-        );
-        const ALLOrders = [];
-        boughtOrders?.forEach((order: any) => {
-          order.type = "Bought";
-          ALLOrders.push(order);
         });
-        soldOrders?.forEach((order: any) => {
-          order.type = "Sold";
-          ALLOrders.push(order);
-        });
-        return ctx.send({ data: ALLOrders });
       } catch (error) {
         console.error("Error fetching orders:", error);
         return ctx.internalServerError(

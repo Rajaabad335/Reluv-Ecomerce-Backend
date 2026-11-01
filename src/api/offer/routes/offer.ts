@@ -20,6 +20,12 @@ export default {
     },
     {
       method: "GET",
+      path: "/offers/user/:userId",
+      handler: "offer.getOffersForUser",
+      config: { auth: false },
+    },
+    {
+      method: "GET",
       path: "/offers/seller/:sellerId",
       handler: "offer.getOffersForSeller",
       config: { auth: false },

@@ -20,6 +20,7 @@ const sanitizeMessage = (message: any) => ({
   id: message?.id,
   content: message?.content ?? '',
   createdAt: message?.createdAt ?? null,
+  readAt: message?.readAt ?? null,
   sender: message?.sender
     ? { id: message.sender.id, username: message.sender.username, avatar: message.sender.avatar ?? null }
     : null,
@@ -42,7 +43,7 @@ const sanitizeMessage = (message: any) => ({
     status: message.offer.status,
     editedAt: message.offer.editedAt ?? null,
     editCount: message.offer.editCount ?? 0,
-    seenAt: message.offer.seenAt ?? null,
+    seenAt: message.offer.seenAt ?? message?.readAt ?? null,
     productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
     productImage: message.offer.productImage ?? null,
     product: message.offer.product ? {
@@ -59,6 +60,10 @@ const sanitizeMessage = (message: any) => ({
     seller: message.offer.seller ? {
       id: message.offer.seller.id,
       username: message.offer.seller.username
+    } : null,
+    sender: message.offer.sender ? {
+      id: message.offer.sender.id,
+      username: message.offer.sender.username
     } : null,
   } : undefined,
 });
@@ -125,7 +130,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller', 'product']
+            populate: ['buyer', 'seller', 'product', 'sender']
           }
         },
         sort: { createdAt: 'asc' },
@@ -138,15 +143,46 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       );
 
       if (unreadMessages.length > 0) {
+        const now = new Date().toISOString();
+        const io = (strapi as any).io as import('socket.io').Server | undefined;
+
         await Promise.all(
-          unreadMessages.map((msg) =>
-            strapi.entityService.update(messageUid, msg.id, {
-              data: { readAt: new Date().toISOString() },
-            })
-          )
+          unreadMessages.map(async (msg) => {
+            await strapi.entityService.update(messageUid, msg.id, {
+              data: { readAt: now },
+            });
+            msg.readAt = now;
+
+            // If this message has an offer, mark the offer seen as well
+            if (msg.offer?.id && !msg.offer.seenAt) {
+              const offerSenderId = msg.offer.sender?.id
+                ? Number(msg.offer.sender.id)
+                : (msg.sender?.id ? Number(msg.sender.id) : null);
+
+              if (offerSenderId && offerSenderId !== userId) {
+                try {
+                  await strapi.entityService.update("api::offer.offer", msg.offer.id, {
+                    data: { seenAt: now },
+                  });
+                  msg.offer.seenAt = now;
+
+                  if (io) {
+                    const seenPayload = {
+                      conversationId: canonicalId,
+                      offerId: msg.offer.id,
+                      seenAt: now,
+                    };
+                    io.to(`conversation:${canonicalId}`).emit('offer:seen', seenPayload);
+                    io.to(`user:${offerSenderId}`).emit('offer:seen', seenPayload);
+                  }
+                } catch (offerErr) {
+                  strapi.log.warn('Could not mark offer seen during conversation load:', offerErr);
+                }
+              }
+            }
+          })
         );
 
-        const io = (strapi as any).io as import('socket.io').Server | undefined;
         if (io) {
           io.to(`conversation:${canonicalId}`).emit('messages:read', {
             conversationId: canonicalId,

@@ -32,7 +32,8 @@
         "ITEM_NOT_RECEIVED",
         "DAMAGED_PRODUCT",
         "WRONG_ITEM",
-        "PAYMENT_ISSUE"
+        "PAYMENT_ISSUE",
+        "OTHER"
       ]
     },
     "description": {
@@ -44,6 +45,8 @@
         "OPEN",
         "UNDER_REVIEW",
         "RESOLVED",
+        "RESOLVED_REFUND",
+        "RESOLVED_RELEASE",
         "REJECTED",
         "CLOSED"
       ],
