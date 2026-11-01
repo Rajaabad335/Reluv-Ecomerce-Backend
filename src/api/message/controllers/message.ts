@@ -41,6 +41,7 @@ const sanitizeMessage = (message: any) => ({
     offerPrice: message.offer.offerPrice,
     originalPrice: message.offer.originalPrice,
     status: message.offer.status,
+    message: message.offer.message ?? message.metadata?.message ?? null,
     editedAt: message.offer.editedAt ?? null,
     editCount: message.offer.editCount ?? 0,
     seenAt: message.offer.seenAt ?? message?.readAt ?? null,

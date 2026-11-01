@@ -654,8 +654,13 @@ export default {
 
           if (conversationId && offer?.id) {
             try {
-              const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
-              if (conversation) {
+              const canonical = await resolveCanonicalConversation(strapi, Number(conversationId));
+              const canonicalId = canonical?.id ? Number(canonical.id) : Number(conversationId);
+              io.to(`conversation:${canonicalId}`).emit('offer:created', {
+                offer,
+                conversationId: canonicalId,
+              });
+              if (canonicalId !== Number(conversationId)) {
                 io.to(`conversation:${conversationId}`).emit('offer:created', {
                   offer,
                   conversationId,

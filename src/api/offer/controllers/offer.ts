@@ -3,6 +3,7 @@ import {
   fetchStatusGroupPage,
   parseListPagination,
 } from "../../../lib/paginatedStatusGroups";
+import { resolveCanonicalConversation } from "../../../lib/unified-conversations";
 
 const MIN_RATIO = 0.5; // offer must be >= 50% of original price
 const MAX_RATIO = 1.5; // offer must be <= 150% of original price
@@ -55,15 +56,22 @@ async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | n
 }
 
 async function createOfferChatMessage(strapi: any, conversationId: number, data: any) {
-  const message = await strapi.entityService.create("api::message.message" as any, {
-    data: { ...data, conversation: conversationId },
+  const canonical = await resolveCanonicalConversation(strapi, conversationId);
+  const canonicalId = canonical?.id ? Number(canonical.id) : conversationId;
+
+  const created = await strapi.entityService.create("api::message.message" as any, {
+    data: { ...data, conversation: canonicalId },
+  }) as any;
+
+  let message = (await strapi.entityService.findOne("api::message.message" as any, created.id, {
     populate: {
       sender: { fields: ["id", "username"], populate: { avatar: { fields: ["url"] } } },
+      attachments: true,
       offer: {
         populate: {
           buyer: { fields: ["id", "username"] },
           seller: { fields: ["id", "username"] },
-  sender: { fields: ["id", "username"] },
+          sender: { fields: ["id", "username"] },
           product: {
             fields: ["id", "documentId", "title", "price", "productStatus"],
             populate: { users_permissions_user: { fields: ["id"] } },
@@ -71,28 +79,38 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
         },
       },
     },
-  }) as any;
+  })) as any;
 
-  const offer = message.offer;
+  let offer = message?.offer;
+  if (!offer && data?.offer) {
+    try {
+      offer = await strapi.entityService.findOne("api::offer.offer" as any, Number(data.offer), {
+        populate: OFFER_POPULATE,
+      });
+    } catch {}
+  }
+
   const event = {
     id: message.id,
-    conversationId,
+    conversationId: canonicalId,
     content: message.content ?? "",
     createdAt: message.createdAt ?? new Date().toISOString(),
+    readAt: message.readAt ?? null,
     sender: message.sender
       ? { id: message.sender.id, username: message.sender.username, avatar: message.sender.avatar ?? null }
       : null,
-    attachments: [],
+    attachments: message.attachments ?? [],
     metadata: message.metadata ?? undefined,
     offer: offer
       ? {
           id: offer.id,
           offerPrice: offer.offerPrice,
+          originalPrice: offer.originalPrice,
+          status: offer.status,
+          message: offer.message ?? data?.metadata?.message ?? null,
           editedAt: offer.editedAt ?? null,
           editCount: offer.editCount ?? 0,
           seenAt: offer.seenAt ?? null,
-          originalPrice: offer.originalPrice,
-          status: offer.status,
           productTitle: offer.productTitle ?? offer.product?.title ?? null,
           productImage: offer.productImage ?? null,
           product: offer.product
@@ -116,10 +134,28 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
   if (io) {
     const buyerId = Number(offer?.buyer?.id);
     const sellerId = Number(offer?.seller?.id);
-    let target = io.to(`conversation:${conversationId}`);
+    let target = io.to(`conversation:${canonicalId}`);
+    if (canonicalId !== conversationId) {
+      target = target.to(`conversation:${conversationId}`);
+    }
     if (buyerId) target = target.to(`user:${buyerId}`);
     if (sellerId) target = target.to(`user:${sellerId}`);
     target.emit("message:new", event);
+
+    // Also notify user rooms with conversation:upsert for seamless sidebar updates
+    try {
+      const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
+        populate: {
+          product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
+          buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+          seller: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+        },
+      });
+      if (updatedConv) {
+        if (buyerId) io.to(`user:${buyerId}`).emit('conversation:upsert', { conversation: updatedConv });
+        if (sellerId && sellerId !== buyerId) io.to(`user:${sellerId}`).emit('conversation:upsert', { conversation: updatedConv });
+      }
+    } catch {}
   }
 
   return message;
@@ -260,9 +296,54 @@ export default factories.createCoreController(
         );
       }
 
-      // A counter is a new offer. Updating the pending parent would make the
-      // follow-up decline target the counter itself instead of the old offer.
-      if (!parentOffer) {
+      // A counter is a new offer. Atomically decline the parent offer so it cannot be
+      // countered or accepted again, and prevent rapid duplicate counter creation.
+      if (parentOffer) {
+        // Idempotency: if a pending counter offer by this user with this exact price was created in the last 10s, reuse it
+        const recentOffers = await strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: {
+              product: { id: productId },
+              sender: { id: authenticatedUserId },
+              offerPrice: offerPrice,
+              status: "pending",
+              createdAt: { $gte: new Date(Date.now() - 10000).toISOString() },
+            },
+            populate: OFFER_POPULATE,
+            sort: { createdAt: "desc" },
+            limit: 1,
+          }
+        );
+
+        if ((recentOffers as any[]).length > 0) {
+          return ctx.send({ data: (recentOffers as any[])[0] });
+        }
+
+        // Atomically decline the parent offer in the backend
+        try {
+          await strapi.entityService.update("api::offer.offer" as any, parentOffer.id, {
+            data: { status: "declined" },
+          });
+
+          const io = (strapi as any).io;
+          if (io && conversationId) {
+            const canonical = await resolveCanonicalConversation(strapi, Number(conversationId));
+            const canonicalId = canonical?.id ? Number(canonical.id) : Number(conversationId);
+            const declinePayload = {
+              offerId: parentOffer.id,
+              conversationId: canonicalId,
+              offer: { id: parentOffer.id, status: "declined" },
+            };
+            io.to(`conversation:${canonicalId}`).emit("offer:responded", declinePayload);
+            if (canonicalId !== Number(conversationId)) {
+              io.to(`conversation:${conversationId}`).emit("offer:responded", declinePayload);
+            }
+          }
+        } catch (parentErr) {
+          strapi.log.warn("Failed to decline parent offer during counter-offer:", parentErr);
+        }
+      } else {
         const existing = await strapi.entityService.findMany(
           "api::offer.offer" as any,
           {
@@ -288,6 +369,74 @@ export default factories.createCoreController(
             existingOffer.id,
             { populate: OFFER_POPULATE }
           );
+
+          // Update linked chat message and broadcast via socket
+          try {
+            const targetConvId = conversationId ?? existingOffer.conversation?.id;
+            const newContent = `Made an offer: THB${offerPrice}${message ? ` - "${message}"` : ''}`;
+            const linkedMessages = await strapi.db.query("api::message.message").findMany({
+              where: { offer: { id: existingOffer.id } },
+              limit: 1,
+            });
+            const linkedMsg = linkedMessages?.[0];
+            if (linkedMsg) {
+              await strapi.db.query("api::message.message").update({
+                where: { id: linkedMsg.id },
+                data: {
+                  content: newContent,
+                  metadata: {
+                    ...(linkedMsg.metadata || {}),
+                    amount: offerPrice,
+                    offerPrice: offerPrice,
+                  },
+                },
+              });
+            }
+
+            if (targetConvId) {
+              await strapi.entityService.update('api::conversation.conversation' as any, Number(targetConvId), {
+                data: {
+                  lastMessageAt: new Date().toISOString(),
+                  lastMessagePreview: newContent.slice(0, 120),
+                },
+              });
+
+              const io = (strapi as any).io;
+              if (io) {
+                const canonical = await resolveCanonicalConversation(strapi, Number(targetConvId));
+                const canonicalId = canonical?.id ? Number(canonical.id) : Number(targetConvId);
+                const updatePayload = {
+                  offerId: existingOffer.id,
+                  conversationId: canonicalId,
+                  price: offerPrice,
+                  offerPrice,
+                  status: "pending",
+                  offer: populatedUpdated ?? updatedOffer,
+                };
+                io.to(`conversation:${canonicalId}`).emit("offer:updated", updatePayload);
+                if (canonicalId !== Number(targetConvId)) {
+                  io.to(`conversation:${targetConvId}`).emit("offer:updated", updatePayload);
+                }
+                if (actualBuyerId) io.to(`user:${actualBuyerId}`).emit("offer:updated", updatePayload);
+                if (actualSellerId) io.to(`user:${actualSellerId}`).emit("offer:updated", updatePayload);
+
+                const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
+                  populate: {
+                    product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
+                    buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+                    seller: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+                  },
+                });
+                if (updatedConv) {
+                  if (actualBuyerId) io.to(`user:${actualBuyerId}`).emit('conversation:upsert', { conversation: updatedConv });
+                  if (actualSellerId) io.to(`user:${actualSellerId}`).emit('conversation:upsert', { conversation: updatedConv });
+                }
+              }
+            }
+          } catch (syncErr) {
+            strapi.log.warn('Failed to sync updated existing offer over sockets:', syncErr);
+          }
+
           return ctx.send({ data: populatedUpdated ?? updatedOffer });
         }
       }
@@ -325,6 +474,7 @@ export default factories.createCoreController(
               offerId: offer.id,
               amount: offerPrice,
               status: 'pending',
+              message: message ?? null,
               // Product identity travels with the offer, not the conversation:
               // one conversation can hold offers for several products.
               productId: (offer as any).product?.id ?? productId,
