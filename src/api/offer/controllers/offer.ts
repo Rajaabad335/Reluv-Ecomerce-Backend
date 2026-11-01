@@ -64,7 +64,10 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
           buyer: { fields: ["id", "username"] },
           seller: { fields: ["id", "username"] },
   sender: { fields: ["id", "username"] },
-          product: { fields: ["id", "documentId", "title", "price", "productStatus"] },
+          product: {
+            fields: ["id", "documentId", "title", "price", "productStatus"],
+            populate: { users_permissions_user: { fields: ["id"] } },
+          },
         },
       },
     },
@@ -99,6 +102,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
                 title: offer.product.title ?? null,
                 price: offer.product.price ?? null,
                 productStatus: offer.product.productStatus ?? null,
+                sellerId: offer.product.users_permissions_user?.id ?? null,
               }
             : null,
           buyer: offer.buyer ? { id: offer.buyer.id, username: offer.buyer.username } : null,
@@ -135,6 +139,11 @@ export default factories.createCoreController(
 
       const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
       if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
+
+      const counterParentId = parentOfferId == null ? null : Number(parentOfferId);
+      if (parentOfferId != null && (!Number.isInteger(counterParentId) || counterParentId! <= 0)) {
+        return ctx.badRequest("parentOfferId must be a valid offer id.");
+      }
 
       const product = await strapi.entityService.findOne(
         "api::product.product",
@@ -200,6 +209,39 @@ export default factories.createCoreController(
         return ctx.forbidden("You must be a participant in this offer.");
       }
 
+      let parentOffer: any = null;
+      if (parentOfferId != null) {
+        parentOffer = await strapi.entityService.findOne("api::offer.offer" as any, counterParentId!, {
+          populate: {
+            product: { fields: ["id"] },
+            buyer: { fields: ["id"] },
+            seller: { fields: ["id"] },
+            sender: { fields: ["id"] },
+            conversation: { fields: ["id"] },
+          },
+        }) as any;
+        if (!parentOffer) return ctx.notFound("Offer being countered not found.");
+        if (parentOffer.status !== "pending") {
+          return ctx.badRequest("Only pending offers can be countered.");
+        }
+        if (
+          Number(parentOffer.product?.id) !== Number(productId) ||
+          Number(parentOffer.buyer?.id) !== actualBuyerId ||
+          Number(parentOffer.seller?.id) !== actualSellerId
+        ) {
+          return ctx.forbidden("Counter offer must match the original offer participants and product.");
+        }
+        if (Number(parentOffer.sender?.id) === authenticatedUserId) {
+          return ctx.forbidden("You cannot counter your own offer.");
+        }
+        if (
+          conversationId && parentOffer.conversation?.id &&
+          Number(parentOffer.conversation.id) !== Number(conversationId)
+        ) {
+          return ctx.badRequest("Counter offer must use the original conversation.");
+        }
+      }
+
       const productStatus = (product as any).productStatus;
       if (productStatus === 'sold' || productStatus === 'reserved') {
         return ctx.badRequest('This item is no longer available for offers.');
@@ -218,33 +260,36 @@ export default factories.createCoreController(
         );
       }
 
-      // Decline any existing pending offer from same buyer on same product
-      const existing = await strapi.entityService.findMany(
-        "api::offer.offer" as any,
-        {
-          filters: {
-            product: { id: productId },
-            buyer: { id: buyerId },
-            status: "pending",
-          },
-          limit: 1,
-        }
-      );
+      // A counter is a new offer. Updating the pending parent would make the
+      // follow-up decline target the counter itself instead of the old offer.
+      if (!parentOffer) {
+        const existing = await strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: {
+              product: { id: productId },
+              buyer: { id: actualBuyerId },
+              status: "pending",
+            },
+            limit: 1,
+          }
+        );
 
-      if ((existing as any[]).length > 0) {
-        // Update the existing pending offer price instead of creating a new one
-        const existingOffer = (existing as any[])[0];
-        const updatedOffer = await strapi.entityService.update(
-          "api::offer.offer" as any,
-          existingOffer.id,
-          { data: { offerPrice, message: message ?? null, conversation: conversationId ?? existingOffer.conversation ?? null } }
-        );
-        const populatedUpdated = await strapi.entityService.findOne(
-          "api::offer.offer" as any,
-          existingOffer.id,
-          { populate: OFFER_POPULATE }
-        );
-        return ctx.send({ data: populatedUpdated ?? updatedOffer });
+        if ((existing as any[]).length > 0) {
+          // Update the existing pending offer price instead of creating a new one
+          const existingOffer = (existing as any[])[0];
+          const updatedOffer = await strapi.entityService.update(
+            "api::offer.offer" as any,
+            existingOffer.id,
+            { data: { offerPrice, message: message ?? null, conversation: conversationId ?? existingOffer.conversation ?? null } }
+          );
+          const populatedUpdated = await strapi.entityService.findOne(
+            "api::offer.offer" as any,
+            existingOffer.id,
+            { populate: OFFER_POPULATE }
+          );
+          return ctx.send({ data: populatedUpdated ?? updatedOffer });
+        }
       }
 
       const images = (product as any).images ?? [];
@@ -261,39 +306,46 @@ export default factories.createCoreController(
           buyer: actualBuyerId,
           seller: actualSellerId,
           sender: authenticatedUserId,
-          productTitle: (product as any).title,
+                    productTitle: (product as any).title,
           productImage: firstImage,
           conversation: conversationId ?? null,
         },
       });
 
-      // Fire-and-forget: chat message + notification (don't block the response)
+      // Persist the chat message before returning so the client can refresh and
+      // see the new offer before it closes the parent counter offer.
+      if (conversationId) {
+        try {
+          await createOfferChatMessage(strapi, Number(conversationId), {
+            sender: authenticatedUserId,
+            content: `Made an offer: THB${offerPrice}${message ? ` - "${message}"` : ''}`,
+            offer: offer.id,
+            metadata: {
+              type: 'offer',
+              offerId: offer.id,
+              amount: offerPrice,
+              status: 'pending',
+              // Product identity travels with the offer, not the conversation:
+              // one conversation can hold offers for several products.
+              productId: (offer as any).product?.id ?? productId,
+              productTitle: (offer as any).productTitle ?? (product as any).title,
+              productImage: (offer as any).productImage ?? firstImage,
+            },
+          });
+          await strapi.entityService.update('api::conversation.conversation' as any, Number(conversationId), {
+            data: {
+              lastMessageAt: new Date().toISOString(),
+              lastMessagePreview: 'Offer sent',
+            },
+          });
+        } catch (e) {
+          strapi.log.error('makeOffer chat message failed:', e);
+        }
+      }
+
+      // Notifications can finish asynchronously after the offer is returned.
       setImmediate(async () => {
         try {
-          if (conversationId) {
-            await createOfferChatMessage(strapi, Number(conversationId), {
-                sender: authenticatedUserId || buyerId,
-                content: `Made an offer: THB${offerPrice}${message ? ` - "${message}"` : ''}`,
-                offer: offer.id,
-                metadata: {
-                  type: 'offer',
-                  offerId: offer.id,
-                  amount: offerPrice,
-                  status: 'pending',
-                  // Product identity travels with the offer, not the conversation:
-                  // one conversation can hold offers for several products.
-                  productId: (offer as any).product?.id ?? productId,
-                  productTitle: (offer as any).productTitle ?? (product as any).title,
-                  productImage: (offer as any).productImage ?? firstImage,
-                },
-            });
-            await strapi.entityService.update('api::conversation.conversation' as any, Number(conversationId), {
-              data: {
-                lastMessageAt: new Date().toISOString(),
-                lastMessagePreview: 'Offer sent',
-              },
-            });
-          }
           await strapi.entityService.create('api::notification.notification' as any, {
             data: {
               type: 'offer_received',
@@ -421,10 +473,10 @@ export default factories.createCoreController(
     // PATCH /api/offers/:id/respond
     async respondToOffer(ctx: any) {
       const offerId = Number(ctx.params.id);
-      const { action, sellerId, conversationId } = ctx.request.body; // action: "accepted" | "declined"
+      const { action, conversationId } = ctx.request.body; // action: "accepted" | "declined"
 
-      if (!offerId || !action || !sellerId) {
-        return ctx.badRequest("offerId, action, and sellerId are required.");
+      if (!offerId || !action) {
+        return ctx.badRequest("offerId and action are required.");
       }
       if (!["accepted", "declined"].includes(action)) {
         return ctx.badRequest('action must be "accepted" or "declined".');
@@ -439,10 +491,15 @@ export default factories.createCoreController(
       if (!offer) return ctx.notFound("Offer not found.");
       const authenticatedUserId = await getAuthenticatedUserId(strapi, ctx);
       if (!authenticatedUserId) return ctx.unauthorized("Authentication required.");
-      if (authenticatedUserId !== Number((offer as any).seller?.id))
-        return ctx.forbidden("Only the offer seller can respond.");
-      if (Number((offer as any).seller?.id) !== Number(sellerId))
-        return ctx.forbidden("Not your offer.");
+      const offerBuyerId = Number((offer as any).buyer?.id);
+      const offerSellerId = Number((offer as any).seller?.id);
+      const offerSenderId = Number((offer as any).sender?.id);
+      if (authenticatedUserId !== offerBuyerId && authenticatedUserId !== offerSellerId) {
+        return ctx.forbidden("You must be a participant in this offer.");
+      }
+      if (offerSenderId ? authenticatedUserId === offerSenderId : authenticatedUserId !== offerSellerId) {
+        return ctx.forbidden("Only the recipient can respond to this offer.");
+      }
       if ((offer as any).status !== "pending")
         return ctx.send({ data: offer, alreadyResponded: true }); // already responded — return current state
 
@@ -508,7 +565,7 @@ export default factories.createCoreController(
           const offerConversationId = (offer as any).conversation?.id;
           if (offerConversationId) {
             await createOfferChatMessage(strapi, Number(offerConversationId), {
-                sender: sellerId,
+                sender: authenticatedUserId,
                 content: action === 'accepted' ? 'Offer Accepted' : 'Offer Declined',
                 offer: offerId,
                 metadata: {
@@ -533,12 +590,12 @@ export default factories.createCoreController(
               title: action === 'accepted' ? 'Offer Accepted! 🎉' : 'Offer Declined',
               body: action === 'accepted'
                 ? `Your offer of THB ${offerPrice} on "${productTitle}" was accepted! You have 48 hours to complete the purchase.`
-                : `Your offer on "${productTitle}" was declined by the seller.`,
+                : `Your offer on "${productTitle}" was declined.`,
               read: false,
               link: action === 'accepted'
                 ? `/Orders?tab=offers&highlight=${offerId}`
                 : `/products/${productId}`,
-              recipient: buyerId,
+              recipient: Number((offer as any).sender?.id) || buyerId,
             },
           });
         } catch (e) {

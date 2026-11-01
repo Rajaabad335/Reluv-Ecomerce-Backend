@@ -52,6 +52,7 @@ const sanitizeMessage = (message: any) => ({
       title: message.offer.product.title ?? null,
       price: message.offer.product.price ?? null,
       productStatus: message.offer.product.productStatus ?? null,
+      sellerId: message.offer.product.users_permissions_user?.id ?? null,
     } : null,
     buyer: message.offer.buyer ? {
       id: message.offer.buyer.id,
@@ -130,7 +131,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller', 'product', 'sender']
+            populate: {
+              buyer: { fields: ['id', 'username'] },
+              seller: { fields: ['id', 'username'] },
+              sender: { fields: ['id', 'username'] },
+              product: {
+                populate: { users_permissions_user: { fields: ['id'] } },
+              },
+            },
           }
         },
         sort: { createdAt: 'asc' },
@@ -265,7 +273,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller', 'product']
+            populate: {
+              buyer: { fields: ['id', 'username'] },
+              seller: { fields: ['id', 'username'] },
+              sender: { fields: ['id', 'username'] },
+              product: {
+                populate: { users_permissions_user: { fields: ['id'] } },
+              },
+            },
           }
         },
       });
@@ -295,7 +310,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
             sender: true,
             attachments: true,
             offer: {
-              populate: ['buyer', 'seller', 'product']
+              populate: {
+                buyer: { fields: ['id', 'username'] },
+                seller: { fields: ['id', 'username'] },
+                sender: { fields: ['id', 'username'] },
+                product: {
+                  populate: { users_permissions_user: { fields: ['id'] } },
+                },
+              },
             }
           },
         }) as any;

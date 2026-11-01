@@ -620,7 +620,7 @@ export default {
         }
       });
 
-        socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId, clientOfferId }: any) => {
+        socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId }: any) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -629,15 +629,15 @@ export default {
             },
             state: { user: { id: userId } },
             badRequest: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
               throw new Error(msg);
             },
             unauthorized: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
               throw new Error(msg);
             },
             notFound: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
               throw new Error(msg);
             },
             created: (data: any) => data,
@@ -650,14 +650,13 @@ export default {
           // Acknowledge the sender as soon as the offer is persisted. The
           // conversation lookup/broadcast is secondary and must not hold up
           // the create request long enough for clients to report a timeout.
-          socket.emit('offer:created', { clientOfferId, offer });
+          socket.emit('offer:created', { offer, conversationId });
 
           if (conversationId && offer?.id) {
             try {
               const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
               if (conversation) {
                 io.to(`conversation:${conversationId}`).emit('offer:created', {
-                  clientOfferId,
                   offer,
                   conversationId,
                 });
@@ -668,7 +667,7 @@ export default {
           }
         } catch (error: any) {
           socket.emit('offer:error', {
-            clientOfferId,
+            conversationId,
             message: error.message || 'Failed to create offer',
           });
         }
@@ -726,7 +725,7 @@ export default {
       });
 
       
-      socket.on('offer:edit', async ({ offerId, offerPrice, price, conversationId, clientOfferId }: any) => {
+      socket.on('offer:edit', async ({ offerId, offerPrice, price, conversationId }: any) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -736,19 +735,19 @@ export default {
             },
             state: { user: { id: userId } },
             badRequest: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              socket.emit('offer:error', { offerId, message: msg });
               throw new Error(msg);
             },
             notFound: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              socket.emit('offer:error', { offerId, message: msg });
               throw new Error(msg);
             },
             forbidden: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              socket.emit('offer:error', { offerId, message: msg });
               throw new Error(msg);
             },
             internalServerError: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, offerId, message: msg });
+              socket.emit('offer:error', { offerId, message: msg });
               throw new Error(msg);
             },
             send: (data: any) => data,
@@ -756,10 +755,9 @@ export default {
 
           const result = await offerController.editOfferPrice(mockCtx);
           const offer = result?.data;
-          socket.emit('offer:edited', { clientOfferId, offerId, offer });
+          socket.emit('offer:edited', { offerId, offer, conversationId });
         } catch (error: any) {
           socket.emit('offer:error', {
-            clientOfferId,
             offerId,
             message: error.message || 'Failed to edit offer',
           });
