@@ -245,6 +245,24 @@ export default factories.createCoreController(
         return ctx.forbidden("You must be a participant in this offer.");
       }
 
+      // Global Idempotency Guard: prevent duplicate offers created within 15 seconds
+      const recentDuplicates = await strapi.entityService.findMany(
+        "api::offer.offer" as any,
+        {
+          filters: {
+            product: { id: Number(productId) },
+            sender: { id: authenticatedUserId },
+            createdAt: { $gte: new Date(Date.now() - 15000).toISOString() },
+          },
+          populate: OFFER_POPULATE,
+          sort: { createdAt: "desc" },
+          limit: 1,
+        }
+      );
+      if ((recentDuplicates as any[]).length > 0) {
+        return ctx.send({ data: (recentDuplicates as any[])[0] });
+      }
+
       let parentOffer: any = null;
       if (parentOfferId != null) {
         parentOffer = await strapi.entityService.findOne("api::offer.offer" as any, counterParentId!, {
@@ -257,6 +275,25 @@ export default factories.createCoreController(
           },
         }) as any;
         if (!parentOffer) return ctx.notFound("Offer being countered not found.");
+
+        // Idempotency: If this user already created a counter offer for this product recently, reuse it
+        const existingCounter = await strapi.entityService.findMany(
+          "api::offer.offer" as any,
+          {
+            filters: {
+              product: { id: Number(productId) },
+              sender: { id: authenticatedUserId },
+              createdAt: { $gte: new Date(Date.now() - 30000).toISOString() },
+            },
+            populate: OFFER_POPULATE,
+            sort: { createdAt: "desc" },
+            limit: 1,
+          }
+        );
+        if ((existingCounter as any[]).length > 0) {
+          return ctx.send({ data: (existingCounter as any[])[0] });
+        }
+
         if (parentOffer.status !== "pending") {
           return ctx.badRequest("Only pending offers can be countered.");
         }
@@ -299,27 +336,6 @@ export default factories.createCoreController(
       // A counter is a new offer. Atomically decline the parent offer so it cannot be
       // countered or accepted again, and prevent rapid duplicate counter creation.
       if (parentOffer) {
-        // Idempotency: if a pending counter offer by this user with this exact price was created in the last 10s, reuse it
-        const recentOffers = await strapi.entityService.findMany(
-          "api::offer.offer" as any,
-          {
-            filters: {
-              product: { id: productId },
-              sender: { id: authenticatedUserId },
-              offerPrice: offerPrice,
-              status: "pending",
-              createdAt: { $gte: new Date(Date.now() - 10000).toISOString() },
-            },
-            populate: OFFER_POPULATE,
-            sort: { createdAt: "desc" },
-            limit: 1,
-          }
-        );
-
-        if ((recentOffers as any[]).length > 0) {
-          return ctx.send({ data: (recentOffers as any[])[0] });
-        }
-
         // Atomically decline the parent offer in the backend
         try {
           await strapi.entityService.update("api::offer.offer" as any, parentOffer.id, {
@@ -647,11 +663,12 @@ export default factories.createCoreController(
       if (authenticatedUserId !== offerBuyerId && authenticatedUserId !== offerSellerId) {
         return ctx.forbidden("You must be a participant in this offer.");
       }
+      if ((offer as any).status !== "pending") {
+        return ctx.send({ data: offer, alreadyResponded: true }); // already responded — return current state
+      }
       if (offerSenderId ? authenticatedUserId === offerSenderId : authenticatedUserId !== offerSellerId) {
         return ctx.forbidden("Only the recipient can respond to this offer.");
       }
-      if ((offer as any).status !== "pending")
-        return ctx.send({ data: offer, alreadyResponded: true }); // already responded — return current state
 
       const productId = (offer as any).product?.id;
 

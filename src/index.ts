@@ -620,7 +620,7 @@ export default {
         }
       });
 
-        socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId }: any) => {
+      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId }: any, ack?: Function) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -630,14 +630,17 @@ export default {
             state: { user: { id: userId } },
             badRequest: (msg: string) => {
               socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             unauthorized: (msg: string) => {
               socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             notFound: (msg: string) => {
               socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             created: (data: any) => data,
@@ -647,30 +650,38 @@ export default {
           const result = await offerController.makeOffer(mockCtx);
           const offer = result?.data;
 
-          // Acknowledge the sender as soon as the offer is persisted. The
-          // conversation lookup/broadcast is secondary and must not hold up
-          // the create request long enough for clients to report a timeout.
-          socket.emit('offer:created', { offer, conversationId });
+          const broadcastPayload = {
+            offer,
+            conversationId,
+            productId,
+          };
+          ack?.({ ok: true, offer, conversationId, productId });
+          socket.emit('offer:created', broadcastPayload);
 
           if (conversationId && offer?.id) {
             try {
               const canonical = await resolveCanonicalConversation(strapi, Number(conversationId));
               const canonicalId = canonical?.id ? Number(canonical.id) : Number(conversationId);
-              io.to(`conversation:${canonicalId}`).emit('offer:created', {
+              const canonicalPayload = {
                 offer,
                 conversationId: canonicalId,
-              });
+                originalConversationId: Number(conversationId),
+                productId,
+              };
+              io.to(`conversation:${canonicalId}`).emit('offer:created', canonicalPayload);
               if (canonicalId !== Number(conversationId)) {
-                io.to(`conversation:${conversationId}`).emit('offer:created', {
-                  offer,
-                  conversationId,
-                });
+                io.to(`conversation:${conversationId}`).emit('offer:created', canonicalPayload);
               }
+              const buyerNum = Number(offer?.buyer?.id ?? buyerId);
+              const sellerNum = Number(offer?.seller?.id ?? sellerId);
+              if (buyerNum) io.to(`user:${buyerNum}`).emit('offer:created', canonicalPayload);
+              if (sellerNum) io.to(`user:${sellerNum}`).emit('offer:created', canonicalPayload);
             } catch (broadcastError: any) {
               strapi.log.warn('Offer was created, but conversation broadcast failed:', broadcastError);
             }
           }
         } catch (error: any) {
+          ack?.({ ok: false, message: error.message || 'Failed to create offer' });
           socket.emit('offer:error', {
             conversationId,
             message: error.message || 'Failed to create offer',
@@ -678,7 +689,7 @@ export default {
         }
       });
 
-      socket.on('offer:respond', async ({ offerId, action, sellerId, conversationId }: any) => {
+      socket.on('offer:respond', async ({ offerId, action, sellerId, conversationId }: any, ack?: Function) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -708,6 +719,7 @@ export default {
           // Conflict: product already taken by another buyer
           if (result?.conflict) {
             socket.emit('offer:responded', { offerId, offer, conflict: true, message: result.message });
+            ack?.({ ok: false, conflict: true, message: result.message, offer });
             return;
           }
 
@@ -720,12 +732,14 @@ export default {
           }
 
           socket.emit('offer:responded', { offerId, offer });
+          ack?.({ ok: true, offer, alreadyResponded: result?.alreadyResponded });
 
         } catch (error: any) {
           socket.emit('offer:error', {
             offerId,
             message: error.message || 'Failed to respond to offer',
           });
+          ack?.({ ok: false, message: error.message || 'Failed to respond to offer' });
         }
       });
 
