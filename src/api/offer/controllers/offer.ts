@@ -142,20 +142,22 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
     if (sellerId) target = target.to(`user:${sellerId}`);
     target.emit("message:new", event);
 
-    // Also notify user rooms with conversation:upsert for seamless sidebar updates
-    try {
-      const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
-        populate: {
-          product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
-          buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
-          seller: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
-        },
-      });
-      if (updatedConv) {
-        if (buyerId) io.to(`user:${buyerId}`).emit('conversation:upsert', { conversation: updatedConv });
-        if (sellerId && sellerId !== buyerId) io.to(`user:${sellerId}`).emit('conversation:upsert', { conversation: updatedConv });
-      }
-    } catch {}
+    // Also notify user rooms with conversation:upsert for seamless sidebar updates (non-blocking)
+    setImmediate(async () => {
+      try {
+        const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
+          populate: {
+            product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
+            buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+            seller: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
+          },
+        });
+        if (updatedConv) {
+          if (buyerId) io.to(`user:${buyerId}`).emit('conversation:upsert', { conversation: updatedConv });
+          if (sellerId && sellerId !== buyerId) io.to(`user:${sellerId}`).emit('conversation:upsert', { conversation: updatedConv });
+        }
+      } catch {}
+    });
   }
 
   return message;
@@ -498,12 +500,12 @@ export default factories.createCoreController(
               productImage: (offer as any).productImage ?? firstImage,
             },
           });
-          await strapi.entityService.update('api::conversation.conversation' as any, Number(conversationId), {
+          strapi.entityService.update('api::conversation.conversation' as any, Number(conversationId), {
             data: {
               lastMessageAt: new Date().toISOString(),
               lastMessagePreview: 'Offer sent',
             },
-          });
+          }).catch((err: any) => strapi.log.warn('Failed to update conversation preview:', err));
         } catch (e) {
           strapi.log.error('makeOffer chat message failed:', e);
         }
