@@ -4,7 +4,6 @@
 
 import { factories } from '@strapi/strapi';
 import { createNotification } from '../../../lib/createNotification';
-import { resolveCanonicalConversation } from '../../../lib/unified-conversations';
 
 const conversationUid = 'api::conversation.conversation' as any;
 const messageUid = 'api::message.message' as any;
@@ -109,23 +108,21 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const canAccess = await assertParticipant(strapi, conversationId, userId);
       if (!canAccess) return ctx.unauthorized('Not allowed.');
 
-      const canonical = await resolveCanonicalConversation(strapi, conversationId);
-      if (!canonical) return ctx.notFound('Conversation not found.');
-      const canonicalId = Number(canonical.id);
-
-      const conversation = await strapi.entityService.findOne(conversationUid, canonicalId, {
+      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
         populate: {
           buyer: { fields: ['id'] },
           seller: { fields: ['id'] },
         },
       }) as any;
+      if (!conversation) return ctx.notFound('Conversation not found.');
+
       const deletedAt = conversation?.buyer?.id === userId
         ? conversation?.buyerDeletedAt
         : conversation?.sellerDeletedAt;
 
       const messages = await strapi.entityService.findMany(messageUid, {
         filters: {
-          conversation: { id: { $eq: canonicalId } },
+          conversation: { id: { $eq: conversationId } },
           ...(deletedAt ? { createdAt: { $gt: deletedAt } } : {}),
         },
         populate: {
@@ -177,11 +174,11 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
                   if (io) {
                     const seenPayload = {
-                      conversationId: canonicalId,
+                      conversationId,
                       offerId: msg.offer.id,
                       seenAt: now,
                     };
-                    io.to(`conversation:${canonicalId}`).emit('offer:seen', seenPayload);
+                    io.to(`conversation:${conversationId}`).emit('offer:seen', seenPayload);
                     io.to(`user:${offerSenderId}`).emit('offer:seen', seenPayload);
                   }
                 } catch (offerErr) {
@@ -193,8 +190,8 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
         );
 
         if (io) {
-          io.to(`conversation:${canonicalId}`).emit('messages:read', {
-            conversationId: canonicalId,
+          io.to(`conversation:${conversationId}`).emit('messages:read', {
+            conversationId,
             readBy: userId,
           });
         }
@@ -202,7 +199,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       ctx.body = {
         ok: true,
-        conversationId: canonicalId,
+        conversationId,
         messages: messages.map(sanitizeMessage),
       };
     } catch (error) {
@@ -234,14 +231,11 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const canAccess = await assertParticipant(strapi, conversationId, userId);
       if (!canAccess) return ctx.unauthorized('Not allowed.');
 
-      const canonical = await resolveCanonicalConversation(strapi, conversationId);
-      if (!canonical) return ctx.notFound('Conversation not found.');
-      const canonicalId = Number(canonical.id);
-
       // Get conversation to find the receiver
-      const conversation = await strapi.entityService.findOne(conversationUid, canonicalId, {
+      const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
         populate: { buyer: { fields: ['id'] }, seller: { fields: ['id'] } },
       }) as any;
+      if (!conversation) return ctx.notFound('Conversation not found.');
 
       const receiverId = conversation?.buyer?.id === userId
         ? conversation?.seller?.id
@@ -256,7 +250,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       }
 
       const messageData: any = {
-        conversation: canonicalId,
+        conversation: conversationId,
         sender: userId,
         content: content || '',
       };
@@ -332,7 +326,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       });
 
       const preview = content || (attachmentIds.length > 0 ? `📎 ${attachmentIds.length} file(s)` : 'Message');
-      await strapi.entityService.update(conversationUid, canonicalId, {
+      await strapi.entityService.update(conversationUid, conversationId, {
         data: {
           lastMessageAt: new Date().toISOString(),
           lastMessagePreview: preview.slice(0, 120),
@@ -342,15 +336,15 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const io = (strapi as any).io as import('socket.io').Server | undefined;
       if (io) {
         const sanitized = sanitizeMessage(created);
-        let messageTarget = io.to(`conversation:${canonicalId}`).to(`user:${userId}`);
+        let messageTarget = io.to(`conversation:${conversationId}`).to(`user:${userId}`);
         if (receiverId) {
           messageTarget = messageTarget.to(`user:${receiverId}`);
         }
-        messageTarget.emit('message:new', { conversationId: canonicalId, ...sanitized });
+        messageTarget.emit('message:new', { conversationId, ...sanitized });
 
         if (receiverId) {
           // Update the receiver's conversation list and unread count
-          const updatedConversation = await strapi.entityService.findOne(conversationUid, canonicalId, {
+          const updatedConversation = await strapi.entityService.findOne(conversationUid, conversationId, {
             populate: {
               product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
               buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
@@ -383,7 +377,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           type: 'new_message',
           title: 'New message',
           body: preview.slice(0, 80),
-          link: `/Messages?conversationId=${canonicalId}`,
+          link: `/Messages?conversationId=${conversationId}`,
         });
       }
 

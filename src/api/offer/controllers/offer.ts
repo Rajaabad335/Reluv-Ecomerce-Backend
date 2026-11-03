@@ -3,7 +3,6 @@ import {
   fetchStatusGroupPage,
   parseListPagination,
 } from "../../../lib/paginatedStatusGroups";
-import { resolveCanonicalConversation } from "../../../lib/unified-conversations";
 
 const MIN_RATIO = 0.5; // offer must be >= 50% of original price
 const MAX_RATIO = 1.5; // offer must be <= 150% of original price
@@ -56,11 +55,8 @@ async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | n
 }
 
 async function createOfferChatMessage(strapi: any, conversationId: number, data: any) {
-  const canonical = await resolveCanonicalConversation(strapi, conversationId);
-  const canonicalId = canonical?.id ? Number(canonical.id) : conversationId;
-
   const created = await strapi.entityService.create("api::message.message" as any, {
-    data: { ...data, conversation: canonicalId },
+    data: { ...data, conversation: conversationId },
   }) as any;
 
   let message = (await strapi.entityService.findOne("api::message.message" as any, created.id, {
@@ -92,7 +88,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
 
   const event = {
     id: message.id,
-    conversationId: canonicalId,
+    conversationId,
     content: message.content ?? "",
     createdAt: message.createdAt ?? new Date().toISOString(),
     readAt: message.readAt ?? null,
@@ -134,10 +130,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
   if (io) {
     const buyerId = Number(offer?.buyer?.id);
     const sellerId = Number(offer?.seller?.id);
-    let target = io.to(`conversation:${canonicalId}`);
-    if (canonicalId !== conversationId) {
-      target = target.to(`conversation:${conversationId}`);
-    }
+    let target = io.to(`conversation:${conversationId}`);
     if (buyerId) target = target.to(`user:${buyerId}`);
     if (sellerId) target = target.to(`user:${sellerId}`);
     target.emit("message:new", event);
@@ -145,7 +138,7 @@ async function createOfferChatMessage(strapi: any, conversationId: number, data:
     // Also notify user rooms with conversation:upsert for seamless sidebar updates (non-blocking)
     setImmediate(async () => {
       try {
-        const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
+        const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, conversationId, {
           populate: {
             product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
             buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },
@@ -346,17 +339,13 @@ export default factories.createCoreController(
 
           const io = (strapi as any).io;
           if (io && conversationId) {
-            const canonical = await resolveCanonicalConversation(strapi, Number(conversationId));
-            const canonicalId = canonical?.id ? Number(canonical.id) : Number(conversationId);
+            const directConversationId = Number(conversationId);
             const declinePayload = {
               offerId: parentOffer.id,
-              conversationId: canonicalId,
+              conversationId: directConversationId,
               offer: { id: parentOffer.id, status: "declined" },
             };
-            io.to(`conversation:${canonicalId}`).emit("offer:responded", declinePayload);
-            if (canonicalId !== Number(conversationId)) {
-              io.to(`conversation:${conversationId}`).emit("offer:responded", declinePayload);
-            }
+            io.to(`conversation:${directConversationId}`).emit("offer:responded", declinePayload);
           }
         } catch (parentErr) {
           strapi.log.warn("Failed to decline parent offer during counter-offer:", parentErr);
@@ -421,24 +410,20 @@ export default factories.createCoreController(
 
               const io = (strapi as any).io;
               if (io) {
-                const canonical = await resolveCanonicalConversation(strapi, Number(targetConvId));
-                const canonicalId = canonical?.id ? Number(canonical.id) : Number(targetConvId);
+                const directConversationId = Number(targetConvId);
                 const updatePayload = {
                   offerId: existingOffer.id,
-                  conversationId: canonicalId,
+                  conversationId: directConversationId,
                   price: offerPrice,
                   offerPrice,
                   status: "pending",
                   offer: populatedUpdated ?? updatedOffer,
                 };
-                io.to(`conversation:${canonicalId}`).emit("offer:updated", updatePayload);
-                if (canonicalId !== Number(targetConvId)) {
-                  io.to(`conversation:${targetConvId}`).emit("offer:updated", updatePayload);
-                }
+                io.to(`conversation:${directConversationId}`).emit("offer:updated", updatePayload);
                 if (actualBuyerId) io.to(`user:${actualBuyerId}`).emit("offer:updated", updatePayload);
                 if (actualSellerId) io.to(`user:${actualSellerId}`).emit("offer:updated", updatePayload);
 
-                const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, canonicalId, {
+                const updatedConv = await strapi.entityService.findOne('api::conversation.conversation' as any, directConversationId, {
                   populate: {
                     product: { fields: ['id', 'title', 'price'], populate: { images: { fields: ['url'] } } },
                     buyer: { fields: ['id', 'username'], populate: { avatar: { fields: ['url'] } } },

@@ -792,10 +792,6 @@ export interface ApiConversationConversation
       'api::conversation.conversation'
     > &
       Schema.Attribute.Private;
-    mergedInto: Schema.Attribute.Relation<
-      'manyToOne',
-      'api::conversation.conversation'
-    >;
     messages: Schema.Attribute.Relation<'oneToMany', 'api::message.message'>;
     pairKey: Schema.Attribute.String & Schema.Attribute.Unique;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
