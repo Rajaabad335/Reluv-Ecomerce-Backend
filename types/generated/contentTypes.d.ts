@@ -2060,6 +2060,7 @@ export interface PluginUsersPermissionsUser
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    displayName: Schema.Attribute.String;
     districtCode: Schema.Attribute.String;
     email: Schema.Attribute.Email &
       Schema.Attribute.Required &
@@ -2091,6 +2092,8 @@ export interface PluginUsersPermissionsUser
     language: Schema.Attribute.Enumeration<['en', 'th']> &
       Schema.Attribute.DefaultTo<'en'>;
     lastName: Schema.Attribute.String;
+    linePicture: Schema.Attribute.String;
+    lineUserId: Schema.Attribute.String & Schema.Attribute.Unique;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
