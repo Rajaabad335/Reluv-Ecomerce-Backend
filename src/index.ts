@@ -1,6 +1,6 @@
 import { Server } from 'socket.io';
 import { repairCategoryAttributeLinks, resolveCategoryAttributeLinkSchema } from './lib/repairCategoryAttributeLinks';
-import { ensureLineAuthColumns } from "./database/migrations/ensure-line-auth-columns";
+import { runRequiredLineAuthMigration } from "./database/migrations/ensure-line-auth-columns";
 import { createNotification } from './lib/createNotification';
 import {
   findOrCreateConversationForPair,
@@ -48,11 +48,7 @@ export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   async bootstrap({ strapi }: { strapi: any }) {
-    try {
-      await ensureLineAuthColumns({ strapi });
-    } catch (err: any) {
-      strapi.log.error(`[LINE auth] Could not prepare user identity columns: ${err.message}`);
-    }
+    await runRequiredLineAuthMigration(strapi);
 
     try {
       const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);

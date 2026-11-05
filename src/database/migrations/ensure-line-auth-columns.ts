@@ -24,3 +24,13 @@ export async function ensureLineAuthColumns({ strapi }: { strapi: any }) {
 
   strapi.log.info("[LINE auth] User identity columns are ready.");
 }
+
+export async function runRequiredLineAuthMigration(strapi: any) {
+  try {
+    await ensureLineAuthColumns({ strapi });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    strapi.log.error(`[LINE auth] Migration failed: ${message}`);
+    throw error;
+  }
+}
