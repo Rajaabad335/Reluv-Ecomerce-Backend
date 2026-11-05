@@ -1,4 +1,5 @@
 import { filterToExistingColumns } from "../../../lib/authUserHelpers";
+import { buildLineTokenParams } from "../line-auth-helpers";
 
 const userUid = "plugin::users-permissions.user" as any;
 const roleUid = "plugin::users-permissions.role" as any;
@@ -41,14 +42,13 @@ const exchangeCodeForToken = async (
   redirectUri: string,
   codeVerifier?: string,
 ): Promise<string> => {
-  const params = new URLSearchParams({
-    grant_type: "authorization_code",
+  const params = buildLineTokenParams({
     code,
-    redirect_uri: redirectUri,
-    client_id: process.env.LINE_CHANNEL_ID!,
-    client_secret: process.env.LINE_CHANNEL_SECRET!,
+    redirectUri,
+    channelId: process.env.LINE_CHANNEL_ID!,
+    channelSecret: process.env.LINE_CHANNEL_SECRET!,
+    codeVerifier,
   });
-  if (codeVerifier) params.set("code_verifier", codeVerifier);
 
   const res = await fetch(LINE_TOKEN_URL, {
     method: "POST",
