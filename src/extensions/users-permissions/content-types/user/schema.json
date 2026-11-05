@@ -30,6 +30,17 @@
       "type": "string",
       "configurable": false
     },
+    "lineUserId": {
+      "type": "string",
+      "configurable": false,
+      "private": true
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "linePicture": {
+      "type": "string"
+    },
     "password": {
       "type": "password",
       "minLength": 6,

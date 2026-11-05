@@ -1,4 +1,5 @@
 import { filterToExistingColumns } from "../../../lib/authUserHelpers";
+import { buildLineTokenParams } from "../line-auth-helpers";
 
 const userUid = "plugin::users-permissions.user" as any;
 const roleUid = "plugin::users-permissions.role" as any;
@@ -36,13 +37,17 @@ const sanitizeUser = async (strapi: any, user: any, ctx: any) => {
 };
 
 // Exchange authorization code for access token (server-side PKCE flow)
-const exchangeCodeForToken = async (code: string, redirectUri: string): Promise<string> => {
-  const params = new URLSearchParams({
-    grant_type: "authorization_code",
+const exchangeCodeForToken = async (
+  code: string,
+  redirectUri: string,
+  codeVerifier?: string
+): Promise<string> => {
+  const params = buildLineTokenParams({
     code,
-    redirect_uri: redirectUri,
-    client_id: process.env.LINE_CHANNEL_ID!,
-    client_secret: process.env.LINE_CHANNEL_SECRET!,
+    redirectUri,
+    channelId: process.env.LINE_CHANNEL_ID!,
+    channelSecret: process.env.LINE_CHANNEL_SECRET!,
+    codeVerifier,
   });
 
   const res = await fetch(LINE_TOKEN_URL, {
@@ -94,6 +99,7 @@ export default {
       // Accept either a pre-obtained access_token (mobile SDK) or an auth code (web flow)
       let accessToken: string = String(body.access_token ?? "").trim();
       const code: string = String(body.code ?? "").trim();
+      const codeVerifier: string = String(body.code_verifier ?? "").trim();
 
       if (!accessToken && !code) {
         return ctx.badRequest("Either access_token or code is required.");
@@ -103,7 +109,7 @@ export default {
         // redirect_uri must exactly match what was sent in the authorization request
         const redirectUri: string =
           String(body.redirect_uri ?? "").trim() || process.env.LINE_CALLBACK_URL!;
-        accessToken = await exchangeCodeForToken(code, redirectUri);
+        accessToken = await exchangeCodeForToken(code, redirectUri, codeVerifier || undefined);
       }
 
       await verifyAccessToken(accessToken);
