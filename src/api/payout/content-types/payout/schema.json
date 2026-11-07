@@ -81,7 +81,7 @@
     },
     "isMock": {
       "type": "boolean",
-      "default": true
+      "default": false
     },
     "stripeAccountId": {
       "type": "string"

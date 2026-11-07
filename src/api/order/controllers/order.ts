@@ -522,7 +522,27 @@ export default factories.createCoreController(
           },
         );
 
-        // ✅ Transform data to match frontend UI
+        const getProgressStatus = (status: string | undefined) => {
+          switch ((status || "").trim().toLowerCase().replace(/_/g, " ")) {
+            case "placed":
+            case "pending":
+              return "Placed";
+            case "confirmed":
+            case "processing":
+            case "in progress":
+              return "In Progress";
+            case "shipped":
+              return "Shipped";
+            case "delivered":
+            case "completed":
+              return "Delivered";
+            case "cancelled":
+              return "Cancelled";
+            default:
+              return "N/A";
+          }
+        };
+
         const formattedOrders = allOrders.map((order: any) => ({
           id: order.id,
           documentId: order.documentId,
@@ -544,26 +564,11 @@ export default factories.createCoreController(
 
           role: "User",
 
-          roleColor:
-            order.status === "Delivered"
-              ? "bg-[#ffede0] text-[#f2994a]"
-              : "bg-[#56ab65]",
+          roleColor: "bg-[#56ab65]",
 
-          status: order.status || "Pending",
+          status: order.paymentStatus || "pending",
 
-          progressStatus:
-            order.status === "Delivered"
-              ? "Completed"
-              : order.status === "Cancelled"
-                ? "Cancelled"
-                : "In Progress",
-
-          dotColor:
-            order.status === "Delivered"
-              ? "bg-orange-500"
-              : order.status === "Cancelled"
-                ? "bg-red-500"
-                : "bg-green-600",
+          progressStatus: getProgressStatus(order.orderStatus),
 
           tracking: order.trackingNumber || "N/A",
           carrier: order.carrier || "N/A",

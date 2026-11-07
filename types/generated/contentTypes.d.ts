@@ -1404,7 +1404,7 @@ export interface ApiPayoutPayout extends Struct.CollectionTypeSchema {
         number
       > &
       Schema.Attribute.DefaultTo<0>;
-    isMock: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    isMock: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

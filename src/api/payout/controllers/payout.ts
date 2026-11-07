@@ -12,12 +12,9 @@ const processedWebhookEventIds = new Set<string>();
 
 /**
  * Stripe Connect Payout Provider Service
- * Prepares the platform for future Stripe Connect Separate Charges & Transfers.
- * Configurable mock payout mode for development and sandbox testing.
+ * Executes seller transfers through Stripe Connect.
  */
 export const stripeConnectPayoutService = {
-  isMockMode: true, // Configurable: true for development mock mode
-
   async executePayout({
     orderId,
     sellerId,
@@ -31,25 +28,14 @@ export const stripeConnectPayoutService = {
     currency?: string;
     destinationAccountId?: string;
   }) {
-    if (this.isMockMode || !destinationAccountId) {
-      // Development mock payout
-      const mockTransferId = `tr_mock_${Date.now()}_${Math.floor(
-        Math.random() * 1000
-      )}`;
-      const mockPayoutId = `po_mock_${Date.now()}_${Math.floor(
-        Math.random() * 1000
-      )}`;
+    if (!destinationAccountId) {
       return {
-        isMock: true,
-        status: "TRANSFERRED",
-        transferId: mockTransferId,
-        payoutId: mockPayoutId,
-        provider: "MOCK",
-        message: "Simulated transfer executed in MOCK mode for development.",
+        isMock: false,
+        status: "FAILED",
+        error: "Seller does not have a Stripe Connect account configured.",
       };
     }
 
-    // Real Stripe Connect Transfer (prepared for future activation)
     try {
       const transfer = await stripe.transfers.create({
         amount: amountMinor,
@@ -70,11 +56,12 @@ export const stripeConnectPayoutService = {
         message:
           "Real Stripe Connect transfer executed to seller connected account.",
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       return {
         isMock: false,
         status: "FAILED",
-        error: err.message || "Stripe Connect transfer failed",
+        error:
+          err instanceof Error ? err.message : "Stripe Connect transfer failed",
       };
     }
   },
@@ -149,7 +136,11 @@ export default factories.createCoreController(
         const completedPayoutsByOrder = new Map<number, any>();
         for (const po of payouts) {
           const st = (po.status || "").toLowerCase();
-          if (st === "success" || st === "paid" || st === "transferred") {
+          if (
+            po.isMock !== true &&
+            (po.stripeTransferId || po.stripePayoutId) &&
+            (st === "success" || st === "paid" || st === "transferred")
+          ) {
             completedPayouts += Number(po.netAmount || 0);
             if (po.order?.id) {
               completedPayoutsByOrder.set(Number(po.order.id), po);
@@ -258,8 +249,14 @@ export default factories.createCoreController(
 
         const payoutsByOrderId = new Map<number, any>();
         for (const po of payouts) {
-          if (po.order?.id && !payoutsByOrderId.has(Number(po.order.id))) {
-            payoutsByOrderId.set(Number(po.order.id), po);
+          if (po.isMock === true || !po.order?.id) continue;
+          const orderId = Number(po.order.id);
+          const existing = payoutsByOrderId.get(orderId);
+          const isCompleted = (payout: any) =>
+            ["success", "paid"].includes((payout.status || "").toLowerCase()) &&
+            Boolean(payout.stripeTransferId || payout.stripePayoutId);
+          if (!existing || (isCompleted(po) && !isCompleted(existing))) {
+            payoutsByOrderId.set(orderId, po);
           }
         }
 
@@ -307,7 +304,12 @@ export default factories.createCoreController(
           let payoutStatus = "Not eligible";
           if (isRefunded || dispStatus === "RESOLVED_REFUND") {
             payoutStatus = "Failed";
-          } else if (payoutDbStatus === "success" || payoutDbStatus === "paid") {
+          } else if (
+            payout &&
+            payout.isMock !== true &&
+            ["success", "paid"].includes(payoutDbStatus) &&
+            (payout.stripeTransferId || payout.stripePayoutId)
+          ) {
             payoutStatus = "Paid";
           } else if (payoutDbStatus === "processing") {
             payoutStatus = "Processing";
@@ -315,6 +317,10 @@ export default factories.createCoreController(
             payoutStatus = "Transferred";
           } else if (payoutDbStatus === "bank_payout_pending") {
             payoutStatus = "Bank payout pending";
+          } else if (payout && payout.isMock === true) {
+            payoutStatus = "Failed";
+          } else if (["failed", "refused"].includes(payoutDbStatus)) {
+            payoutStatus = "Failed";
           } else if (hasActiveDispute) {
             payoutStatus = "On hold";
           } else if (isDelivered && is48hExpired && isPaid && !payout) {
@@ -329,7 +335,8 @@ export default factories.createCoreController(
             isPaid &&
             !hasActiveDispute &&
             !isRefunded &&
-            payoutStatus === "Eligible";
+            ["Eligible", "Failed"].includes(payoutStatus) &&
+            Boolean(o.seller?.stripeAccountId);
 
           return {
             id: Number(o.id),
@@ -339,9 +346,9 @@ export default factories.createCoreController(
               id: o.seller?.id || 0,
               name: o.seller?.username || "Unknown Seller",
               email: o.seller?.email || "",
-              bankName: o.seller?.bankName || "Kasikornbank (KBank)",
-              bankAccountLast4: o.seller?.bankAccountLast4 || "8821",
-              stripeConnectStatus: o.seller?.stripeConnectStatus || "Active",
+              bankName: o.seller?.bankName || "Not provided",
+              bankAccountLast4: o.seller?.bankAccountLast4 || "",
+              stripeConnectStatus: o.seller?.stripeAccountId ? "Connected" : "Not connected",
             },
             buyer: {
               id: o.buyer?.id || 0,
@@ -362,7 +369,6 @@ export default factories.createCoreController(
             hasActiveDispute,
             payoutStatus,
             canRelease,
-            isMock: payout ? payout.isMock !== false : true,
             payoutId: payout?.id || null,
             payoutNotes: payout?.notes || null,
             createdAt: o.createdAt,
@@ -444,10 +450,12 @@ export default factories.createCoreController(
           }
         )) as any[];
 
-        const alreadyPaid = existingPayouts.some((p: any) =>
-          ["success", "paid", "processing", "transferred"].includes(
-            (p.status || "").toLowerCase()
-          )
+        const alreadyPaid = existingPayouts.some(
+          (p: any) =>
+            p.isMock !== true &&
+            ["success", "paid", "processing", "transferred"].includes(
+              (p.status || "").toLowerCase()
+            )
         );
 
         if (alreadyPaid) {
@@ -483,12 +491,12 @@ export default factories.createCoreController(
             netAmount: sellerAmount,
             currency: "thb",
             status: payoutResult.status === "FAILED" ? "failed" : "success",
-            isMock: payoutResult.isMock,
+            isMock: false,
             stripeTransferId: payoutResult.transferId,
             stripePayoutId: payoutResult.payoutId,
-            bankAccountLast4: order.seller?.bankAccountLast4 || "8821",
             processedAt: new Date(),
-            notes: notes || "MOCK PAYOUT - Simulated disbursement for development.",
+            notes: notes || null,
+            failureReason: payoutResult.error || null,
           } as any,
         })) as any;
 
@@ -497,12 +505,18 @@ export default factories.createCoreController(
           data: { payoutStatus: payoutResult.status === "FAILED" ? "FAILED" : "PAID" } as any,
         });
 
+        if (payoutResult.status === "FAILED") {
+          return ctx.badRequest(
+            payoutResult.error || "Stripe Connect transfer could not be completed."
+          );
+        }
+
         if (order.seller?.id) {
           await createNotification({
             strapi,
             recipientId: order.seller.id,
             type: "order_update",
-            title: "Seller Payout Released (MOCK)",
+            title: "Seller Payout Released",
             body: `Payout of ${sellerAmount.toLocaleString()} THB for Order #ORD-${order.id} has been released to your account.`,
             link: "/Orders",
           });
@@ -510,8 +524,7 @@ export default factories.createCoreController(
 
         return ctx.send({
           ok: true,
-          message: "Mock payout released successfully.",
-          isMock: true,
+          message: "Stripe Connect transfer created successfully.",
           payout: {
             id: payout.id,
             orderId: order.id,
@@ -571,18 +584,43 @@ export default factories.createCoreController(
               ? Number(refundAmount)
               : Number(dispute.refundAmount || order?.totalAmount || 0);
 
+          if (!order?.paymentIntentId) {
+            return ctx.badRequest(
+              "Cannot issue refund: this order has no Stripe payment intent."
+            );
+          }
+          if (!Number.isFinite(effectiveRefundAmt) || effectiveRefundAmt <= 0) {
+            return ctx.badRequest("Refund amount must be greater than zero.");
+          }
+          if (dispute.stripeRefundId && dispute.refundStatus !== "FAILED") {
+            return ctx.badRequest("A Stripe refund has already been created for this dispute.");
+          }
+
+          const refund = await stripe.refunds.create({
+            payment_intent: order.paymentIntentId,
+            amount: Math.round(effectiveRefundAmt * 100),
+          });
+          const refundStatus =
+            refund.status === "succeeded"
+              ? "SUCCEEDED"
+              : refund.status === "pending"
+              ? "PROCESSING"
+              : "FAILED";
+          const resolved = refund.status === "succeeded";
+
           await strapi.entityService.update(
             "api::dispute.dispute",
             dispute.id,
             {
               data: {
-                status: "RESOLVED_REFUND",
-                refundStatus: "SUCCEEDED",
-                resolvedAt: new Date(),
+                status: resolved ? "RESOLVED_REFUND" : "UNDER_REVIEW",
+                refundStatus,
+                resolvedAt: resolved ? new Date() : null,
                 adminDecision: "REFUND_APPROVED",
+                stripeRefundId: refund.id,
                 resolution:
                   resolution ||
-                  `Full refund of ${effectiveRefundAmt} THB approved by Admin to buyer original payment method.`,
+                  `Refund of ${effectiveRefundAmt} THB submitted to Stripe.`,
                 adminNotes: adminNotes ?? dispute.adminNotes ?? null,
                 refundAmount: effectiveRefundAmt,
               } as any,
@@ -592,28 +630,30 @@ export default factories.createCoreController(
           if (order?.id) {
             await strapi.entityService.update("api::order.order", order.id, {
               data: {
-                paymentStatus: "refunded",
-                payoutStatus: "CANCELLED",
+                ...(resolved ? { paymentStatus: "refunded" } : {}),
+                payoutStatus: resolved ? "CANCELLED" : "ON_HOLD",
               } as any,
             });
 
-            const pos = (await strapi.entityService.findMany(
-              "api::payout.payout",
-              { filters: { order: { id: order.id } } as any }
-            )) as any[];
-            for (const p of pos) {
-              if (["pending", "processing"].includes(p.status)) {
-                await strapi.entityService.update("api::payout.payout", p.id, {
-                  data: {
-                    status: "refused",
-                    notes: "Order refunded to buyer",
-                  } as any,
-                });
+            if (resolved) {
+              const pos = (await strapi.entityService.findMany(
+                "api::payout.payout",
+                { filters: { order: { id: order.id } } as any }
+              )) as any[];
+              for (const p of pos) {
+                if (["pending", "processing"].includes(p.status)) {
+                  await strapi.entityService.update("api::payout.payout", p.id, {
+                    data: {
+                      status: "refused",
+                      notes: "Order refunded to buyer",
+                    } as any,
+                  });
+                }
               }
             }
           }
 
-          if (dispute.raisedBy?.id) {
+          if (resolved && dispute.raisedBy?.id) {
             await createNotification({
               strapi,
               recipientId: dispute.raisedBy.id,
@@ -625,7 +665,7 @@ export default factories.createCoreController(
               link: "/Orders?tab=Disputes_Raised",
             });
           }
-          if (dispute.recievedBy?.id) {
+          if (resolved && dispute.recievedBy?.id) {
             await createNotification({
               strapi,
               recipientId: dispute.recievedBy.id,
@@ -641,8 +681,10 @@ export default factories.createCoreController(
           return ctx.send({
             ok: true,
             action: "REFUND_BUYER",
-            message: `Refund of ${effectiveRefundAmt} THB processed successfully. Seller payout blocked.`,
-            status: "RESOLVED_REFUND",
+            message: resolved
+              ? `Refund of ${effectiveRefundAmt} THB succeeded. Seller payout blocked.`
+              : `Refund is ${refund.status}; payout remains on hold.`,
+            status: resolved ? "RESOLVED_REFUND" : "UNDER_REVIEW",
           });
         } else if (action === "RELEASE_TO_SELLER") {
           if (!resolution || !resolution.trim()) {
@@ -821,7 +863,7 @@ export default factories.createCoreController(
               bankAccountLast4:
                 d.recievedBy?.bankAccountLast4 ||
                 order.seller?.bankAccountLast4 ||
-                "8821",
+                "",
             },
             product: {
               id: order.product?.id || 0,
@@ -832,7 +874,7 @@ export default factories.createCoreController(
               image:
                 order.productImage ||
                 order.product?.image ||
-                "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=300",
+                "",
               price: Number(
                 order.productPrice || order.product?.price || totalAmt
               ),
@@ -879,17 +921,7 @@ export default factories.createCoreController(
           }
         )) as any[];
 
-        const refundedOrders = (await strapi.entityService.findMany(
-          "api::order.order",
-          {
-            filters: { paymentStatus: "refunded" } as any,
-            populate: { buyer: true, seller: true },
-            sort: { updatedAt: "desc" },
-          }
-        )) as any[];
-
         const list: any[] = [];
-        const seenOrderIds = new Set<number>();
 
         for (const d of disputes) {
           const s = (d.status || "").toUpperCase();
@@ -902,16 +934,26 @@ export default factories.createCoreController(
             );
 
           if (isRefundDispute && d.order?.id) {
-            seenOrderIds.add(Number(d.order.id));
             const amount = Number(
               d.refundAmount || d.order?.totalAmount || 0
             );
 
             let refundStatus = "REQUESTED";
-            if (s === "RESOLVED_REFUND") refundStatus = "SUCCEEDED";
-            else if (s === "UNDER_REVIEW") refundStatus = "PROCESSING";
-            else if (s === "CLOSED" || s === "REJECTED")
+            if (d.stripeRefundId) {
+              refundStatus =
+                d.refundStatus === "SUCCEEDED"
+                  ? "SUCCEEDED"
+                  : d.refundStatus === "PROCESSING" ||
+                    d.refundStatus === "PENDING"
+                  ? "PROCESSING"
+                  : "FAILED";
+            } else if (s === "RESOLVED_REFUND") {
+              refundStatus = "FAILED";
+            } else if (s === "UNDER_REVIEW") {
+              refundStatus = "PROCESSING";
+            } else if (s === "CLOSED" || s === "REJECTED") {
               refundStatus = "CANCELLED";
+            }
 
             list.push({
               id: Number(d.id),
@@ -924,34 +966,12 @@ export default factories.createCoreController(
                 d.recievedBy?.username || d.order.seller?.username || "Seller",
               refundAmount: amount,
               reason: d.reason || "Dispute Refund Request",
-              stripeRefundId: `re_mock_${d.id}`,
+              stripeRefundId: d.stripeRefundId || "",
               status: refundStatus,
               requestDate: d.createdAt,
               processingDate: d.updatedAt,
               completionDate:
                 s === "RESOLVED_REFUND" ? d.updatedAt : null,
-              isMock: true,
-            });
-          }
-        }
-
-        for (const o of refundedOrders) {
-          if (!seenOrderIds.has(Number(o.id))) {
-            list.push({
-              id: Number(o.id) + 1000,
-              refundId: `REF-ORD-${String(o.id).padStart(4, "0")}`,
-              orderId: Number(o.id),
-              orderNumber: `ORD-${String(o.id).padStart(5, "0")}`,
-              buyer: o.buyer?.username || "Buyer",
-              seller: o.seller?.username || "Seller",
-              refundAmount: Number(o.totalAmount || 0),
-              reason: "Order Refunded",
-              stripeRefundId: `re_mock_ord_${o.id}`,
-              status: "SUCCEEDED",
-              requestDate: o.createdAt,
-              processingDate: o.updatedAt,
-              completionDate: o.updatedAt,
-              isMock: true,
             });
           }
         }
@@ -1002,19 +1022,18 @@ export default factories.createCoreController(
             (o.paymentStatus || "").toLowerCase() === "refunded";
           const orderRef = `ORD-${String(o.id).padStart(5, "0")}`;
 
-          if (isPaid && totalAmt > 0) {
+          if (isPaid && totalAmt > 0 && (o.paymentIntentId || o.chargeId)) {
             txs.push({
               id: `TX-PAY-${o.id}`,
               orderId: orderRef,
               type: "CUSTOMER_PAYMENT",
               amount: totalAmt,
               currency: "THB",
-              stripeReference: `pi_test_${o.id}_${Math.floor(totalAmt * 10)}`,
+              stripeReference: o.paymentIntentId || o.chargeId,
               status: "COMPLETED",
               initiatedBy: o.buyer?.username || "Customer",
               createdAt: o.createdAt,
               processedAt: o.createdAt,
-              isMock: false,
             });
 
             const commAmt = Math.round(totalAmt * 0.1 * 100) / 100;
@@ -1024,21 +1043,25 @@ export default factories.createCoreController(
               type: "PLATFORM_COMMISSION",
               amount: commAmt,
               currency: "THB",
-              stripeReference: `fee_platform_${o.id}`,
+              stripeReference: "",
               status: "COMPLETED",
               initiatedBy: "System",
               createdAt: o.createdAt,
               processedAt: o.createdAt,
-              isMock: false,
             });
           }
         }
 
         for (const po of payouts) {
+          if (
+            po.isMock === true ||
+            (!po.stripePayoutId && !po.stripeTransferId)
+          ) {
+            continue;
+          }
           const orderRef = po.order?.id
             ? `ORD-${String(po.order.id).padStart(5, "0")}`
             : `PO-${po.id}`;
-          const isMock = po.isMock !== false;
           const status =
             (po.status || "").toLowerCase() === "success" ||
             (po.status || "").toLowerCase() === "paid"
@@ -1048,22 +1071,19 @@ export default factories.createCoreController(
           txs.push({
             id: `TX-PO-${po.id}`,
             orderId: orderRef,
-            type: isMock ? "MOCK_PAYOUT" : "SELLER_BANK_PAYOUT",
+            type: "SELLER_BANK_PAYOUT",
             amount: Number(po.netAmount || 0),
             currency: "THB",
-            stripeReference:
-              po.stripePayoutId ||
-              po.stripeTransferId ||
-              `po_mock_${po.id}`,
+            stripeReference: po.stripePayoutId || po.stripeTransferId,
             status,
             initiatedBy: "Admin",
             createdAt: po.createdAt,
             processedAt: po.processedAt || po.updatedAt || po.createdAt,
-            isMock,
           });
         }
 
         for (const d of disputes) {
+          if (!d.stripeRefundId) continue;
           const orderRef = d.order?.id
             ? `ORD-${String(d.order.id).padStart(5, "0")}`
             : `DSP-${d.id}`;
@@ -1075,12 +1095,17 @@ export default factories.createCoreController(
             type: "BUYER_REFUND",
             amount: amt,
             currency: "THB",
-            stripeReference: `re_mock_${d.id}`,
-            status: "COMPLETED",
+            stripeReference: d.stripeRefundId,
+            status:
+              d.refundStatus === "SUCCEEDED"
+                ? "COMPLETED"
+                : d.refundStatus === "PROCESSING" ||
+                  d.refundStatus === "PENDING"
+                ? "PENDING"
+                : "FAILED",
             initiatedBy: "Admin",
             createdAt: d.updatedAt || d.createdAt,
             processedAt: d.updatedAt || d.createdAt,
-            isMock: true,
           });
         }
 
@@ -1143,6 +1168,8 @@ export default factories.createCoreController(
               const hasPayout = userPayouts.some(
                 (p: any) =>
                   p.order?.id === o.id &&
+                  p.isMock !== true &&
+                  (p.stripeTransferId || p.stripePayoutId) &&
                   ["success", "paid"].includes((p.status || "").toLowerCase())
               );
 
@@ -1164,7 +1191,11 @@ export default factories.createCoreController(
           }
 
           for (const p of userPayouts) {
-            if (["success", "paid"].includes((p.status || "").toLowerCase())) {
+            if (
+              p.isMock !== true &&
+              (p.stripeTransferId || p.stripePayoutId) &&
+              ["success", "paid"].includes((p.status || "").toLowerCase())
+            ) {
               completedPayoutsTotal += Number(p.netAmount || 0);
             }
           }
@@ -1173,11 +1204,11 @@ export default factories.createCoreController(
             sellerId: Number(u.id),
             name: u.username || `User #${u.id}`,
             email: u.email || "",
-            bankName: u.bankName || "Kasikornbank (KBank)",
+            bankName: u.bankName || "Not provided",
             maskedAccountNumber: u.bankAccountLast4
               ? `•••• ${u.bankAccountLast4}`
-              : "•••• 8821",
-            stripeConnectStatus: u.stripeConnectStatus || "Active",
+              : "Not provided",
+            stripeConnectStatus: u.stripeAccountId ? "Connected" : "Not connected",
             pendingEarnings: Math.round(pendingEarnings * 100) / 100,
             eligibleEarnings: Math.round(eligibleEarnings * 100) / 100,
             completedPayouts: Math.round(completedPayoutsTotal * 100) / 100,
@@ -1293,24 +1324,44 @@ export default factories.createCoreController(
             ? Number(refundAmount)
             : Number(dispute.refundAmount || order?.totalAmount || 0);
 
-        // Call Stripe Refund or simulated mock refund
-        const refundId = `re_mock_${Date.now()}`;
+        if (!order?.paymentIntentId) {
+          return ctx.badRequest(
+            "Cannot issue refund: this order has no Stripe payment intent."
+          );
+        }
+        if (!Number.isFinite(effectiveAmount) || effectiveAmount <= 0) {
+          return ctx.badRequest("Refund amount must be greater than zero.");
+        }
+        if (dispute.stripeRefundId && dispute.refundStatus !== "FAILED") {
+          return ctx.badRequest("A Stripe refund has already been created for this dispute.");
+        }
+
+        const refund = await stripe.refunds.create({
+          payment_intent: order.paymentIntentId,
+          amount: Math.round(effectiveAmount * 100),
+        });
+        const succeeded = refund.status === "succeeded";
 
         await strapi.entityService.update("api::dispute.dispute", dispute.id, {
           data: {
-            status: "RESOLVED_REFUND",
-            refundStatus: "SUCCEEDED",
-            resolvedAt: new Date(),
+            status: succeeded ? "RESOLVED_REFUND" : "UNDER_REVIEW",
+            refundStatus:
+              refund.status === "succeeded"
+                ? "SUCCEEDED"
+                : refund.status === "pending"
+                ? "PROCESSING"
+                : "FAILED",
+            resolvedAt: succeeded ? new Date() : null,
             adminDecision: "REFUND_APPROVED",
-            stripeRefundId: refundId,
+            stripeRefundId: refund.id,
             resolution:
               resolution ||
-              `Refund of ${effectiveAmount} THB processed to buyer original payment method.`,
+              `Refund of ${effectiveAmount} THB submitted to Stripe.`,
             refundAmount: effectiveAmount,
           } as any,
         });
 
-        if (order?.id) {
+        if (order?.id && succeeded) {
           await strapi.entityService.update("api::order.order", order.id, {
             data: {
               paymentStatus: "refunded",
@@ -1319,7 +1370,7 @@ export default factories.createCoreController(
           });
         }
 
-        if (dispute.raisedBy?.id) {
+        if (succeeded && dispute.raisedBy?.id) {
           await createNotification({
             strapi,
             recipientId: dispute.raisedBy.id,
@@ -1332,9 +1383,11 @@ export default factories.createCoreController(
 
         return ctx.send({
           ok: true,
-          message: `Buyer refund of ${effectiveAmount} THB succeeded. Seller payout cancelled.`,
-          refundId,
-          status: "RESOLVED_REFUND",
+          message: succeeded
+            ? `Buyer refund of ${effectiveAmount} THB succeeded. Seller payout cancelled.`
+            : `Stripe refund is ${refund.status}; the dispute remains under review.`,
+          refundId: refund.id,
+          status: succeeded ? "RESOLVED_REFUND" : "UNDER_REVIEW",
         });
       } catch (err) {
         strapi.log.error("Error in adminRefundBuyer:", err);
@@ -1414,7 +1467,10 @@ export default factories.createCoreController(
             sort: { createdAt: "desc" },
           }
         );
-        return ctx.send({ ok: true, data: payouts });
+        return ctx.send({
+          ok: true,
+          data: payouts.filter((payout: any) => payout.isMock !== true),
+        });
       } catch (err) {
         strapi.log.error("Error in getAdminPayouts:", err);
         return ctx.internalServerError("Failed to load payouts.");
@@ -1432,7 +1488,9 @@ export default factories.createCoreController(
           Number(id),
           { populate: { order: true, seller: true } }
         );
-        if (!payout) return ctx.notFound("Payout not found.");
+        if (!payout || (payout as any).isMock === true) {
+          return ctx.notFound("Payout not found.");
+        }
         return ctx.send({ ok: true, data: payout });
       } catch (err) {
         strapi.log.error("Error in getAdminPayoutById:", err);
@@ -1514,8 +1572,11 @@ export default factories.createCoreController(
           history.push({
             event: `PAYOUT_${(p.status || "").toUpperCase()}`,
             timestamp: p.processedAt || p.createdAt,
-            details: `Payout of ${p.netAmount} THB released via ${p.isMock ? "MOCK" : "STRIPE_CONNECT"}`,
-            transferId: p.stripeTransferId,
+            details:
+              p.isMock === true || (!p.stripeTransferId && !p.stripePayoutId)
+                ? "No external transfer was recorded."
+                : `Payout of ${p.netAmount} THB processed through Stripe Connect.`,
+            transferId: p.stripeTransferId || null,
           });
         }
 
