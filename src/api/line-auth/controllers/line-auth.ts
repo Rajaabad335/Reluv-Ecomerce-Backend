@@ -128,11 +128,12 @@ export default {
       }
 
       if (user) {
-        // Update picture in case it changed
+        // LINE users can change their display name and picture after signup.
         user = await strapi.db.query(userUid).update({
           where: { id: user.id },
           data: await filterToExistingColumns(strapi, userUid, {
-            linePicture: pictureUrl ?? null,
+            displayName,
+            linePicture: pictureUrl ?? user.linePicture ?? null,
             confirmed: true,
           }),
           populate: ["role"],
