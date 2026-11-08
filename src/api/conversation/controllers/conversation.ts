@@ -335,7 +335,7 @@ export default factories.createCoreController(
         return ctx.badRequest("A valid conversation id is required.");
       }
 
-      const conversation = await strapi.db
+      let conversation = await strapi.db
         .query("api::conversation.conversation")
         .findOne({
           where: { id: conversationId },

@@ -55,6 +55,8 @@
         "RESOLVED_REFUND",
         "RESOLVED_RELEASE",
         "RESOLVED",
+        "RESOLVED_REFUND",
+        "RESOLVED_RELEASE",
         "REJECTED",
         "CLOSED"
       ],

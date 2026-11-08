@@ -19,6 +19,7 @@ const sanitizeMessage = (message: any) => ({
   id: message?.id,
   content: message?.content ?? '',
   createdAt: message?.createdAt ?? null,
+  readAt: message?.readAt ?? null,
   sender: message?.sender
     ? { id: message.sender.id, username: message.sender.username, avatar: message.sender.avatar ?? null }
     : null,
@@ -39,6 +40,10 @@ const sanitizeMessage = (message: any) => ({
     offerPrice: message.offer.offerPrice,
     originalPrice: message.offer.originalPrice,
     status: message.offer.status,
+    message: message.offer.message ?? message.metadata?.message ?? null,
+    editedAt: message.offer.editedAt ?? null,
+    editCount: message.offer.editCount ?? 0,
+    seenAt: message.offer.seenAt ?? message?.readAt ?? null,
     productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
     productImage: message.offer.productImage ?? null,
     product: message.offer.product ? {
@@ -47,6 +52,7 @@ const sanitizeMessage = (message: any) => ({
       title: message.offer.product.title ?? null,
       price: message.offer.product.price ?? null,
       productStatus: message.offer.product.productStatus ?? null,
+      sellerId: message.offer.product.users_permissions_user?.id ?? null,
     } : null,
     buyer: message.offer.buyer ? {
       id: message.offer.buyer.id,
@@ -55,6 +61,10 @@ const sanitizeMessage = (message: any) => ({
     seller: message.offer.seller ? {
       id: message.offer.seller.id,
       username: message.offer.seller.username
+    } : null,
+    sender: message.offer.sender ? {
+      id: message.offer.sender.id,
+      username: message.offer.sender.username
     } : null,
   } : undefined,
 });
@@ -104,6 +114,8 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           seller: { fields: ['id'] },
         },
       }) as any;
+      if (!conversation) return ctx.notFound('Conversation not found.');
+
       const deletedAt = conversation?.buyer?.id === userId
         ? conversation?.buyerDeletedAt
         : conversation?.sellerDeletedAt;
@@ -117,7 +129,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller', 'product']
+            populate: {
+              buyer: { fields: ['id', 'username'] },
+              seller: { fields: ['id', 'username'] },
+              sender: { fields: ['id', 'username'] },
+              product: {
+                populate: { users_permissions_user: { fields: ['id'] } },
+              },
+            },
           }
         },
         sort: { createdAt: 'asc' },
@@ -130,15 +149,46 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       );
 
       if (unreadMessages.length > 0) {
+        const now = new Date().toISOString();
+        const io = (strapi as any).io as import('socket.io').Server | undefined;
+
         await Promise.all(
-          unreadMessages.map((msg) =>
-            strapi.entityService.update(messageUid, msg.id, {
-              data: { readAt: new Date().toISOString() },
-            })
-          )
+          unreadMessages.map(async (msg) => {
+            await strapi.entityService.update(messageUid, msg.id, {
+              data: { readAt: now },
+            });
+            msg.readAt = now;
+
+            // If this message has an offer, mark the offer seen as well
+            if (msg.offer?.id && !msg.offer.seenAt) {
+              const offerSenderId = msg.offer.sender?.id
+                ? Number(msg.offer.sender.id)
+                : (msg.sender?.id ? Number(msg.sender.id) : null);
+
+              if (offerSenderId && offerSenderId !== userId) {
+                try {
+                  await strapi.entityService.update("api::offer.offer", msg.offer.id, {
+                    data: { seenAt: now },
+                  });
+                  msg.offer.seenAt = now;
+
+                  if (io) {
+                    const seenPayload = {
+                      conversationId,
+                      offerId: msg.offer.id,
+                      seenAt: now,
+                    };
+                    io.to(`conversation:${conversationId}`).emit('offer:seen', seenPayload);
+                    io.to(`user:${offerSenderId}`).emit('offer:seen', seenPayload);
+                  }
+                } catch (offerErr) {
+                  strapi.log.warn('Could not mark offer seen during conversation load:', offerErr);
+                }
+              }
+            }
+          })
         );
 
-        const io = (strapi as any).io as import('socket.io').Server | undefined;
         if (io) {
           io.to(`conversation:${conversationId}`).emit('messages:read', {
             conversationId,
@@ -149,6 +199,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
 
       ctx.body = {
         ok: true,
+        conversationId,
         messages: messages.map(sanitizeMessage),
       };
     } catch (error) {
@@ -184,6 +235,7 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
       const conversation = await strapi.entityService.findOne(conversationUid, conversationId, {
         populate: { buyer: { fields: ['id'] }, seller: { fields: ['id'] } },
       }) as any;
+      if (!conversation) return ctx.notFound('Conversation not found.');
 
       const receiverId = conversation?.buyer?.id === userId
         ? conversation?.seller?.id
@@ -216,7 +268,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
           sender: true,
           attachments: true,
           offer: {
-            populate: ['buyer', 'seller', 'product']
+            populate: {
+              buyer: { fields: ['id', 'username'] },
+              seller: { fields: ['id', 'username'] },
+              sender: { fields: ['id', 'username'] },
+              product: {
+                populate: { users_permissions_user: { fields: ['id'] } },
+              },
+            },
           }
         },
       });
@@ -246,7 +305,14 @@ export default factories.createCoreController(messageUid, ({ strapi }) => ({
             sender: true,
             attachments: true,
             offer: {
-              populate: ['buyer', 'seller', 'product']
+              populate: {
+                buyer: { fields: ['id', 'username'] },
+                seller: { fields: ['id', 'username'] },
+                sender: { fields: ['id', 'username'] },
+                product: {
+                  populate: { users_permissions_user: { fields: ['id'] } },
+                },
+              },
             }
           },
         }) as any;

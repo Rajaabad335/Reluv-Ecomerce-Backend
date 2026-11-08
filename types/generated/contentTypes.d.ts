@@ -767,7 +767,7 @@ export interface ApiConversationConversation
   extends Struct.CollectionTypeSchema {
   collectionName: 'conversations';
   info: {
-    description: 'Buyer and seller conversation tied to a product';
+    description: 'Buyer and seller conversation that can reference multiple products';
     displayName: 'Conversation';
     pluralName: 'conversations';
     singularName: 'conversation';
@@ -793,6 +793,7 @@ export interface ApiConversationConversation
     > &
       Schema.Attribute.Private;
     messages: Schema.Attribute.Relation<'oneToMany', 'api::message.message'>;
+    pairKey: Schema.Attribute.String & Schema.Attribute.Unique;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
     publishedAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<
@@ -1229,6 +1230,8 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    editCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    editedAt: Schema.Attribute.DateTime;
     expiresAt: Schema.Attribute.DateTime;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<'oneToMany', 'api::offer.offer'> &
@@ -1241,7 +1244,12 @@ export interface ApiOfferOffer extends Struct.CollectionTypeSchema {
     productImage: Schema.Attribute.String;
     productTitle: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
+    seenAt: Schema.Attribute.DateTime;
     seller: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+    sender: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.user'
     >;
@@ -2165,7 +2173,7 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.DefaultTo<'en'>;
     lastName: Schema.Attribute.String;
     linePicture: Schema.Attribute.String;
-    lineUserId: Schema.Attribute.String & Schema.Attribute.Private;
+    lineUserId: Schema.Attribute.String & Schema.Attribute.Unique;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',

@@ -1,11 +1,9 @@
 import { Server } from 'socket.io';
 import { repairCategoryAttributeLinks, resolveCategoryAttributeLinkSchema } from './lib/repairCategoryAttributeLinks';
-import { autoSyncColumns } from "./database/migrations/auto-sync-columns";
-import { ensureLineAuthColumns } from "./database/migrations/line-auth-columns";
+import { runRequiredLineAuthMigration } from "./database/migrations/ensure-line-auth-columns";
 import { createNotification } from './lib/createNotification';
 import {
   findOrCreateConversationForPair,
-  mergeDuplicateConversations,
   sanitizeConversationPayload as sanitizeUnifiedConversation,
   ensureProductRefMessage,
   loadProductById,
@@ -50,15 +48,9 @@ export default {
   register(/* { strapi }: { strapi: Core.Strapi } */) {},
 
   async bootstrap({ strapi }: { strapi: any }) {
-    try {
-      await ensureLineAuthColumns(strapi);
-    } catch (err: any) {
-      strapi.log.error(`[Reluv] LINE auth database migration failed: ${err.message}`);
-      throw err;
-    }
+    await runRequiredLineAuthMigration(strapi);
 
     try {
-      // await autoSyncColumns({ strapi });
       const linkSchema = await resolveCategoryAttributeLinkSchema(strapi);
       if (!linkSchema) {
         strapi.log.warn('[Reluv] ⚠  Could not determine category-attribute link table schema. Running repair directly.');
@@ -85,21 +77,6 @@ export default {
     } catch (err: any) {
       // Never crash Strapi startup due to link repair failure
       strapi.log.error(`[Reluv] ✗ Link repair failed: ${err.message}`);
-    }
-
-    // ── 1a. Unified conversations migration (safe to rerun) ────────────────
-    try {
-      const migration = await mergeDuplicateConversations(strapi);
-      if (
-        migration.mergedPairs > 0 ||
-        migration.deletedConversations > 0
-      ) {
-        strapi.log.info(
-          `[Reluv] Unified conversations: merged ${migration.mergedPairs} buyer-seller pair(s), moved ${migration.movedMessages} message(s) and ${migration.movedOffers} offer(s), deleted ${migration.deletedConversations} duplicate conversation(s).`,
-        );
-      }
-    } catch (err: any) {
-      strapi.log.error(`[Reluv] ✗ Unified conversation migration failed: ${err.message}`);
     }
 
     // ── 1b. Ensure custom user enum column exists ──────────────────────────
@@ -198,6 +175,9 @@ export default {
             offerPrice: message.offer.offerPrice,
             originalPrice: message.offer.originalPrice,
             status: message.offer.status,
+            editedAt: message.offer.editedAt ?? null,
+            editCount: message.offer.editCount ?? 0,
+            seenAt: message.offer.seenAt ?? null,
             productTitle: message.offer.productTitle ?? message.offer.product?.title ?? null,
             productImage: message.offer.productImage ?? null,
             product: message.offer.product
@@ -329,6 +309,7 @@ export default {
           seller: { fields: ['id'] },
         },
       })) as any;
+      if (!conversation) throw new Error('Conversation not found.');
       const deletedAt = getDeletedAtForUser(conversation, currentUserId);
 
       const messages = (await strapi.entityService.findMany(messageUid, {
@@ -463,9 +444,9 @@ export default {
         try {
           const id = Number(conversationId);
           if (!Number.isInteger(id) || id <= 0) throw new Error('Conversation id is required.');
-          socket.join(`conversation:${id}`);
           const messages = await listMessagesForConversation(id, userId);
-          ack?.({ ok: true, messages });
+          socket.join(`conversation:${id}`);
+          ack?.({ ok: true, conversationId: id, messages });
         } catch (error: any) {
           ack?.({ ok: false, message: error.message || 'Failed to load messages.' });
         }
@@ -477,7 +458,6 @@ export default {
           if (!Number.isInteger(id) || id <= 0) throw new Error('Conversation id is required.');
           const allowed = await isParticipant(id, userId);
           if (!allowed) throw new Error('Not allowed.');
-
           const unreadMessages = (await strapi.entityService.findMany(messageUid, {
             filters: {
               conversation: { id: { $eq: id } },
@@ -612,7 +592,7 @@ export default {
         }
       });
 
-        socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId, clientOfferId }: any) => {
+      socket.on('offer:create', async ({ productId, buyerId, sellerId, offerPrice, message, conversationId, parentOfferId }: any, ack?: Function) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -621,15 +601,18 @@ export default {
             },
             state: { user: { id: userId } },
             badRequest: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             unauthorized: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             notFound: (msg: string) => {
-              socket.emit('offer:error', { clientOfferId, message: msg });
+              socket.emit('offer:error', { conversationId, message: msg });
+              ack?.({ ok: false, message: msg });
               throw new Error(msg);
             },
             created: (data: any) => data,
@@ -639,34 +622,41 @@ export default {
           const result = await offerController.makeOffer(mockCtx);
           const offer = result?.data;
 
-          // Acknowledge the sender as soon as the offer is persisted. The
-          // conversation lookup/broadcast is secondary and must not hold up
-          // the create request long enough for clients to report a timeout.
-          socket.emit('offer:created', { clientOfferId, offer });
+          const broadcastPayload = {
+            offer,
+            conversationId,
+            productId,
+          };
+          ack?.({ ok: true, offer, conversationId, productId });
+          socket.emit('offer:created', broadcastPayload);
 
           if (conversationId && offer?.id) {
             try {
-              const conversation = await strapi.entityService.findOne(conversationUid, conversationId);
-              if (conversation) {
-                io.to(`conversation:${conversationId}`).emit('offer:created', {
-                  clientOfferId,
-                  offer,
-                  conversationId,
-                });
-              }
+              const directConversationId = Number(conversationId);
+              const offerPayload = {
+                offer,
+                conversationId: directConversationId,
+                productId,
+              };
+              io.to(`conversation:${directConversationId}`).emit('offer:created', offerPayload);
+              const buyerNum = Number(offer?.buyer?.id ?? buyerId);
+              const sellerNum = Number(offer?.seller?.id ?? sellerId);
+              if (buyerNum) io.to(`user:${buyerNum}`).emit('offer:created', offerPayload);
+              if (sellerNum) io.to(`user:${sellerNum}`).emit('offer:created', offerPayload);
             } catch (broadcastError: any) {
               strapi.log.warn('Offer was created, but conversation broadcast failed:', broadcastError);
             }
           }
         } catch (error: any) {
+          ack?.({ ok: false, message: error.message || 'Failed to create offer' });
           socket.emit('offer:error', {
-            clientOfferId,
+            conversationId,
             message: error.message || 'Failed to create offer',
           });
         }
       });
 
-      socket.on('offer:respond', async ({ offerId, action, sellerId, conversationId }: any) => {
+      socket.on('offer:respond', async ({ offerId, action, sellerId, conversationId }: any, ack?: Function) => {
         try {
           const offerController = strapi.controller('api::offer.offer');
           const mockCtx: any = {
@@ -696,6 +686,7 @@ export default {
           // Conflict: product already taken by another buyer
           if (result?.conflict) {
             socket.emit('offer:responded', { offerId, offer, conflict: true, message: result.message });
+            ack?.({ ok: false, conflict: true, message: result.message, offer });
             return;
           }
 
@@ -708,12 +699,76 @@ export default {
           }
 
           socket.emit('offer:responded', { offerId, offer });
+          ack?.({ ok: true, offer, alreadyResponded: result?.alreadyResponded });
 
         } catch (error: any) {
           socket.emit('offer:error', {
             offerId,
             message: error.message || 'Failed to respond to offer',
           });
+          ack?.({ ok: false, message: error.message || 'Failed to respond to offer' });
+        }
+      });
+
+      
+      socket.on('offer:edit', async ({ offerId, offerPrice, price, conversationId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            params: { id: offerId },
+            request: {
+              body: { offerPrice: offerPrice ?? price, conversationId },
+            },
+            state: { user: { id: userId } },
+            badRequest: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            notFound: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            forbidden: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            internalServerError: (msg: string) => {
+              socket.emit('offer:error', { offerId, message: msg });
+              throw new Error(msg);
+            },
+            send: (data: any) => data,
+          };
+
+          const result = await offerController.editOfferPrice(mockCtx);
+          const offer = result?.data;
+          socket.emit('offer:edited', { offerId, offer, conversationId });
+        } catch (error: any) {
+          socket.emit('offer:error', {
+            offerId,
+            message: error.message || 'Failed to edit offer',
+          });
+        }
+      });
+
+      socket.on('offer:seen', async ({ offerId, conversationId }: any) => {
+        try {
+          const offerController = strapi.controller('api::offer.offer');
+          const mockCtx: any = {
+            params: { id: offerId },
+            request: {
+              body: { conversationId },
+            },
+            state: { user: { id: userId } },
+            badRequest: (msg: string) => { throw new Error(msg); },
+            notFound: (msg: string) => { throw new Error(msg); },
+            forbidden: (msg: string) => { throw new Error(msg); },
+            internalServerError: (msg: string) => { throw new Error(msg); },
+            send: (data: any) => data,
+          };
+
+          await offerController.markOfferSeen(mockCtx);
+        } catch (error: any) {
+          strapi.log.warn('Failed to mark offer seen via socket:', error);
         }
       });
 
@@ -746,6 +801,7 @@ export default {
             seller: { fields: ['id'] },
           },
         }) as any;
+        if (!conversation) return;
         const receiverId = conversation?.buyer?.id === userId
           ? Number(conversation?.seller?.id)
           : Number(conversation?.buyer?.id);

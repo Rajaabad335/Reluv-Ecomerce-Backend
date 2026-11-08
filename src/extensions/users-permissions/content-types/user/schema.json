@@ -170,6 +170,16 @@
     "googleProfile": {
       "type": "json"
     },
+    "lineUserId": {
+      "type": "string",
+      "unique": true
+    },
+    "linePicture": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
     "firstName": {
       "type": "string"
     },

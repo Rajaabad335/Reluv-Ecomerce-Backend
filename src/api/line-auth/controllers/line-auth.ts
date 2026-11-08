@@ -40,7 +40,7 @@ const sanitizeUser = async (strapi: any, user: any, ctx: any) => {
 const exchangeCodeForToken = async (
   code: string,
   redirectUri: string,
-  codeVerifier?: string
+  codeVerifier?: string,
 ): Promise<string> => {
   const params = buildLineTokenParams({
     code,
@@ -109,7 +109,7 @@ export default {
         // redirect_uri must exactly match what was sent in the authorization request
         const redirectUri: string =
           String(body.redirect_uri ?? "").trim() || process.env.LINE_CALLBACK_URL!;
-        accessToken = await exchangeCodeForToken(code, redirectUri, codeVerifier || undefined);
+        accessToken = await exchangeCodeForToken(code, redirectUri, codeVerifier);
       }
 
       await verifyAccessToken(accessToken);

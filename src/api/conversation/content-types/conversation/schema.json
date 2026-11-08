@@ -5,12 +5,16 @@
     "singularName": "conversation",
     "pluralName": "conversations",
     "displayName": "Conversation",
-    "description": "Buyer and seller conversation tied to a product"
+    "description": "Buyer and seller conversation that can reference multiple products"
   },
   "options": {
     "draftAndPublish": false
   },
   "attributes": {
+    "pairKey": {
+      "type": "string",
+      "unique": true
+    },
     "product": {
       "type": "relation",
       "relation": "manyToOne",

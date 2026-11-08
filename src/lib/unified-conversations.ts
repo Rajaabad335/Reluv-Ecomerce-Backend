@@ -30,8 +30,6 @@ export const CONVERSATION_POPULATE = {
   },
 };
 
-const CONVERSATION_FIELDS = ["id", "lastMessageAt", "buyerDeletedAt", "sellerDeletedAt"];
-
 /** In-process lock so simultaneous requests for the same pair don't duplicate. */
 const pendingLookups = new Map<string, Promise<any>>();
 
@@ -149,6 +147,7 @@ export async function findOrCreateConversationForPair(
       filters: {
         buyer: { id: { $eq: buyerId } },
         seller: { id: { $eq: sellerId } },
+        pairKey: { $eq: pairKey(buyerId, sellerId) },
       },
       populate: CONVERSATION_POPULATE,
       sort: { lastMessageAt: "desc" },
@@ -160,16 +159,29 @@ export async function findOrCreateConversationForPair(
     if (!conversation) {
       // Product is set as the conversation's primary product (legacy display),
       // but the identity of the conversation is the buyer-seller pair.
-      conversation = (await strapi.entityService.create(conversationUid, {
-        data: {
-          ...(productId ? { product: Number(productId) } : {}),
-          buyer: buyerId,
-          seller: sellerId,
-          lastMessageAt: new Date().toISOString(),
-          lastMessagePreview: "",
-        },
-        populate: CONVERSATION_POPULATE,
-      })) as any;
+      try {
+        conversation = (await strapi.entityService.create(conversationUid, {
+          data: {
+            ...(productId ? { product: Number(productId) } : {}),
+            buyer: buyerId,
+            seller: sellerId,
+            pairKey: pairKey(buyerId, sellerId),
+            lastMessageAt: new Date().toISOString(),
+            lastMessagePreview: "",
+          },
+          populate: CONVERSATION_POPULATE,
+        })) as any;
+      } catch (error) {
+        // The unique pairKey is the cross-process guard; concurrent requests
+        // that race to create the same relationship reuse the winning row.
+        const winner = (await strapi.entityService.findMany(conversationUid, {
+          filters: { pairKey: { $eq: pairKey(buyerId, sellerId) } },
+          populate: CONVERSATION_POPULATE,
+          limit: 1,
+        })) as any[];
+        if (!winner?.[0]) throw error;
+        conversation = winner[0];
+      }
     }
 
     // Every product opened from chat gets an in-thread card, including the
@@ -178,6 +190,9 @@ export async function findOrCreateConversationForPair(
       const product = await loadProduct(strapi, Number(productId));
       if (product) {
         await ensureProductRefMessage(strapi, conversation, product, referenceSenderId);
+        conversation = await strapi.entityService.findOne(conversationUid, Number(conversation.id), {
+          populate: CONVERSATION_POPULATE,
+        });
       }
     }
 
@@ -224,121 +239,4 @@ export function sanitizeConversationPayload(conversation: any, hasUnread = false
     updatedAt: conversation?.updatedAt ?? null,
     hasUnread,
   };
-}
-
-/**
- * Safe rerunnable migration: merge legacy duplicate conversations for the same
- * buyer-seller pair. Messages and offers are moved (not copied) onto the
- * earliest conversation; empty duplicates are removed. Offer product relations
- * are untouched, so every offer stays tied to its own product.
- */
-export async function mergeDuplicateConversations(strapi: any): Promise<{
-  mergedPairs: number;
-  movedMessages: number;
-  movedOffers: number;
-  deletedConversations: number;
-}> {
-  const result = {
-    mergedPairs: 0,
-    movedMessages: 0,
-    movedOffers: 0,
-    deletedConversations: 0,
-  };
-
-  const all = (await strapi.entityService.findMany(conversationUid, {
-    filters: {},
-    populate: {
-      buyer: { fields: ["id"] },
-      seller: { fields: ["id"] },
-    },
-    fields: CONVERSATION_FIELDS,
-    sort: { createdAt: "asc" },
-    limit: -1,
-  })) as any[];
-
-  const groups = new Map<string, any[]>();
-  for (const conv of all) {
-    const buyerId = Number(conv?.buyer?.id);
-    const sellerId = Number(conv?.seller?.id);
-    if (!Number.isInteger(buyerId) || !Number.isInteger(sellerId)) continue;
-    const key = pairKey(buyerId, sellerId);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(conv);
-  }
-
-  for (const [, duplicates] of groups) {
-    if (duplicates.length <= 1) continue;
-    result.mergedPairs++;
-
-    // Keep the oldest conversation so legacy links still resolve.
-    const keep = duplicates[0];
-    const keepId = Number(keep.id);
-
-    // Merge per-side deletedAt: a user's delete must not resurrect history
-    // merged from another conversation.
-    const buyerDeletedAt = [keep.buyerDeletedAt, ...duplicates.slice(1).map((d: any) => d.buyerDeletedAt)]
-      .filter(Boolean)
-      .sort()[0] ?? null;
-    const sellerDeletedAt = [keep.sellerDeletedAt, ...duplicates.slice(1).map((d: any) => d.sellerDeletedAt)]
-      .filter(Boolean)
-      .sort()[0] ?? null;
-
-    let latestMessageAt: string | null = keep.lastMessageAt ?? null;
-    let latestPreview: string | null = keep.lastMessagePreview ?? null;
-
-    for (const dup of duplicates.slice(1)) {
-      const dupId = Number(dup.id);
-
-      const dupMessages = (await strapi.entityService.findMany(messageUid, {
-        filters: { conversation: { id: { $eq: dupId } } },
-        fields: ["id", "createdAt"],
-        limit: -1,
-      })) as any[];
-
-      for (const msg of dupMessages) {
-        // Move (not copy): the message's own conversation relation is rewritten,
-        // preserving content, attachments, offers and createdAt ordering.
-        await strapi.db.query(messageUid).update({
-          where: { id: msg.id },
-          data: { conversation: keepId },
-        });
-        result.movedMessages++;
-        if (
-          msg.createdAt &&
-          (!latestMessageAt || new Date(msg.createdAt) > new Date(latestMessageAt))
-        ) {
-          latestMessageAt = msg.createdAt;
-          latestPreview = "Message";
-        }
-      }
-
-      const dupOffers = (await strapi.entityService.findMany("api::offer.offer" as any, {
-        filters: { conversation: { id: { $eq: dupId } } },
-        fields: ["id"],
-        limit: -1,
-      })) as any[];
-      for (const offer of dupOffers) {
-        await strapi.db.query("api::offer.offer" as any).update({
-          where: { id: offer.id },
-          data: { conversation: keepId },
-        });
-        result.movedOffers++;
-      }
-
-      await strapi.db.query(conversationUid).delete({ where: { id: dupId } });
-      result.deletedConversations++;
-    }
-
-    await strapi.db.query(conversationUid).update({
-      where: { id: keepId },
-      data: {
-        lastMessageAt: latestMessageAt ?? keep.lastMessageAt ?? null,
-        ...(latestPreview ? { lastMessagePreview: latestPreview } : {}),
-        ...(buyerDeletedAt ? { buyerDeletedAt } : {}),
-        ...(sellerDeletedAt ? { sellerDeletedAt } : {}),
-      },
-    });
-  }
-
-  return result;
 }
