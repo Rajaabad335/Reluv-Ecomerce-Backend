@@ -7,10 +7,10 @@
     "displayName": "dispute"
   },
   "options": {
-    "draftAndPublish": true
+    "draftAndPublish": false
   },
   "pluginOptions": {},
-   "attributes": {
+  "attributes": {
     "order": {
       "type": "relation",
       "relation": "manyToOne",
@@ -26,6 +26,11 @@
       "relation": "manyToOne",
       "target": "plugin::users-permissions.user"
     },
+    "requestType": {
+      "type": "enumeration",
+      "enum": ["DISPUTE", "REFUND_REQUEST"],
+      "default": "DISPUTE"
+    },
     "reason": {
       "type": "enumeration",
       "enum": [
@@ -33,6 +38,8 @@
         "DAMAGED_PRODUCT",
         "WRONG_ITEM",
         "PAYMENT_ISSUE",
+        "PRODUCT_NOT_AS_DESCRIBED",
+        "MISSING_ITEMS",
         "OTHER"
       ]
     },
@@ -44,19 +51,47 @@
       "enum": [
         "OPEN",
         "UNDER_REVIEW",
-        "RESOLVED",
+        "AWAITING_INFORMATION",
         "RESOLVED_REFUND",
         "RESOLVED_RELEASE",
+        "RESOLVED",
         "REJECTED",
         "CLOSED"
       ],
       "default": "OPEN"
     },
+    "refundStatus": {
+      "type": "enumeration",
+      "enum": [
+        "NONE",
+        "PENDING",
+        "PROCESSING",
+        "SUCCEEDED",
+        "FAILED",
+        "CANCELLED"
+      ],
+      "default": "NONE"
+    },
+    "stripeRefundId": {
+      "type": "string"
+    },
+    "adminDecision": {
+      "type": "string"
+    },
     "resolution": {
+      "type": "text"
+    },
+    "adminNotes": {
+      "type": "text"
+    },
+    "evidence": {
       "type": "text"
     },
     "refundAmount": {
       "type": "decimal"
+    },
+    "resolvedAt": {
+      "type": "datetime"
     }
   }
 }

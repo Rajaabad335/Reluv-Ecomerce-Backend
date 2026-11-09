@@ -4,6 +4,7 @@
 
 import { factories } from "@strapi/strapi";
 import { createNotification } from "../../../lib/createNotification";
+import { stripe } from "../../../utils/stripe";
 import {
   fetchStatusGroupPage,
   parseListPagination,
@@ -33,6 +34,97 @@ async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | n
 export default factories.createCoreController(
   "api::order.order",
   ({ strapi }) => ({
+    async createPaymentIntent(ctx) {
+      try {
+        const { body } = ctx.request as any;
+        const { productId, buyerProtectionFee, shippingFee, currencyCode } =
+          body;
+
+        // Re-derive price from DB — do not trust client-sent price/total for the charge
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+        );
+        if (!product) return ctx.badRequest("Product not found.");
+
+        const amount =
+          Number(product.price) +
+          Number(buyerProtectionFee || 0) +
+          Number(shippingFee || 0);
+        const amountInMinorUnits = Math.round(amount * 100); // Stripe expects cents
+
+        const paymentIntent = await stripe.paymentIntents.create({
+          amount: amountInMinorUnits,
+          currency: (currencyCode || "thb").toLowerCase(),
+          metadata: {
+            productId: String(productId),
+            buyerId: String(body.buyerId),
+            sellerId: String(body.sellerId),
+          },
+          automatic_payment_methods: { enabled: true },
+        });
+
+        return ctx.send({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount,
+        });
+      } catch (error) {
+        strapi.log.error("Error creating payment intent:", error);
+        return ctx.internalServerError("Could not create payment intent.");
+      }
+    },
+    async syncPaymentIntent(ctx) {
+      try {
+        const { body } = ctx.request as any;
+        const {
+          productId,
+          buyerProtectionFee,
+          shippingFee,
+          currencyCode,
+          paymentIntentId,
+        } = body;
+
+        const product = await strapi.entityService.findOne(
+          "api::product.product",
+          productId,
+        );
+        if (!product) return ctx.badRequest("Product not found.");
+
+        const amount =
+          Number(product.price) +
+          Number(buyerProtectionFee || 0) +
+          Number(shippingFee || 0);
+        const amountInMinorUnits = Math.round(amount * 100);
+
+        let paymentIntent;
+        if (paymentIntentId) {
+          paymentIntent = await stripe.paymentIntents.update(paymentIntentId, {
+            amount: amountInMinorUnits,
+          });
+        } else {
+          paymentIntent = await stripe.paymentIntents.create({
+            amount: amountInMinorUnits,
+            currency: (currencyCode || "thb").toLowerCase(),
+            metadata: {
+              productId: String(productId),
+              buyerId: String(body.buyerId),
+              sellerId: String(body.sellerId),
+            },
+            automatic_payment_methods: { enabled: true },
+          });
+        }
+
+        return ctx.send({
+          clientSecret: paymentIntent.client_secret,
+          paymentIntentId: paymentIntent.id,
+          amount,
+        });
+      } catch (error) {
+        strapi.log.error("Error syncing payment intent:", error);
+        return ctx.internalServerError("Could not prepare payment.");
+      }
+    },
     async placeOrder(ctx) {
       try {
         const { body } = ctx.request as any; // Type assertion to access body
@@ -467,7 +559,7 @@ export default factories.createCoreController(
         const { orderStatus, paymentStatus } = ctx.request.body;
 
         const data: any = {};
-        if (orderStatus !== undefined)   data.orderStatus = orderStatus;
+        if (orderStatus !== undefined) data.orderStatus = orderStatus;
         if (paymentStatus !== undefined) data.paymentStatus = paymentStatus;
 
         // id may be a documentId string — resolve to numeric id first
@@ -517,7 +609,27 @@ export default factories.createCoreController(
           },
         );
 
-        // ✅ Transform data to match frontend UI
+        const getProgressStatus = (status: string | undefined) => {
+          switch ((status || "").trim().toLowerCase().replace(/_/g, " ")) {
+            case "placed":
+            case "pending":
+              return "Placed";
+            case "confirmed":
+            case "processing":
+            case "in progress":
+              return "In Progress";
+            case "shipped":
+              return "Shipped";
+            case "delivered":
+            case "completed":
+              return "Delivered";
+            case "cancelled":
+              return "Cancelled";
+            default:
+              return "N/A";
+          }
+        };
+
         const formattedOrders = allOrders.map((order: any) => ({
           id: order.id,
           documentId: order.documentId,
@@ -532,33 +644,18 @@ export default factories.createCoreController(
             avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${order.seller?.username || "seller"}`,
           },
 
-          amount: order.totalAmount ? `TBH${order.totalAmount}` : "TBH0.00",
+          amount: order.totalAmount ? `thb${order.totalAmount}` : "thb0.00",
 
           item: order.product?.title || "Product",
           itemImage: order.product?.image || "https://via.placeholder.com/300",
 
           role: "User",
 
-          roleColor:
-            order.status === "Delivered"
-              ? "bg-[#ffede0] text-[#f2994a]"
-              : "bg-[#56ab65]",
+          roleColor: "bg-[#56ab65]",
 
-          status: order.status || "Pending",
+          status: order.paymentStatus || "pending",
 
-          progressStatus:
-            order.status === "Delivered"
-              ? "Completed"
-              : order.status === "Cancelled"
-                ? "Cancelled"
-                : "In Progress",
-
-          dotColor:
-            order.status === "Delivered"
-              ? "bg-orange-500"
-              : order.status === "Cancelled"
-                ? "bg-red-500"
-                : "bg-green-600",
+          progressStatus: getProgressStatus(order.orderStatus),
 
           tracking: order.trackingNumber || "N/A",
           carrier: order.carrier || "N/A",
@@ -576,6 +673,491 @@ export default factories.createCoreController(
       } catch (error) {
         strapi.log.error(error);
         return ctx.internalServerError("Failed to load orders.");
+      }
+    },
+
+    /**
+     * GET /orders/:id/payment-summary
+     */
+    async getPaymentSummary(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const order = (await strapi.entityService.findOne(
+          "api::order.order",
+          resolvedId,
+          { populate: { buyer: true, seller: true, product: true } }
+        )) as any;
+
+        if (!order) return ctx.notFound("Order not found.");
+
+        const totalAmount = Number(order.totalAmount || 0);
+        const amountMinor = Math.round(totalAmount * 100);
+        const platformCommissionMinor = Math.round(amountMinor * 0.1);
+        const sellerEarningsMinor = amountMinor - platformCommissionMinor;
+        const stripeFeeMinor = Math.round(amountMinor * 0.0365) + 1000;
+
+        return ctx.send({
+          ok: true,
+          data: {
+            orderId: order.id,
+            currency: order.currency || "thb",
+            totalAmount,
+            amountMinor,
+            platformCommission: platformCommissionMinor / 100,
+            platformCommissionMinor,
+            commissionRate: 10,
+            sellerEarnings: sellerEarningsMinor / 100,
+            sellerEarningsMinor,
+            stripeFee: stripeFeeMinor / 100,
+            stripeFeeMinor,
+            paymentStatus: order.paymentStatus || "pending",
+            payoutStatus: order.payoutStatus || "NOT_ELIGIBLE",
+            paymentIntentId: order.paymentIntentId || null,
+            chargeId: order.chargeId || null,
+            orderStatus: order.orderStatus || "placed",
+            deliveredAt: order.deliveredAt || null,
+            disputeDeadline: order.disputeDeadline || null,
+            payoutEligibleAt: order.payoutEligibleAt || null,
+            disputeWindowStatus: order.disputeWindowStatus || "CLOSED",
+          },
+        });
+      } catch (error) {
+        strapi.log.error("Error in getPaymentSummary:", error);
+        return ctx.internalServerError("Failed to retrieve payment summary.");
+      }
+    },
+
+    /**
+     * POST /orders/:id/confirm-delivery
+     */
+    async confirmDelivery(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const order = (await strapi.entityService.findOne(
+          "api::order.order",
+          resolvedId,
+          { populate: { buyer: true, seller: true } }
+        )) as any;
+
+        if (!order) return ctx.notFound("Order not found.");
+
+        // Prevent repeated delivery confirmation from resetting the 48-hour timer!
+        if (order.deliveredAt && (order.orderStatus || "").toLowerCase() === "delivered") {
+          return ctx.send({
+            ok: true,
+            message: "Delivery was already confirmed. Dispute window remains active without resetting timer.",
+            data: order,
+          });
+        }
+
+        const now = new Date();
+        const deliveredAt = now.toISOString();
+        const disputeDeadline = new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString();
+        const totalAmount = Number(order.totalAmount || 0);
+
+        const updated = await strapi.entityService.update(
+          "api::order.order",
+          resolvedId,
+          {
+            data: {
+              orderStatus: "delivered",
+              deliveredAt,
+              disputeDeadline,
+              payoutEligibleAt: disputeDeadline,
+              disputeWindowStatus: "OPEN",
+              payoutStatus: "NOT_ELIGIBLE",
+              platformCommission: Math.round(totalAmount * 0.1 * 100) / 100,
+              sellerEarnings: Math.round(totalAmount * 0.9 * 100) / 100,
+            } as any,
+          }
+        );
+
+        if (order.buyer?.id) {
+          await createNotification({
+            strapi,
+            recipientId: order.buyer.id,
+            type: "order_update",
+            title: "Order Delivered",
+            body: `Order #${resolvedId} has been confirmed delivered. Your 48-hour buyer dispute window is now active until ${new Date(
+              disputeDeadline
+            ).toLocaleTimeString("en-GB")}.`,
+            link: "/Orders",
+          });
+        }
+
+        return ctx.send({
+          ok: true,
+          message: "Order marked DELIVERED. 48-hour dispute window started.",
+          data: updated,
+        });
+      } catch (error) {
+        strapi.log.error("Error confirming delivery:", error);
+        return ctx.internalServerError("Failed to confirm delivery.");
+      }
+    },
+
+    /**
+     * GET /orders/:id/dispute-eligibility
+     */
+    async getDisputeEligibility(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const order = (await strapi.entityService.findOne(
+          "api::order.order",
+          resolvedId,
+          { populate: { buyer: true, seller: true } }
+        )) as any;
+
+        if (!order) return ctx.notFound("Order not found.");
+
+        const isDelivered = (order.orderStatus || "").toLowerCase() === "delivered";
+        const deliveredAt = order.deliveredAt;
+        const disputeDeadline = order.disputeDeadline
+          ? order.disputeDeadline
+          : deliveredAt
+          ? new Date(new Date(deliveredAt).getTime() + 48 * 60 * 60 * 1000).toISOString()
+          : null;
+
+        const isRefunded = (order.paymentStatus || "").toLowerCase() === "refunded";
+        const payoutStatus = (order.payoutStatus || "NOT_ELIGIBLE").toUpperCase();
+        const isPayoutReleased = ["PAID", "TRANSFERRED"].includes(payoutStatus);
+
+        const now = Date.now();
+        const isWithin48h = disputeDeadline ? now <= new Date(disputeDeadline).getTime() : false;
+
+        const disputes = (await strapi.entityService.findMany(
+          "api::dispute.dispute",
+          { filters: { order: { id: resolvedId } } as any }
+        )) as any[];
+
+        const hasActiveDispute = disputes.some((d: any) =>
+          ["OPEN", "UNDER_REVIEW", "AWAITING_INFORMATION"].includes((d.status || "").toUpperCase())
+        );
+
+        let eligible = false;
+        let reason: string | null = null;
+
+        if (!isDelivered) {
+          reason = "Order is not yet delivered.";
+        } else if (!isWithin48h) {
+          reason = "The 48-hour dispute and refund request period has expired.";
+        } else if (isRefunded) {
+          reason = "The order has already been refunded.";
+        } else if (isPayoutReleased) {
+          reason = "The seller payout has already been released.";
+        } else if (hasActiveDispute) {
+          reason = "An active dispute or refund request already exists for this order.";
+        } else {
+          eligible = true;
+        }
+
+        const remainingMs = disputeDeadline
+          ? Math.max(0, new Date(disputeDeadline).getTime() - now)
+          : 0;
+        const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
+        const remainingMinutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+        return ctx.send({
+          ok: true,
+          data: {
+            eligible,
+            reason,
+            deliveredAt,
+            disputeDeadline,
+            remainingHours,
+            remainingMinutes,
+            hasActiveDispute,
+            isRefunded,
+            payoutStatus,
+          },
+        });
+      } catch (error) {
+        strapi.log.error("Error in getDisputeEligibility:", error);
+        return ctx.internalServerError("Failed to check dispute eligibility.");
+      }
+    },
+
+    /**
+     * POST /orders/:id/disputes
+     */
+    async createOrderDispute(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const { reason, description, evidence, raisedBy, sellerId } =
+          ctx.request.body || {};
+
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const order = (await strapi.entityService.findOne(
+          "api::order.order",
+          resolvedId,
+          { populate: { buyer: true, seller: true } }
+        )) as any;
+
+        if (!order) return ctx.notFound("Order not found.");
+
+        const currentPayoutStatus = (order.payoutStatus || "").toUpperCase();
+        if (["PROCESSING", "PAID", "TRANSFERRED"].includes(currentPayoutStatus)) {
+          return ctx.badRequest(
+            "Cannot file dispute: Seller payout is already being processed or completed."
+          );
+        }
+
+        if ((order.orderStatus || "").toLowerCase() !== "delivered") {
+          return ctx.badRequest("Disputes can only be filed after order is delivered.");
+        }
+
+        const deadline = order.disputeDeadline
+          ? new Date(order.disputeDeadline).getTime()
+          : new Date(order.deliveredAt).getTime() + 48 * 60 * 60 * 1000;
+        if (Date.now() > deadline) {
+          return ctx.badRequest("The 48-hour dispute window has expired.");
+        }
+
+        const existingDisputes = (await strapi.entityService.findMany(
+          "api::dispute.dispute",
+          { filters: { order: { id: resolvedId } } as any }
+        )) as any[];
+
+        const activeExists = existingDisputes.some((d: any) =>
+          ["OPEN", "UNDER_REVIEW", "AWAITING_INFORMATION"].includes((d.status || "").toUpperCase())
+        );
+        if (activeExists) {
+          return ctx.badRequest("An active dispute already exists for this order.");
+        }
+
+        await strapi.entityService.update("api::order.order", resolvedId, {
+          data: { payoutStatus: "ON_HOLD" } as any,
+        });
+
+        const newDispute = (await strapi.entityService.create(
+          "api::dispute.dispute",
+          {
+            data: {
+              order: { id: resolvedId },
+              raisedBy: raisedBy || order.buyer?.id,
+              recievedBy: sellerId || order.seller?.id,
+              requestType: "DISPUTE",
+              reason: reason || "OTHER",
+              description: description || "",
+              evidence: evidence || null,
+              status: "OPEN",
+              refundAmount: Number(order.totalAmount || 0),
+            } as any,
+          }
+        )) as any;
+
+        const buyerId = raisedBy || order.buyer?.id;
+        const targetSellerId = sellerId || order.seller?.id;
+        if (buyerId) {
+          await createNotification({
+            strapi,
+            recipientId: buyerId,
+            type: "dispute_raised",
+            title: "Dispute Submitted",
+            body: `Your dispute on Order #${resolvedId} was submitted and seller payout is on hold pending admin review.`,
+            link: "/Orders?tab=Disputes_Raised",
+          });
+        }
+        if (targetSellerId) {
+          await createNotification({
+            strapi,
+            recipientId: targetSellerId,
+            type: "dispute_received",
+            title: "Dispute Received - Payout On Hold",
+            body: `A buyer dispute (${reason}) was filed on Order #${resolvedId}. Payout has been placed on hold.`,
+            link: "/Orders?tab=Disputes_Recieved",
+          });
+        }
+
+        return ctx.created({
+          ok: true,
+          message: "Dispute filed successfully. Seller payout placed on hold.",
+          data: newDispute,
+        });
+      } catch (error) {
+        strapi.log.error("Error creating dispute:", error);
+        return ctx.internalServerError("Failed to submit dispute.");
+      }
+    },
+
+    /**
+     * POST /orders/:id/refund-requests
+     */
+    async createRefundRequest(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const { reason, description, evidence, refundAmount, raisedBy, sellerId } =
+          ctx.request.body || {};
+
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const order = (await strapi.entityService.findOne(
+          "api::order.order",
+          resolvedId,
+          { populate: { buyer: true, seller: true } }
+        )) as any;
+
+        if (!order) return ctx.notFound("Order not found.");
+
+        const currentPayoutStatus = (order.payoutStatus || "").toUpperCase();
+        if (["PROCESSING", "PAID", "TRANSFERRED"].includes(currentPayoutStatus)) {
+          return ctx.badRequest(
+            "Cannot request refund: Seller payout is already being processed or completed."
+          );
+        }
+
+        if ((order.orderStatus || "").toLowerCase() !== "delivered") {
+          return ctx.badRequest("Refund requests can only be submitted after order is delivered.");
+        }
+
+        const deadline = order.disputeDeadline
+          ? new Date(order.disputeDeadline).getTime()
+          : new Date(order.deliveredAt).getTime() + 48 * 60 * 60 * 1000;
+        if (Date.now() > deadline) {
+          return ctx.badRequest("The 48-hour dispute and refund window has expired.");
+        }
+
+        await strapi.entityService.update("api::order.order", resolvedId, {
+          data: { payoutStatus: "ON_HOLD" } as any,
+        });
+
+        const effectiveRefundAmount =
+          refundAmount !== undefined ? Number(refundAmount) : Number(order.totalAmount || 0);
+
+        const newRequest = (await strapi.entityService.create(
+          "api::dispute.dispute",
+          {
+            data: {
+              order: { id: resolvedId },
+              raisedBy: raisedBy || order.buyer?.id,
+              recievedBy: sellerId || order.seller?.id,
+              requestType: "REFUND_REQUEST",
+              reason: reason || "OTHER",
+              description: description || "",
+              evidence: evidence || null,
+              status: "OPEN",
+              refundStatus: "PENDING",
+              refundAmount: effectiveRefundAmount,
+            } as any,
+          }
+        )) as any;
+
+        const buyerId = raisedBy || order.buyer?.id;
+        const targetSellerId = sellerId || order.seller?.id;
+        if (buyerId) {
+          await createNotification({
+            strapi,
+            recipientId: buyerId,
+            type: "dispute_raised",
+            title: "Refund Request Submitted",
+            body: `Your refund request of ${effectiveRefundAmount} THB for Order #${resolvedId} is awaiting admin review.`,
+            link: "/Orders?tab=Disputes_Raised",
+          });
+        }
+        if (targetSellerId) {
+          await createNotification({
+            strapi,
+            recipientId: targetSellerId,
+            type: "dispute_received",
+            title: "Refund Request Received - Payout On Hold",
+            body: `A refund request was submitted for Order #${resolvedId}. Payout has been placed on hold pending admin review.`,
+            link: "/Orders?tab=Disputes_Recieved",
+          });
+        }
+
+        return ctx.created({
+          ok: true,
+          message: "Refund request submitted and awaiting admin review. Payout placed on hold.",
+          data: newRequest,
+        });
+      } catch (error) {
+        strapi.log.error("Error creating refund request:", error);
+        return ctx.internalServerError("Failed to submit refund request.");
+      }
+    },
+
+    /**
+     * GET /orders/:id/disputes
+     */
+    async getOrderDisputes(ctx: any) {
+      try {
+        const { id } = ctx.params;
+        const numericId = Number(id);
+        let resolvedId = numericId;
+        if (Number.isNaN(numericId) || numericId <= 0) {
+          const row = await strapi.db.query("api::order.order").findOne({
+            where: { documentId: id },
+            select: ["id"],
+          });
+          if (!row) return ctx.notFound("Order not found.");
+          resolvedId = row.id;
+        }
+
+        const disputes = await strapi.entityService.findMany(
+          "api::dispute.dispute",
+          {
+            filters: { order: { id: resolvedId } } as any,
+            populate: { raisedBy: true, recievedBy: true, order: true },
+            sort: { createdAt: "desc" },
+          }
+        );
+
+        return ctx.send({ ok: true, data: disputes });
+      } catch (error) {
+        strapi.log.error("Error getting order disputes:", error);
+        return ctx.internalServerError("Failed to get order disputes.");
       }
     },
   }),

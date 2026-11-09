@@ -49,14 +49,29 @@
     "currency": {
       "type": "string",
       "required": true,
-      "default": "TBH",
+      "default": "thb",
       "maxLength": 3
     },
     "status": {
       "type": "enumeration",
       "enum": [
+        "NOT_ELIGIBLE",
+        "ELIGIBLE",
+        "ON_HOLD",
+        "PROCESSING",
+        "TRANSFERRED",
+        "BANK_PAYOUT_PENDING",
+        "PAID",
+        "FAILED",
+        "CANCELLED",
+        "not_eligible",
+        "eligible",
+        "on_hold",
         "pending",
         "processing",
+        "transferred",
+        "bank_payout_pending",
+        "paid",
         "success",
         "failed",
         "refused"
@@ -64,13 +79,18 @@
       "required": true,
       "default": "pending"
     },
+    "isMock": {
+      "type": "boolean",
+      "default": false
+    },
+    "stripeAccountId": {
+      "type": "string"
+    },
     "stripeTransferId": {
-      "type": "string",
-      "private": true
+      "type": "string"
     },
     "stripePayoutId": {
-      "type": "string",
-      "private": true
+      "type": "string"
     },
     "bankAccountLast4": {
       "type": "string",
