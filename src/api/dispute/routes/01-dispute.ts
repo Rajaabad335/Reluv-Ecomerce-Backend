@@ -15,6 +15,14 @@ export default {
       config: {
         auth: false,
       }
+    },
+    {
+      method: "POST",
+      path: "/disputes/:id/submit-information",
+      handler: "dispute.submitBuyerInfo",
+      config: {
+        auth: false,
+      }
     }
   ],
 };

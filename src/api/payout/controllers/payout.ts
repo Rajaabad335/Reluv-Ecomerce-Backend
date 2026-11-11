@@ -67,6 +67,240 @@ export const stripeConnectPayoutService = {
   },
 };
 
+const FINALIZED_DISPUTE_STATUSES = [
+  "RESOLVED_REFUND",
+  "RESOLVED_RELEASE",
+  "RESOLVED",
+  "REJECTED",
+  "CLOSED",
+];
+
+async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
+  const stateId = Number(ctx?.state?.user?.id);
+  if (Number.isInteger(stateId) && stateId > 0) return stateId;
+  const authorization = String(ctx?.request?.headers?.authorization ?? "");
+  if (!authorization.startsWith("Bearer ")) return null;
+  try {
+    const payload = await strapi
+      .plugin("users-permissions")
+      .service("jwt")
+      .verify(authorization.slice(7).trim());
+    const id = Number(payload?.id);
+    return Number.isInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function computeRestoredPayoutStatus(order: any): string {
+  if (!order) return "NOT_ELIGIBLE";
+  if ((order.paymentStatus || "").toLowerCase() === "refunded") {
+    return "CANCELLED";
+  }
+  const current = (order.payoutStatus || "").toUpperCase();
+  if (["PAID", "TRANSFERRED"].includes(current)) {
+    return current;
+  }
+  const isDelivered = (order.orderStatus || "").toLowerCase() === "delivered";
+  const deliveredAt = order.deliveredAt || order.updatedAt || order.createdAt;
+  const deadline = order.disputeDeadline
+    ? new Date(order.disputeDeadline).getTime()
+    : deliveredAt
+    ? new Date(deliveredAt).getTime() + 48 * 60 * 60 * 1000
+    : null;
+  if (isDelivered && deadline && Date.now() >= deadline) {
+    return "ELIGIBLE";
+  }
+  return "NOT_ELIGIBLE";
+}
+
+async function findDisputeWithRelations(strapi: any, disputeId: number | string) {
+  const populate = {
+    order: { populate: { buyer: true, seller: true, product: true } },
+    raisedBy: true,
+    recievedBy: true,
+  };
+  if (typeof disputeId === "number" || !isNaN(Number(disputeId))) {
+    return (await strapi.entityService.findOne(
+      "api::dispute.dispute",
+      Number(disputeId),
+      { populate }
+    )) as any;
+  }
+  const rows = (await strapi.entityService.findMany("api::dispute.dispute", {
+    filters: { documentId: disputeId } as any,
+    populate,
+  })) as any[];
+  return rows?.[0] || null;
+}
+
+interface ExecuteSellerPayoutResult {
+  ok: boolean;
+  statusCode: number;
+  message: string;
+  payout?: any;
+  order?: any;
+  sellerAmount?: number;
+  commissionAmount?: number;
+  transferId?: string;
+  destinationAccountId?: string;
+}
+
+async function executeSellerPayoutForOrder(
+  strapi: any,
+  {
+    orderId,
+    notes,
+    fallbackOrderPayoutStatus = "FAILED",
+  }: {
+    orderId: number;
+    notes?: string | null;
+    fallbackOrderPayoutStatus?: string;
+  }
+): Promise<ExecuteSellerPayoutResult> {
+  const order = (await strapi.entityService.findOne(
+    "api::order.order",
+    Number(orderId),
+    { populate: { buyer: true, seller: true } }
+  )) as any;
+
+  if (!order) {
+    return { ok: false, statusCode: 404, message: "Order not found." };
+  }
+
+  if ((order.paymentStatus || "").toLowerCase() === "refunded") {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: "Cannot release payout: This order has been refunded.",
+    };
+  }
+
+  const existingPayouts = (await strapi.entityService.findMany(
+    "api::payout.payout",
+    { filters: { order: { id: order.id } } as any }
+  )) as any[];
+
+  const alreadyPaid = existingPayouts.some(
+    (p: any) =>
+      p.isMock !== true &&
+      ["success", "paid", "processing", "transferred"].includes(
+        (p.status || "").toLowerCase()
+      )
+  );
+  if (
+    alreadyPaid ||
+    ["PAID", "TRANSFERRED", "PROCESSING"].includes(
+      (order.payoutStatus || "").toUpperCase()
+    )
+  ) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message:
+        "Cannot release payout: Payout has already been processed or completed.",
+    };
+  }
+
+  const destinationAccountId = order.seller?.stripeAccountId;
+  if (!destinationAccountId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message:
+        "Seller does not have a connected Stripe Connect account yet. Ask the seller to connect Stripe in Settings -> Payments before releasing payout.",
+    };
+  }
+
+  const totalAmt = Number(order.totalAmount || 0);
+  const commissionAmount = Math.round(totalAmt * 0.1 * 100) / 100;
+  const sellerAmount = Math.round(totalAmt * 0.9 * 100) / 100;
+
+  if (!Number.isFinite(sellerAmount) || sellerAmount <= 0) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message: "Cannot release payout: Seller payout amount must be greater than zero.",
+    };
+  }
+
+  await strapi.entityService.update("api::order.order", order.id, {
+    data: { payoutStatus: "PROCESSING" } as any,
+  });
+
+  const payoutResult = await stripeConnectPayoutService.executePayout({
+    orderId: order.id,
+    sellerId: order.seller?.id,
+    amountMinor: Math.round(sellerAmount * 100),
+    currency: order.currency || "thb",
+    destinationAccountId,
+  });
+
+  const payout = (await strapi.entityService.create("api::payout.payout", {
+    data: {
+      seller: order.seller?.id,
+      order: order.id,
+      grossAmount: totalAmt,
+      commissionRate: 10,
+      commissionAmount,
+      netAmount: sellerAmount,
+      currency: String(order.currency || "thb").toLowerCase().slice(0, 3),
+      status: payoutResult.status === "FAILED" ? "failed" : "success",
+      isMock: false,
+      stripeAccountId: destinationAccountId,
+      stripeTransferId: payoutResult.transferId,
+      stripePayoutId: payoutResult.payoutId,
+      bankAccountLast4: order.seller?.bankAccountLast4 || null,
+      processedAt: new Date(),
+      notes: notes || null,
+      failureReason: payoutResult.error || null,
+    } as any,
+  })) as any;
+
+  await strapi.entityService.update("api::order.order", order.id, {
+    data: {
+      payoutStatus:
+        payoutResult.status === "FAILED" ? fallbackOrderPayoutStatus : "PAID",
+      platformCommission: commissionAmount,
+      sellerEarnings: sellerAmount,
+    } as any,
+  });
+
+  if (payoutResult.status === "FAILED" || !payoutResult.transferId) {
+    return {
+      ok: false,
+      statusCode: 400,
+      message:
+        payoutResult.error || "Stripe Connect transfer could not be completed.",
+    };
+  }
+
+  return {
+    ok: true,
+    statusCode: 200,
+    message: "Stripe Connect transfer created successfully.",
+    payout,
+    order,
+    sellerAmount,
+    commissionAmount,
+    transferId: payoutResult.transferId,
+    destinationAccountId,
+  };
+}
+
+function getStripeRefundTarget(order: any): {
+  payment_intent?: string;
+  charge?: string;
+} | null {
+  if (order?.paymentIntentId) {
+    return { payment_intent: order.paymentIntentId };
+  }
+  if (order?.chargeId) {
+    return { charge: order.chargeId };
+  }
+  return null;
+}
+
 export default factories.createCoreController(
   "api::payout.payout",
   ({ strapi }) => ({
@@ -437,79 +671,29 @@ export default factories.createCoreController(
           );
         }
 
-        if ((order.paymentStatus || "").toLowerCase() === "refunded") {
-          return ctx.badRequest(
-            "Cannot release payout: This order has been refunded."
-          );
-        }
-
-        const existingPayouts = (await strapi.entityService.findMany(
-          "api::payout.payout",
-          {
-            filters: { order: { id: orderId } } as any,
-          }
-        )) as any[];
-
-        const alreadyPaid = existingPayouts.some(
-          (p: any) =>
-            p.isMock !== true &&
-            ["success", "paid", "processing", "transferred"].includes(
-              (p.status || "").toLowerCase()
-            )
-        );
-
-        if (alreadyPaid) {
-          return ctx.badRequest(
-            "Cannot release payout: Payout has already been processed or completed."
-          );
-        }
-
-        const totalAmt = Number(order.totalAmount || 0);
-        const commissionAmount = Math.round(totalAmt * 0.1 * 100) / 100;
-        const sellerAmount = Math.round(totalAmt * 0.9 * 100) / 100;
-
-        // Atomically set PROCESSING
-        await strapi.entityService.update("api::order.order", order.id, {
-          data: { payoutStatus: "PROCESSING" } as any,
-        });
-
-        const payoutResult = await stripeConnectPayoutService.executePayout({
+        const transferResult = await executeSellerPayoutForOrder(strapi, {
           orderId: order.id,
-          sellerId: order.seller?.id,
-          amountMinor: Math.round(sellerAmount * 100),
-          currency: order.currency || "thb",
-          destinationAccountId: order.seller?.stripeAccountId,
+          notes: notes || null,
+          fallbackOrderPayoutStatus: "FAILED",
         });
 
-        const payout = (await strapi.entityService.create("api::payout.payout", {
-          data: {
-            seller: order.seller?.id,
-            order: order.id,
-            grossAmount: totalAmt,
-            commissionRate: 10,
-            commissionAmount,
-            netAmount: sellerAmount,
-            currency: "thb",
-            status: payoutResult.status === "FAILED" ? "failed" : "success",
-            isMock: false,
-            stripeTransferId: payoutResult.transferId,
-            stripePayoutId: payoutResult.payoutId,
-            processedAt: new Date(),
-            notes: notes || null,
-            failureReason: payoutResult.error || null,
-          } as any,
-        })) as any;
-
-        // Update order payout status
-        await strapi.entityService.update("api::order.order", order.id, {
-          data: { payoutStatus: payoutResult.status === "FAILED" ? "FAILED" : "PAID" } as any,
-        });
-
-        if (payoutResult.status === "FAILED") {
-          return ctx.badRequest(
-            payoutResult.error || "Stripe Connect transfer could not be completed."
+        if (!transferResult.ok) {
+          return ctx.send(
+            {
+              error: {
+                status: transferResult.statusCode,
+                name: "BadRequestError",
+                message: transferResult.message,
+              },
+              ok: false,
+              message: transferResult.message,
+            },
+            transferResult.statusCode
           );
         }
+
+        const { payout, sellerAmount, commissionAmount, transferId } =
+          transferResult;
 
         if (order.seller?.id) {
           await createNotification({
@@ -517,7 +701,7 @@ export default factories.createCoreController(
             recipientId: order.seller.id,
             type: "order_update",
             title: "Seller Payout Released",
-            body: `Payout of ${sellerAmount.toLocaleString()} THB for Order #ORD-${order.id} has been released to your account.`,
+            body: `Payout of ${sellerAmount.toLocaleString()} THB for Order #ORD-${order.id} has been released to your Stripe Connect account (Transfer: ${transferId}).`,
             link: "/Orders",
           });
         }
@@ -530,8 +714,8 @@ export default factories.createCoreController(
             orderId: order.id,
             sellerAmount,
             commissionAmount,
-            transferId: payoutResult.transferId,
-            payoutId: payoutResult.payoutId,
+            transferId,
+            payoutId: payout.stripePayoutId || null,
             processedAt: new Date().toISOString(),
             status: "Paid",
           },
@@ -548,58 +732,130 @@ export default factories.createCoreController(
     async handleDisputeAction(ctx) {
       try {
         const { disputeId, action, resolution, adminNotes, refundAmount } =
-          ctx.request.body;
+          ctx.request.body || {};
 
         if (!disputeId || !action) {
           return ctx.badRequest("disputeId and action are required.");
         }
 
-        let dispute: any = null;
-        if (typeof disputeId === "number" || !isNaN(Number(disputeId))) {
-          dispute = await strapi.entityService.findOne(
-            "api::dispute.dispute",
-            Number(disputeId),
-            { populate: { order: true, raisedBy: true, recievedBy: true } }
-          );
-        } else {
-          const rows = (await strapi.entityService.findMany(
-            "api::dispute.dispute",
-            {
-              filters: { documentId: disputeId } as any,
-              populate: { order: true, raisedBy: true, recievedBy: true },
-            }
-          )) as any[];
-          dispute = rows?.[0];
-        }
-
+        const dispute = await findDisputeWithRelations(strapi, disputeId);
         if (!dispute) {
           return ctx.notFound("Dispute not found.");
         }
 
         const order = dispute.order;
+        const currentStatus = (dispute.status || "OPEN").toUpperCase();
+        const normalizedAction = String(action).trim().toUpperCase();
 
-        if (action === "REFUND_BUYER") {
+        if (
+          FINALIZED_DISPUTE_STATUSES.includes(currentStatus) &&
+          normalizedAction !== "ADD_NOTE"
+        ) {
+          return ctx.badRequest(
+            `This dispute is already finalized (${currentStatus}) and cannot run ${normalizedAction}.`
+          );
+        }
+
+        if (normalizedAction === "UNDER_REVIEW" || normalizedAction === "ADD_NOTE") {
+          const noteText = String(adminNotes ?? resolution ?? "").trim();
+          const nextNotes = noteText
+            ? dispute.adminNotes && dispute.adminNotes !== noteText
+              ? `${dispute.adminNotes}\n${noteText}`
+              : noteText
+            : dispute.adminNotes || "Admin started reviewing this dispute.";
+
+          const nextStatus = FINALIZED_DISPUTE_STATUSES.includes(currentStatus)
+            ? currentStatus
+            : "UNDER_REVIEW";
+
+          const updatedDispute = await strapi.entityService.update(
+            "api::dispute.dispute",
+            dispute.id,
+            {
+              data: {
+                status: nextStatus,
+                adminNotes: nextNotes,
+              } as any,
+            }
+          );
+
+          if (!FINALIZED_DISPUTE_STATUSES.includes(nextStatus) && order?.id) {
+            await strapi.entityService.update("api::order.order", order.id, {
+              data: { payoutStatus: "ON_HOLD" } as any,
+            });
+          }
+
+          if (dispute.raisedBy?.id) {
+            await createNotification({
+              strapi,
+              recipientId: dispute.raisedBy.id,
+              type: "dispute_status_updated",
+              title: "Dispute Under Review",
+              body: `Your dispute on Order #ORD-${order?.id ?? dispute.id} is now Under Review.${noteText ? ` Note: ${noteText}` : ""}`,
+              link: "/Orders?tab=Disputes_Raised",
+            });
+          }
+          if (dispute.recievedBy?.id) {
+            await createNotification({
+              strapi,
+              recipientId: dispute.recievedBy.id,
+              type: "dispute_status_updated",
+              title: "Dispute Under Admin Review",
+              body: `Dispute on Order #ORD-${order?.id ?? dispute.id} is now Under Review by admin.`,
+              link: "/Orders?tab=Disputes_Recieved",
+            });
+          }
+
+          return ctx.send({
+            ok: true,
+            action: normalizedAction,
+            status: nextStatus,
+            message:
+              nextStatus === "UNDER_REVIEW"
+                ? "Dispute moved to Under Review and admin notes saved."
+                : "Admin notes saved.",
+            data: updatedDispute,
+          });
+        } else if (normalizedAction === "REFUND_BUYER") {
           const effectiveRefundAmt =
-            refundAmount !== undefined
+            refundAmount !== undefined && refundAmount !== ""
               ? Number(refundAmount)
               : Number(dispute.refundAmount || order?.totalAmount || 0);
 
-          if (!order?.paymentIntentId) {
+          const refundTarget = getStripeRefundTarget(order);
+          if (!refundTarget) {
             return ctx.badRequest(
-              "Cannot issue refund: this order has no Stripe payment intent."
+              "Cannot issue refund: this order has no Stripe payment intent or charge."
             );
           }
           if (!Number.isFinite(effectiveRefundAmt) || effectiveRefundAmt <= 0) {
             return ctx.badRequest("Refund amount must be greater than zero.");
           }
           if (dispute.stripeRefundId && dispute.refundStatus !== "FAILED") {
-            return ctx.badRequest("A Stripe refund has already been created for this dispute.");
+            return ctx.badRequest(
+              "A Stripe refund has already been created for this dispute."
+            );
+          }
+          if ((order?.paymentStatus || "").toLowerCase() === "refunded") {
+            return ctx.badRequest("This order has already been refunded.");
           }
 
-          const refund = await stripe.refunds.create({
-            payment_intent: order.paymentIntentId,
-            amount: Math.round(effectiveRefundAmt * 100),
-          });
+          let refund: any;
+          try {
+            refund = await stripe.refunds.create({
+              ...refundTarget,
+              amount: Math.round(effectiveRefundAmt * 100),
+              metadata: {
+                disputeId: String(dispute.id),
+                orderId: String(order?.id || ""),
+              },
+            });
+          } catch (stripeErr: any) {
+            const msg =
+              stripeErr?.message || "Stripe refund request failed.";
+            return ctx.badRequest(`Stripe Refund failed: ${msg}`);
+          }
+
           const refundStatus =
             refund.status === "succeeded"
               ? "SUCCEEDED"
@@ -607,20 +863,21 @@ export default factories.createCoreController(
               ? "PROCESSING"
               : "FAILED";
           const resolved = refund.status === "succeeded";
+          const nextStatus = resolved ? "RESOLVED_REFUND" : "UNDER_REVIEW";
 
-          await strapi.entityService.update(
+          const updatedDispute = await strapi.entityService.update(
             "api::dispute.dispute",
             dispute.id,
             {
               data: {
-                status: resolved ? "RESOLVED_REFUND" : "UNDER_REVIEW",
+                status: nextStatus,
                 refundStatus,
                 resolvedAt: resolved ? new Date() : null,
-                adminDecision: "REFUND_APPROVED",
+                adminDecision: "REFUND_BUYER",
                 stripeRefundId: refund.id,
                 resolution:
                   resolution ||
-                  `Refund of ${effectiveRefundAmt} THB submitted to Stripe.`,
+                  `Refund of ${effectiveRefundAmt} THB submitted to Stripe (${refund.id}).`,
                 adminNotes: adminNotes ?? dispute.adminNotes ?? null,
                 refundAmount: effectiveRefundAmt,
               } as any,
@@ -658,10 +915,10 @@ export default factories.createCoreController(
               strapi,
               recipientId: dispute.raisedBy.id,
               type: "refund_processed",
-              title: "Refund Approved",
+              title: "Refund Approved & Processed",
               body: `Your refund of ${effectiveRefundAmt.toLocaleString()} THB for Order #ORD-${
                 order?.id ?? dispute.id
-              } has been processed.`,
+              } has been refunded via Stripe (${refund.id}).`,
               link: "/Orders?tab=Disputes_Raised",
             });
           }
@@ -681,46 +938,60 @@ export default factories.createCoreController(
           return ctx.send({
             ok: true,
             action: "REFUND_BUYER",
+            refundId: refund.id,
+            refundStatus,
             message: resolved
-              ? `Refund of ${effectiveRefundAmt} THB succeeded. Seller payout blocked.`
-              : `Refund is ${refund.status}; payout remains on hold.`,
-            status: resolved ? "RESOLVED_REFUND" : "UNDER_REVIEW",
+              ? `Stripe refund of ${effectiveRefundAmt} THB succeeded (${refund.id}). Seller payout cancelled.`
+              : `Stripe refund is ${refund.status} (${refund.id}); dispute remains Under Review.`,
+            status: nextStatus,
+            data: updatedDispute,
           });
-        } else if (action === "RELEASE_TO_SELLER") {
-          if (!resolution || !resolution.trim()) {
+        } else if (normalizedAction === "RELEASE_TO_SELLER") {
+          if (!resolution || !String(resolution).trim()) {
             return ctx.badRequest(
-              "An admin resolution note is required when releasing to seller."
+              "An admin resolution note is required when releasing payout to seller."
             );
           }
+          if (!order?.id) {
+            return ctx.badRequest("No linked order found for this dispute.");
+          }
 
-          await strapi.entityService.update(
+          const transferResult = await executeSellerPayoutForOrder(strapi, {
+            orderId: order.id,
+            notes: `Dispute #${dispute.id} resolved in seller favor: ${String(resolution).trim()}`,
+            fallbackOrderPayoutStatus: "ON_HOLD",
+          });
+
+          if (!transferResult.ok) {
+            return ctx.badRequest(transferResult.message);
+          }
+
+          const { payout, sellerAmount, transferId, destinationAccountId } =
+            transferResult;
+
+          const updatedDispute = await strapi.entityService.update(
             "api::dispute.dispute",
             dispute.id,
             {
               data: {
                 status: "RESOLVED_RELEASE",
                 resolvedAt: new Date(),
-                resolution: resolution.trim(),
+                adminDecision: "RELEASE_TO_SELLER",
+                resolution: String(resolution).trim(),
                 adminNotes: adminNotes ?? dispute.adminNotes ?? null,
               } as any,
             }
           );
-
-          if (order?.id) {
-            await strapi.entityService.update("api::order.order", order.id, {
-              data: { payoutStatus: "ELIGIBLE" } as any,
-            });
-          }
 
           if (dispute.raisedBy?.id) {
             await createNotification({
               strapi,
               recipientId: dispute.raisedBy.id,
               type: "dispute_resolved",
-              title: "Dispute Decision Made",
+              title: "Dispute Resolved (Released to Seller)",
               body: `Your dispute for Order #ORD-${
-                order?.id ?? dispute.id
-              } has been resolved: ${resolution.trim()}`,
+                order.id
+              } has been resolved in favor of the seller: ${String(resolution).trim()}`,
               link: "/Orders?tab=Disputes_Raised",
             });
           }
@@ -729,10 +1000,8 @@ export default factories.createCoreController(
               strapi,
               recipientId: dispute.recievedBy.id,
               type: "dispute_resolved",
-              title: "Dispute Resolved in Your Favor",
-              body: `The dispute on Order #ORD-${
-                order?.id ?? dispute.id
-              } was resolved in your favor. Payout hold is removed.`,
+              title: "Dispute Resolved - Stripe Payout Sent",
+              body: `Dispute on Order #ORD-${order.id} was resolved in your favor. ${sellerAmount.toLocaleString()} THB has been transferred to your connected Stripe account (${transferId}).`,
               link: "/Orders?tab=Disputes_Recieved",
             });
           }
@@ -740,19 +1009,25 @@ export default factories.createCoreController(
           return ctx.send({
             ok: true,
             action: "RELEASE_TO_SELLER",
-            message:
-              "Dispute resolved in favor of seller. Payout hold removed (Available in Payouts table for release).",
+            message: `Dispute resolved and ${sellerAmount.toLocaleString()} THB transferred to seller Stripe Connect account (${transferId}).`,
             status: "RESOLVED_RELEASE",
+            payout: {
+              id: payout.id,
+              transferId,
+              destinationAccountId,
+              sellerAmount,
+            },
+            data: updatedDispute,
           });
-        } else if (action === "REQUEST_MORE_INFO") {
-          const notesText = (adminNotes || resolution || "").trim();
+        } else if (normalizedAction === "REQUEST_MORE_INFO") {
+          const notesText = String(adminNotes || resolution || "").trim();
           if (!notesText) {
             return ctx.badRequest(
               "Please provide an explanation or request note for the buyer."
             );
           }
 
-          await strapi.entityService.update(
+          const updatedDispute = await strapi.entityService.update(
             "api::dispute.dispute",
             dispute.id,
             {
@@ -764,13 +1039,19 @@ export default factories.createCoreController(
             }
           );
 
+          if (order?.id) {
+            await strapi.entityService.update("api::order.order", order.id, {
+              data: { payoutStatus: "ON_HOLD" } as any,
+            });
+          }
+
           if (dispute.raisedBy?.id) {
             await createNotification({
               strapi,
               recipientId: dispute.raisedBy.id,
               type: "dispute_status_updated",
-              title: "Information Requested on Dispute",
-              body: `Admin requested information on Order #ORD-${
+              title: "More Information Required on Dispute",
+              body: `Admin requested additional info/image evidence for Order #ORD-${
                 order?.id ?? dispute.id
               }: "${notesText}"`,
               link: "/Orders?tab=Disputes_Raised",
@@ -783,6 +1064,84 @@ export default factories.createCoreController(
             message:
               "Dispute status updated to Awaiting Information. Buyer has been notified.",
             status: "AWAITING_INFORMATION",
+            data: updatedDispute,
+          });
+        } else if (
+          [
+            "MARK_RESOLVED",
+            "RESOLVED",
+            "REJECT_DISPUTE",
+            "REJECTED",
+            "CLOSE_DISPUTE",
+            "CLOSED",
+          ].includes(normalizedAction)
+        ) {
+          const targetStatus =
+            normalizedAction === "MARK_RESOLVED" || normalizedAction === "RESOLVED"
+              ? "RESOLVED"
+              : normalizedAction === "REJECT_DISPUTE" || normalizedAction === "REJECTED"
+              ? "REJECTED"
+              : "CLOSED";
+
+          const resolutionText = String(resolution || adminNotes || "").trim();
+          if (!resolutionText) {
+            return ctx.badRequest(
+              `An admin note / resolution reason is required to mark dispute as ${targetStatus}.`
+            );
+          }
+
+          const updatedDispute = await strapi.entityService.update(
+            "api::dispute.dispute",
+            dispute.id,
+            {
+              data: {
+                status: targetStatus,
+                resolvedAt: new Date(),
+                adminDecision: targetStatus,
+                resolution: resolutionText,
+                adminNotes: adminNotes ?? dispute.adminNotes ?? resolutionText,
+              } as any,
+            }
+          );
+
+          if (order?.id) {
+            const restoredPayoutStatus = computeRestoredPayoutStatus(order);
+            await strapi.entityService.update("api::order.order", order.id, {
+              data: { payoutStatus: restoredPayoutStatus } as any,
+            });
+          }
+
+          if (dispute.raisedBy?.id) {
+            await createNotification({
+              strapi,
+              recipientId: dispute.raisedBy.id,
+              type: "dispute_resolved",
+              title: `Dispute ${targetStatus.charAt(0) + targetStatus.slice(1).toLowerCase()}`,
+              body: `Your dispute on Order #ORD-${
+                order?.id ?? dispute.id
+              } has been marked ${targetStatus}: ${resolutionText}`,
+              link: "/Orders?tab=Disputes_Raised",
+            });
+          }
+          if (dispute.recievedBy?.id) {
+            await createNotification({
+              strapi,
+              recipientId: dispute.recievedBy.id,
+              type: "dispute_resolved",
+              title: `Dispute ${targetStatus.charAt(0) + targetStatus.slice(1).toLowerCase()}`,
+              body: `The dispute on Order #ORD-${
+                order?.id ?? dispute.id
+              } has been marked ${targetStatus}.`,
+              link: "/Orders?tab=Disputes_Recieved",
+            });
+          }
+
+          return ctx.send({
+            ok: true,
+            action: normalizedAction,
+            status: targetStatus,
+            message: `Dispute marked as ${targetStatus}.`,
+            data: updatedDispute,
           });
         } else {
           return ctx.badRequest(`Unknown action: ${action}`);
@@ -830,14 +1189,21 @@ export default factories.createCoreController(
             : null;
 
           const s = (d.status || "OPEN").toUpperCase();
+          const orderPayStatus = (order.paymentStatus || "").toLowerCase();
+          const orderPayoutStatus = (order.payoutStatus || "NOT_ELIGIBLE").toUpperCase();
           let payoutHoldStatus = "ON_HOLD";
-          if (s === "RESOLVED_RELEASE") {
-            payoutHoldStatus = "RELEASED";
-          } else if (s === "RESOLVED_REFUND") {
+          if (orderPayStatus === "refunded" || s === "RESOLVED_REFUND") {
             payoutHoldStatus = "BLOCKED_REFUNDED";
-          } else if (s === "CLOSED" || s === "REJECTED") {
+          } else if (["PAID", "TRANSFERRED"].includes(orderPayoutStatus)) {
+            payoutHoldStatus = "PAID";
+          } else if (
+            ["RESOLVED_RELEASE", "RESOLVED", "CLOSED", "REJECTED"].includes(s)
+          ) {
             payoutHoldStatus = "RELEASED";
           }
+
+          const sellerStripeId =
+            d.recievedBy?.stripeAccountId || order.seller?.stripeAccountId || "";
 
           return {
             id: Number(d.id),
@@ -864,6 +1230,8 @@ export default factories.createCoreController(
                 d.recievedBy?.bankAccountLast4 ||
                 order.seller?.bankAccountLast4 ||
                 "",
+              stripeAccountId: sellerStripeId,
+              stripeConnectStatus: sellerStripeId ? "Connected" : "Not connected",
             },
             product: {
               id: order.product?.id || 0,
@@ -888,7 +1256,14 @@ export default factories.createCoreController(
             status: s,
             resolution: d.resolution || null,
             adminNotes: d.adminNotes || null,
+            adminDecision: d.adminDecision || null,
+            stripeRefundId: d.stripeRefundId || null,
+            refundStatus: d.refundStatus || "NONE",
             refundAmount: d.refundAmount ? Number(d.refundAmount) : totalAmt,
+            resolvedAt: d.resolvedAt || null,
+            orderPaymentStatus: order.paymentStatus || "pending",
+            orderPayoutStatus,
+            hasStripePayment: Boolean(order.paymentIntentId || order.chargeId),
             payoutHoldStatus,
             createdDate: d.createdAt,
             deliveryDate: deliveredAt,
@@ -1283,18 +1658,67 @@ export default factories.createCoreController(
         const { id } = ctx.params;
         const { status, adminNotes, resolution } = ctx.request.body || {};
 
+        const existing = await findDisputeWithRelations(strapi, id);
+        if (!existing) return ctx.notFound("Dispute not found.");
+
+        const normalizedStatus = status
+          ? String(status).trim().toUpperCase()
+          : null;
         const data: any = {};
-        if (status) data.status = status;
+        if (normalizedStatus) data.status = normalizedStatus;
         if (adminNotes !== undefined) data.adminNotes = adminNotes;
         if (resolution !== undefined) data.resolution = resolution;
+        if (
+          normalizedStatus &&
+          FINALIZED_DISPUTE_STATUSES.includes(normalizedStatus)
+        ) {
+          data.resolvedAt = new Date();
+        }
 
         const updated = await strapi.entityService.update(
           "api::dispute.dispute",
-          Number(id),
+          existing.id,
           { data }
         );
 
-        return ctx.send({ ok: true, message: "Dispute status updated.", data: updated });
+        if (existing.order?.id && normalizedStatus) {
+          if (
+            ["OPEN", "UNDER_REVIEW", "AWAITING_INFORMATION"].includes(
+              normalizedStatus
+            )
+          ) {
+            await strapi.entityService.update(
+              "api::order.order",
+              existing.order.id,
+              { data: { payoutStatus: "ON_HOLD" } as any }
+            );
+          } else if (
+            ["RESOLVED", "REJECTED", "CLOSED"].includes(normalizedStatus)
+          ) {
+            await strapi.entityService.update(
+              "api::order.order",
+              existing.order.id,
+              { data: { payoutStatus: computeRestoredPayoutStatus(existing.order) } as any }
+            );
+          }
+        }
+
+        if (normalizedStatus && existing.raisedBy?.id) {
+          await createNotification({
+            strapi,
+            recipientId: existing.raisedBy.id,
+            type: "dispute_status_updated",
+            title: "Dispute Status Updated",
+            body: `Your dispute on Order #ORD-${existing.order?.id ?? existing.id} is now ${normalizedStatus.replace(/_/g, " ")}.`,
+            link: "/Orders?tab=Disputes_Raised",
+          });
+        }
+
+        return ctx.send({
+          ok: true,
+          message: "Dispute status updated.",
+          data: updated,
+        });
       } catch (err) {
         strapi.log.error("Error updating dispute status:", err);
         return ctx.internalServerError("Failed to update dispute status.");
@@ -1303,43 +1727,56 @@ export default factories.createCoreController(
 
     /**
      * POST /admin/disputes/:id/refund
-     * (Action A: Refund Buyer)
+     * (Action A: Refund Buyer via Stripe)
      */
     async adminRefundBuyer(ctx) {
       try {
         const { id } = ctx.params;
-        const { resolution, refundAmount } = ctx.request.body || {};
+        const { resolution, adminNotes, refundAmount } = ctx.request.body || {};
 
-        const dispute = (await strapi.entityService.findOne(
-          "api::dispute.dispute",
-          Number(id),
-          { populate: { order: true, raisedBy: true, recievedBy: true } }
-        )) as any;
-
+        const dispute = await findDisputeWithRelations(strapi, id);
         if (!dispute) return ctx.notFound("Dispute not found.");
 
         const order = dispute.order;
         const effectiveAmount =
-          refundAmount !== undefined
+          refundAmount !== undefined && refundAmount !== ""
             ? Number(refundAmount)
             : Number(dispute.refundAmount || order?.totalAmount || 0);
 
-        if (!order?.paymentIntentId) {
+        const refundTarget = getStripeRefundTarget(order);
+        if (!refundTarget) {
           return ctx.badRequest(
-            "Cannot issue refund: this order has no Stripe payment intent."
+            "Cannot issue refund: this order has no Stripe payment intent or charge."
           );
         }
         if (!Number.isFinite(effectiveAmount) || effectiveAmount <= 0) {
           return ctx.badRequest("Refund amount must be greater than zero.");
         }
         if (dispute.stripeRefundId && dispute.refundStatus !== "FAILED") {
-          return ctx.badRequest("A Stripe refund has already been created for this dispute.");
+          return ctx.badRequest(
+            "A Stripe refund has already been created for this dispute."
+          );
+        }
+        if ((order?.paymentStatus || "").toLowerCase() === "refunded") {
+          return ctx.badRequest("This order has already been refunded.");
         }
 
-        const refund = await stripe.refunds.create({
-          payment_intent: order.paymentIntentId,
-          amount: Math.round(effectiveAmount * 100),
-        });
+        let refund: any;
+        try {
+          refund = await stripe.refunds.create({
+            ...refundTarget,
+            amount: Math.round(effectiveAmount * 100),
+            metadata: {
+              disputeId: String(dispute.id),
+              orderId: String(order?.id || ""),
+            },
+          });
+        } catch (stripeErr: any) {
+          return ctx.badRequest(
+            `Stripe Refund failed: ${stripeErr?.message || "Unknown error"}`
+          );
+        }
+
         const succeeded = refund.status === "succeeded";
 
         await strapi.entityService.update("api::dispute.dispute", dispute.id, {
@@ -1352,20 +1789,21 @@ export default factories.createCoreController(
                 ? "PROCESSING"
                 : "FAILED",
             resolvedAt: succeeded ? new Date() : null,
-            adminDecision: "REFUND_APPROVED",
+            adminDecision: "REFUND_BUYER",
             stripeRefundId: refund.id,
             resolution:
               resolution ||
-              `Refund of ${effectiveAmount} THB submitted to Stripe.`,
+              `Refund of ${effectiveAmount} THB submitted to Stripe (${refund.id}).`,
+            adminNotes: adminNotes ?? dispute.adminNotes ?? null,
             refundAmount: effectiveAmount,
           } as any,
         });
 
-        if (order?.id && succeeded) {
+        if (order?.id) {
           await strapi.entityService.update("api::order.order", order.id, {
             data: {
-              paymentStatus: "refunded",
-              payoutStatus: "CANCELLED",
+              ...(succeeded ? { paymentStatus: "refunded" } : {}),
+              payoutStatus: succeeded ? "CANCELLED" : "ON_HOLD",
             } as any,
           });
         }
@@ -1375,16 +1813,26 @@ export default factories.createCoreController(
             strapi,
             recipientId: dispute.raisedBy.id,
             type: "refund_processed",
-            title: "Refund Approved",
-            body: `Your refund of ${effectiveAmount} THB has been approved and processed.`,
+            title: "Refund Approved & Processed",
+            body: `Your refund of ${effectiveAmount} THB has been refunded via Stripe (${refund.id}).`,
             link: "/Orders?tab=Disputes_Raised",
+          });
+        }
+        if (succeeded && dispute.recievedBy?.id) {
+          await createNotification({
+            strapi,
+            recipientId: dispute.recievedBy.id,
+            type: "dispute_resolved",
+            title: "Dispute Resolved (Buyer Refunded)",
+            body: `Dispute on Order #ORD-${order?.id ?? dispute.id} was resolved with a buyer refund. Seller payout cancelled.`,
+            link: "/Orders?tab=Disputes_Recieved",
           });
         }
 
         return ctx.send({
           ok: true,
           message: succeeded
-            ? `Buyer refund of ${effectiveAmount} THB succeeded. Seller payout cancelled.`
+            ? `Buyer refund of ${effectiveAmount} THB succeeded (${refund.id}). Seller payout cancelled.`
             : `Stripe refund is ${refund.status}; the dispute remains under review.`,
           refundId: refund.id,
           status: succeeded ? "RESOLVED_REFUND" : "UNDER_REVIEW",
@@ -1397,57 +1845,78 @@ export default factories.createCoreController(
 
     /**
      * POST /admin/disputes/:id/release
-     * (Action B: Release Payment to Seller)
+     * (Action B: Release & Transfer Payment to Seller Stripe Connect Account)
      */
     async adminReleaseToSeller(ctx) {
       try {
         const { id } = ctx.params;
-        const { resolution } = ctx.request.body || {};
+        const { resolution, adminNotes } = ctx.request.body || {};
 
-        if (!resolution || !resolution.trim()) {
-          return ctx.badRequest("Admin resolution note is required to resolve in favor of seller.");
+        if (!resolution || !String(resolution).trim()) {
+          return ctx.badRequest(
+            "Admin resolution note is required to release payout to seller."
+          );
         }
 
-        const dispute = (await strapi.entityService.findOne(
-          "api::dispute.dispute",
-          Number(id),
-          { populate: { order: true, raisedBy: true, recievedBy: true } }
-        )) as any;
-
+        const dispute = await findDisputeWithRelations(strapi, id);
         if (!dispute) return ctx.notFound("Dispute not found.");
+        if (!dispute.order?.id) {
+          return ctx.badRequest("No linked order found for this dispute.");
+        }
+
+        const transferResult = await executeSellerPayoutForOrder(strapi, {
+          orderId: dispute.order.id,
+          notes: `Dispute #${dispute.id} resolved in seller favor: ${String(resolution).trim()}`,
+          fallbackOrderPayoutStatus: "ON_HOLD",
+        });
+
+        if (!transferResult.ok) {
+          return ctx.badRequest(transferResult.message);
+        }
+
+        const { sellerAmount, transferId, destinationAccountId } =
+          transferResult;
 
         await strapi.entityService.update("api::dispute.dispute", dispute.id, {
           data: {
             status: "RESOLVED_RELEASE",
             resolvedAt: new Date(),
             adminDecision: "RELEASE_TO_SELLER",
-            resolution: resolution.trim(),
+            resolution: String(resolution).trim(),
+            adminNotes: adminNotes ?? dispute.adminNotes ?? null,
           } as any,
         });
 
-        // Lift hold on order: set payoutStatus = ELIGIBLE
-        if (dispute.order?.id) {
-          await strapi.entityService.update("api::order.order", dispute.order.id, {
-            data: { payoutStatus: "ELIGIBLE" } as any,
+        if (dispute.raisedBy?.id) {
+          await createNotification({
+            strapi,
+            recipientId: dispute.raisedBy.id,
+            type: "dispute_resolved",
+            title: "Dispute Resolved (Released to Seller)",
+            body: `Your dispute on order #${dispute.order.id} was resolved in favor of the seller: "${String(resolution).trim()}".`,
+            link: "/Orders?tab=Disputes_Raised",
           });
         }
-
         if (dispute.recievedBy?.id) {
           await createNotification({
             strapi,
             recipientId: dispute.recievedBy.id,
             type: "dispute_resolved",
-            title: "Dispute Resolved in Your Favor",
-            body: `Dispute on order #${dispute.order?.id} was resolved in your favor: "${resolution.trim()}". Payout hold lifted.`,
+            title: "Dispute Resolved - Stripe Payout Sent",
+            body: `Dispute on order #${dispute.order.id} was resolved in your favor. ${sellerAmount.toLocaleString()} THB transferred to your Stripe Connect account (${transferId}).`,
             link: "/Orders?tab=Disputes_Recieved",
           });
         }
 
         return ctx.send({
           ok: true,
-          message:
-            "Dispute resolved in favor of seller. Payout hold removed (Available in Payouts for release).",
+          message: `Dispute resolved and ${sellerAmount.toLocaleString()} THB transferred to seller Stripe Connect account (${transferId}).`,
           status: "RESOLVED_RELEASE",
+          payout: {
+            transferId,
+            destinationAccountId,
+            sellerAmount,
+          },
         });
       } catch (err) {
         strapi.log.error("Error in adminReleaseToSeller:", err);
@@ -1657,6 +2126,165 @@ export default factories.createCoreController(
       } catch (err) {
         strapi.log.error("Error processing Stripe webhook:", err);
         return ctx.internalServerError("Webhook handler failed.");
+      }
+    },
+
+    /**
+     * POST /api/stripe-connect/onboard
+     * Creates (or reuses) a seller's Stripe Connect Express account and returns an onboarding link.
+     */
+    async onboardStripeConnect(ctx) {
+      try {
+        const userId = await getAuthenticatedUserId(strapi, ctx);
+        if (!userId) {
+          return ctx.unauthorized("Authentication required.");
+        }
+
+        const user = (await strapi.entityService.findOne(
+          "plugin::users-permissions.user",
+          userId
+        )) as any;
+        if (!user) return ctx.notFound("User not found.");
+
+        const body = ctx.request.body || {};
+        const origin =
+          String(ctx.request.headers?.origin || "").trim() ||
+          process.env.FRONTEND_URL ||
+          "http://localhost:3000";
+        const returnUrl =
+          String(body.returnUrl || "").trim() ||
+          `${origin}/setting?tab=payments&stripe_connect=return`;
+        const refreshUrl =
+          String(body.refreshUrl || "").trim() ||
+          `${origin}/setting?tab=payments&stripe_connect=refresh`;
+
+        let stripeAccountId = user.stripeAccountId;
+        if (!stripeAccountId) {
+          const account = await stripe.accounts.create({
+            type: "express",
+            country: process.env.STRIPE_CONNECT_COUNTRY || "TH",
+            email: user.email || undefined,
+            capabilities: {
+              card_payments: { requested: true },
+              transfers: { requested: true },
+            },
+            metadata: {
+              userId: String(user.id),
+            },
+          });
+          stripeAccountId = account.id;
+          await strapi.entityService.update(
+            "plugin::users-permissions.user",
+            user.id,
+            {
+              data: {
+                stripeAccountId,
+                stripeConnectStatus: "Pending",
+              } as any,
+            }
+          );
+        }
+
+        const accountLink = await stripe.accountLinks.create({
+          account: stripeAccountId,
+          refresh_url: refreshUrl,
+          return_url: returnUrl,
+          type: "account_onboarding",
+        });
+
+        return ctx.send({
+          ok: true,
+          url: accountLink.url,
+          stripeAccountId,
+        });
+      } catch (err: any) {
+        strapi.log.error("Error in onboardStripeConnect:", err);
+        return ctx.badRequest(
+          err?.message || "Failed to initialize Stripe Connect onboarding."
+        );
+      }
+    },
+
+    /**
+     * GET /api/stripe-connect/status
+     * Syncs and returns the signed-in seller's Stripe Connect onboarding & payout status.
+     */
+    async getStripeConnectStatus(ctx) {
+      try {
+        const userId = await getAuthenticatedUserId(strapi, ctx);
+        if (!userId) {
+          return ctx.unauthorized("Authentication required.");
+        }
+
+        const user = (await strapi.entityService.findOne(
+          "plugin::users-permissions.user",
+          userId
+        )) as any;
+        if (!user) return ctx.notFound("User not found.");
+
+        if (!user.stripeAccountId) {
+          return ctx.send({
+            ok: true,
+            connected: false,
+            payoutsEnabled: false,
+            chargesEnabled: false,
+            detailsSubmitted: false,
+            status: "Not connected",
+            stripeAccountId: null,
+            bankName: user.bankName || null,
+            bankAccountLast4: user.bankAccountLast4 || null,
+          });
+        }
+
+        const account = (await stripe.accounts.retrieve(user.stripeAccountId, {
+          expand: ["external_accounts"],
+        })) as any;
+
+        const payoutsEnabled = Boolean(account.payouts_enabled);
+        const chargesEnabled = Boolean(account.charges_enabled);
+        const detailsSubmitted = Boolean(account.details_submitted);
+        const transfersActive =
+          account.capabilities?.transfers === "active" || payoutsEnabled;
+        const connected = transfersActive || detailsSubmitted;
+
+        const bankAccount = account.external_accounts?.data?.[0];
+        const bankName = bankAccount?.bank_name || user.bankName || null;
+        const bankAccountLast4 =
+          bankAccount?.last4 || user.bankAccountLast4 || null;
+        const statusLabel = payoutsEnabled
+          ? "Connected"
+          : detailsSubmitted
+          ? "Verification Pending"
+          : "Pending";
+
+        await strapi.entityService.update(
+          "plugin::users-permissions.user",
+          user.id,
+          {
+            data: {
+              stripeConnectStatus: statusLabel,
+              ...(bankName ? { bankName } : {}),
+              ...(bankAccountLast4 ? { bankAccountLast4 } : {}),
+            } as any,
+          }
+        );
+
+        return ctx.send({
+          ok: true,
+          connected,
+          payoutsEnabled,
+          chargesEnabled,
+          detailsSubmitted,
+          status: statusLabel,
+          stripeAccountId: user.stripeAccountId,
+          bankName,
+          bankAccountLast4,
+        });
+      } catch (err: any) {
+        strapi.log.error("Error in getStripeConnectStatus:", err);
+        return ctx.badRequest(
+          err?.message || "Failed to fetch Stripe Connect status."
+        );
       }
     },
   })

@@ -240,6 +240,18 @@
     "savedBanks": {
       "type": "json"
     },
+    "stripeAccountId": {
+      "type": "string"
+    },
+    "stripeConnectStatus": {
+      "type": "string"
+    },
+    "bankName": {
+      "type": "string"
+    },
+    "bankAccountLast4": {
+      "type": "string"
+    },
     "notificationSettings": {
       "type": "json",
       "default": {

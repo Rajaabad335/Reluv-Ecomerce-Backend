@@ -33,7 +33,7 @@
       "type": "decimal"
     },
     "productImage": {
-      "type": "string"
+      "type": "text"
     },
     "buyerProtectionFee": {
       "type": "decimal"

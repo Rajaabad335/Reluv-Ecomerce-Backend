@@ -1341,7 +1341,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
     phoneNumber: Schema.Attribute.String;
     platformCommission: Schema.Attribute.Decimal;
     product: Schema.Attribute.Relation<'manyToOne', 'api::product.product'>;
-    productImage: Schema.Attribute.String;
+    productImage: Schema.Attribute.Text;
     productPrice: Schema.Attribute.Decimal;
     productTitle: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
@@ -2131,6 +2131,8 @@ export interface PluginUsersPermissionsUser
     addressLine1: Schema.Attribute.String;
     addressLine2: Schema.Attribute.String;
     avatar: Schema.Attribute.Media<'images' | 'files'>;
+    bankAccountLast4: Schema.Attribute.String;
+    bankName: Schema.Attribute.String;
     birthday: Schema.Attribute.Date;
     blocked: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
     city: Schema.Attribute.String;
@@ -2232,6 +2234,8 @@ export interface PluginUsersPermissionsUser
     savedBanks: Schema.Attribute.JSON;
     savedCards: Schema.Attribute.JSON;
     shippingSettings: Schema.Attribute.JSON;
+    stripeAccountId: Schema.Attribute.String;
+    stripeConnectStatus: Schema.Attribute.String;
     subdistrictCode: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &

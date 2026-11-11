@@ -17,6 +17,18 @@ const ORDER_STATUS_GROUPS = [
   { key: "cancelled", statuses: ["cancelled"] },
 ] as const;
 
+function extractFirstProductImage(raw: unknown, fallbackImages?: any[]): string | null {
+  if (Array.isArray(raw)) {
+    const first = raw.find((item) => typeof item === "string" && item.trim());
+    if (first) return first.trim();
+  } else if (typeof raw === "string" && raw.trim()) {
+    const firstPart = raw.trim().split(/,(?=https?:\/\/|\/)/i)[0]?.trim();
+    if (firstPart) return firstPart;
+  }
+  const fallback = fallbackImages?.[0]?.url ?? fallbackImages?.[0]?.formats?.thumbnail?.url;
+  return typeof fallback === "string" && fallback.trim() ? fallback.trim() : null;
+}
+
 async function getAuthenticatedUserId(strapi: any, ctx: any): Promise<number | null> {
   const stateId = Number(ctx?.state?.user?.id);
   if (Number.isInteger(stateId) && stateId > 0) return stateId;
@@ -140,7 +152,13 @@ export default factories.createCoreController(
         const product = await strapi.entityService.findOne(
           "api::product.product",
           productId,
-          { fields: ["productStatus", "price"], populate: { users_permissions_user: { fields: ["id"] } } },
+          {
+            fields: ["productStatus", "price", "title"],
+            populate: {
+              users_permissions_user: { fields: ["id"] },
+              images: { fields: ["url"] },
+            },
+          },
         ) as any;
         if (!product) return ctx.notFound("Product not found.");
 
@@ -196,8 +214,8 @@ export default factories.createCoreController(
             "api::offer.offer" as any,
             {
               filters: {
-                product: { id: body.productId },
-                buyer: { id: body.buyerId },
+                product: { id: productId },
+                buyer: { id: authenticatedUserId },
                 status: "accepted",
               },
               populate: {
@@ -283,9 +301,9 @@ export default factories.createCoreController(
           {
             filters: {
               $and: [
-                { buyer: body.buyerId },
-                { seller: body.sellerId },
-                { product: body.productId },
+                { buyer: { id: authenticatedUserId } },
+                { seller: { id: productSellerId } },
+                { product: { id: productId } },
                 {
                   orderStatus: {
                     $notIn: ["cancelled", "delivered"],
@@ -303,6 +321,22 @@ export default factories.createCoreController(
           );
         }
 
+        const productTitle = String(body.productTitle || product.title || "").trim().slice(0, 255) || null;
+        const productImage = extractFirstProductImage(body.productImage, product.images);
+        const paymentIntentId =
+          typeof body.paymentIntentId === "string" && body.paymentIntentId.trim()
+            ? body.paymentIntentId.trim().slice(0, 255)
+            : null;
+        const currency =
+          typeof body.currencyCode === "string" && body.currencyCode.trim()
+            ? body.currencyCode.trim().toLowerCase().slice(0, 3)
+            : "thb";
+        const phoneNumber =
+          typeof body.phoneNumber === "string" && body.phoneNumber.trim()
+            ? body.phoneNumber.trim().slice(0, 255)
+            : null;
+        const orderStatus = body.OrderStatus || body.orderStatus || "placed";
+
         // ── Atomic product claim ─────────
         // This endpoint is the current checkout's successful-purchase boundary
         // (it records paymentStatus=paid). Claim only here, after offer
@@ -318,19 +352,21 @@ export default factories.createCoreController(
           const order = await strapi.entityService.create("api::order.order", {
             data: {
               product: productId,
-              productTitle: body.productTitle,
+              productTitle,
               productPrice,
-              productImage: body.productImage,
+              productImage,
               buyerProtectionFee,
               shippingFee,
               totalAmount,
               seller: productSellerId,
               buyer: authenticatedUserId,
-              phoneNumber: body.phoneNumber || null,
+              phoneNumber,
               address: body.address || null,
               deliveryMethod: body.deliveryMethod || null,
-              orderStatus: body.OrderStatus,
+              orderStatus,
               paymentStatus: "paid",
+              paymentIntentId,
+              currency,
             },
           });
 
@@ -365,7 +401,7 @@ export default factories.createCoreController(
               "api::offer.offer" as any,
               {
                 filters: {
-                  product: { id: body.productId },
+                  product: { id: productId },
                   status: ["pending", "accepted"],
                   id: acceptedOffer ? { $ne: acceptedOffer.id } : {},
                 },
@@ -394,9 +430,9 @@ export default factories.createCoreController(
                       data: {
                         type: 'offer_unavailable',
                         title: 'Offer No Longer Available',
-                        body: `"${body.productTitle ?? 'The product'}" has already been purchased and is no longer available.`,
+                        body: `"${productTitle ?? 'The product'}" has already been purchased and is no longer available.`,
                         read: false,
-                        link: `/products/${body.productId}`,
+                        link: `/products/${productId}`,
                         recipient: otherBuyerId,
                       },
                     });
@@ -427,10 +463,10 @@ export default factories.createCoreController(
             try {
               await createNotification({
                 strapi,
-                recipientId: body.sellerId,
+                recipientId: productSellerId,
                 type: "order",
                 title: "New Order Received",
-                body: `You received an order from ${body.username} on ${body.productTitle}.`,
+                body: `You received an order from ${body.username || "a buyer"} on ${productTitle || "your item"}.`,
                 link: `/Orders`,
               });
             } catch (notifError) {
@@ -449,7 +485,7 @@ export default factories.createCoreController(
           return ctx.created(newOrder);
         }
       } catch (error) {
-        console.error("Error placing order:", error); // Debugging line
+        strapi.log.error("Error placing order:", error);
         return ctx.internalServerError(
           "An error occurred while placing the order.",
         );
